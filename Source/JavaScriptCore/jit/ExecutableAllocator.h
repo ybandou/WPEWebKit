@@ -74,7 +74,7 @@ class DemandExecutableAllocator;
 #endif
 
 #if ENABLE(EXECUTABLE_ALLOCATOR_FIXED)
-#if CPU(ARM)
+#if CPU(ARM) || CPU(MIPS)
 static const size_t fixedExecutableMemoryPoolSize = 16 * 1024 * 1024;
 #elif CPU(ARM64)
 static const size_t fixedExecutableMemoryPoolSize = 32 * 1024 * 1024;

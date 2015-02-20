@@ -389,6 +389,15 @@ static gboolean webkitVideoSinkEvent(GstBaseSink* baseSink, GstEvent* event)
     }
 }
 
+gboolean webkitVideoSinkPostMessage(GstElement* element, GstMessage* message)
+{
+    // Don't send tag message towards the media player.
+    if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_TAG)
+        return FALSE;
+
+    return GST_CALL_PARENT_WITH_DEFAULT(GST_ELEMENT_CLASS, post_message, (element, message), TRUE);
+}
+
 static void webkit_video_sink_class_init(WebKitVideoSinkClass* klass)
 {
     GObjectClass* gobjectClass = G_OBJECT_CLASS(klass);
@@ -412,6 +421,8 @@ static void webkit_video_sink_class_init(WebKitVideoSinkClass* klass)
     baseSinkClass->propose_allocation = webkitVideoSinkProposeAllocation;
     baseSinkClass->query = webkitVideoSinkQuery;
     baseSinkClass->event = webkitVideoSinkEvent;
+
+    elementClass->post_message = webkitVideoSinkPostMessage;
 
     webkitVideoSinkSignals[REPAINT_REQUESTED] = g_signal_new("repaint-requested",
             G_TYPE_FROM_CLASS(klass),

@@ -374,7 +374,7 @@ FloatSize MediaPlayerPrivateGStreamerBase::naturalSize() const
     if (!GST_IS_SAMPLE(m_sample.get()))
         return FloatSize();
 
-    GstCaps* caps = gst_sample_get_caps(m_sample.get());
+    GRefPtr<GstCaps> caps = adoptGRef(gst_sample_get_caps(m_sample.get()));
     if (!caps)
         return FloatSize();
 
@@ -389,7 +389,7 @@ FloatSize MediaPlayerPrivateGStreamerBase::naturalSize() const
     int pixelAspectRatioNumerator, pixelAspectRatioDenominator, stride;
     IntSize originalSize;
     GstVideoFormat format;
-    if (!getVideoSizeAndFormatFromCaps(caps, originalSize, format, pixelAspectRatioNumerator, pixelAspectRatioDenominator, stride))
+    if (!getVideoSizeAndFormatFromCaps(caps.get(), originalSize, format, pixelAspectRatioNumerator, pixelAspectRatioDenominator, stride))
         return FloatSize();
 
 #if USE(TEXTURE_MAPPER_GL)

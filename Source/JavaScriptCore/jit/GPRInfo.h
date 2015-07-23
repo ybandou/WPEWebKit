@@ -714,6 +714,13 @@ public:
         return result;
     }
 
+    static GPRReg toArgumentRegister(unsigned)
+    {
+        UNREACHABLE_FOR_PLATFORM();
+        return InvalidGPRReg;
+    }
+
+
     static const char* debugName(GPRReg reg)
     {
         ASSERT(reg != InvalidGPRReg);

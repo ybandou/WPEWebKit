@@ -31,6 +31,8 @@
 
 namespace WTF {
 
+using namespace std;
+
 class Stopwatch : public RefCounted<Stopwatch> {
 public:
     static Ref<Stopwatch> create()

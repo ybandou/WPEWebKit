@@ -2789,6 +2789,12 @@ public:
         UNREACHABLE_FOR_PLATFORM();
     }
 
+    static CodeLocationLabel startOfPatchableBranch32WithPatchOnAddress(CodeLocationDataLabel32)
+    {
+        UNREACHABLE_FOR_PLATFORM();
+        return CodeLocationLabel();
+    }
+
 
 private:
     // If m_fixedWidth is true, we will generate a fixed number of instructions.

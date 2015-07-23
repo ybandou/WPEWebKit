@@ -1119,6 +1119,18 @@
 #define _HAS_EXCEPTIONS 1
 #endif
 
+#if OS(LINUX) && !defined(__GLIBC__)
+// We may have uclibc, but we need to include features.h to know
+#include <features.h>
+#endif
+
+#if defined(__UCLIBC__)
+#undef __STDC_LIMIT_MACROS
+#define __STDC_LIMIT_MACROS
+#undef _GLIBCXX_USE_C99_MATH
+#define _GLIBCXX_USE_C99_MATH
+#endif
+
 #if PLATFORM(MAC)
 #define HAVE_NS_ACTIVITY 1
 #endif

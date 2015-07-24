@@ -251,6 +251,17 @@ public:
         return 2 * sizeof(void*);
     }
 
+    void emitFunctionPrologue()
+    {
+        UNREACHABLE_FOR_PLATFORM();
+    }
+
+    void emitFunctionEpilogue()
+    {
+        UNREACHABLE_FOR_PLATFORM();
+    }
+
+
     ALWAYS_INLINE void preserveReturnAddressAfterCall(RegisterID reg)
     {
         move(returnAddressRegister, reg);

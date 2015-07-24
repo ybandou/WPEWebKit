@@ -47,6 +47,8 @@
 #include "MacroAssemblerX86.h"
 #endif
 
+using namespace std;
+
 namespace JSC {
 
 static bool parse(const char* string, bool& value)

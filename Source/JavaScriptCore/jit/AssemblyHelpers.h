@@ -253,12 +253,16 @@ public:
 
     void emitFunctionPrologue()
     {
-        UNREACHABLE_FOR_PLATFORM();
+        m_assembler.addiu(stackPointerRegister, stackPointerRegister, -8);
+        m_assembler.sw(framePointerRegister, stackPointerRegister, 4)
+        m_assembler.sw(returnAddressRegister, stackPointerRegister, 0)
     }
 
     void emitFunctionEpilogue()
     {
-        UNREACHABLE_FOR_PLATFORM();
+        m_assembler.lw(framePointerRegister, stackPointerRegister, 4)
+        m_assembler.lw(returnAddressRegister, stackPointerRegister, 0)
+        m_assembler.addiu(stackPointerRegister, stackPointerRegister, 8);
     }
 
 

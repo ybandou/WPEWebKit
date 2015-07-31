@@ -2834,14 +2834,16 @@ public:
         UNREACHABLE_FOR_PLATFORM();
     }
 
-    void abortWithReason(AbortReason)
+    void abortWithReason(AbortReason reason)
     {
-        UNREACHABLE_FOR_PLATFORM();
+        move(TrustedImm32(reason), MIPSRegisters::t9);
+        breakpoint();
     }
 
-    void abortWithReason(AbortReason, intptr_t)
+    void abortWithReason(AbortReason reason, intptr_t misc)
     {
-        UNREACHABLE_FOR_PLATFORM();
+        move(TrustedImm32(misc), MIPSRegisters::t8);
+        abortWithReason(reason);
     }
 
     void countLeadingZeros32(RegisterID src, RegisterID dest)

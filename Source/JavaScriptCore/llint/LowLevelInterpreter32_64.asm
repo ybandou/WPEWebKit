@@ -216,7 +216,7 @@ macro doVMEntry(makeCall)
     storep temp2, VMEntryRecord::m_prevTopVMEntryFrame[sp]
 
     # Align stack pointer
-    if X86_WIN
+    if X86_WIN or MIPS
         addp CallFrameAlignSlots * SlotSize, sp, temp1
         andp ~StackAlignmentMask, temp1
         subp temp1, CallFrameAlignSlots * SlotSize, sp

@@ -254,14 +254,16 @@ public:
     void emitFunctionPrologue()
     {
         m_assembler.addiu(stackPointerRegister, stackPointerRegister, -8);
-        m_assembler.sw(framePointerRegister, stackPointerRegister, 4);
-        m_assembler.sw(returnAddressRegister, stackPointerRegister, 0);
+        m_assembler.sw(returnAddressRegister, stackPointerRegister, 4);
+        m_assembler.sw(framePointerRegister, stackPointerRegister, 0);
+        move(stackPointerRegister, framePointerRegister);
     }
 
     void emitFunctionEpilogue()
     {
-        m_assembler.lw(framePointerRegister, stackPointerRegister, 4);
-        m_assembler.lw(returnAddressRegister, stackPointerRegister, 0);
+        move(framePointerRegister, stackPointerRegister);
+        m_assembler.lw(framePointerRegister, stackPointerRegister, 0);
+        m_assembler.lw(returnAddressRegister, stackPointerRegister, 4);
         m_assembler.addiu(stackPointerRegister, stackPointerRegister, 8);
     }
 

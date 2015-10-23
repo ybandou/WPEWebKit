@@ -28,7 +28,9 @@
 
 #include <WPE/ViewBackend/ViewBackend.h>
 
+#if 0
 #include <bcm_host.h>
+#endif
 
 namespace WPE {
 
@@ -48,8 +50,14 @@ public:
 private:
     Client* m_client;
 
+    #if 0
     DISPMANX_DISPLAY_HANDLE_T m_displayHandle;
     DISPMANX_ELEMENT_HANDLE_T m_elementHandle;
+    #endif
+   
+    uint32_t m_displayHandle;
+    uint32_t m_elementHandle;
+   
     uint32_t m_width;
     uint32_t m_height;
 };

@@ -146,6 +146,8 @@ EGLDisplay PlatformDisplay::eglDisplay() const
 
 void PlatformDisplay::initializeEGLDisplay()
 {
+    printf("+PlatformDisplay::initializeEGLDisplay()\n");
+
     m_eglDisplayInitialized = true;
 
     if (m_eglDisplay == EGL_NO_DISPLAY) {
@@ -159,6 +161,7 @@ void PlatformDisplay::initializeEGLDisplay()
         if (m_eglDisplay == EGL_NO_DISPLAY)
             return;
     }
+
 
     if (eglInitialize(m_eglDisplay, 0, 0) == EGL_FALSE) {
         LOG_ERROR("EGLDisplay Initialization failed.");
@@ -176,6 +179,8 @@ void PlatformDisplay::initializeEGLDisplay()
         terminateEGLDisplay();
         return;
     }
+
+    printf("-PlatformDisplay::initializeEGLDisplay()\n");
 }
 
 void PlatformDisplay::terminateEGLDisplay()

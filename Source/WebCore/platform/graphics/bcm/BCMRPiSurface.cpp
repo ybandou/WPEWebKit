@@ -32,33 +32,50 @@
 #include "GLContextEGL.h"
 #include "IntSize.h"
 
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+
 namespace WebCore {
 
 BCMRPiSurface::BCMRPiSurface(const IntSize& size, uint32_t elementHandle)
 {
+    printf("[%d]BCMRPiSurface::BCMRPiSurface() %dx%d\n", getpid(), size.width(), size.height());
+
     m_nativeWindow.element = elementHandle;
     m_nativeWindow.width = size.width();
     m_nativeWindow.height = size.height();
 }
 
+
 std::unique_ptr<GLContext> BCMRPiSurface::createGLContext()
 {
-    return GLContextEGL::createWindowContext(&m_nativeWindow, GLContext::sharingContext());
+    printf("[%d]BCMRPiSurface::createGLContext()\n", getpid());
+
+    //return GLContextEGL::createWindowContext(&m_nativeWindow, GLContext::sharingContext());
+    return GLContextEGL::createWindowContext((EGLNativeWindowType)0x07 /* GDL_PLANE_ID_UPP_C */, GLContext::sharingContext());
 }
 
 void BCMRPiSurface::resize(const IntSize& size)
 {
+    printf("[%d]BCMRPiSurface::resize() %dx%d\n", getpid(), size.width(), size.height());
+
     m_nativeWindow.width = size.width();
     m_nativeWindow.height = size.height();
 }
 
 BCMRPiSurface::BCMBufferExport BCMRPiSurface::lockFrontBuffer()
 {
+    #if 0
+    printf("[%d]BCMRPiSurface::lockFrontBuffer()\n", getpid());
+    #endif
+
     return BCMBufferExport{ m_nativeWindow.element, m_nativeWindow.width, m_nativeWindow.height };
 }
 
 void BCMRPiSurface::releaseBuffer(uint32_t)
 {
+    printf("[%d]BCMRPiSurface::releaseBuffer()\n", getpid());
 }
 
 } // namespace WebCore

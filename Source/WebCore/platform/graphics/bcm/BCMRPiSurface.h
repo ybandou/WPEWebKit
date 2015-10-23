@@ -37,6 +37,16 @@ namespace WebCore {
 class GLContext;
 class IntSize;
 
+
+typedef uint32_t DISPMANX_ELEMENT_HANDLE_T;
+typedef struct {
+    DISPMANX_ELEMENT_HANDLE_T element;
+    int width;
+    int height;
+} EGL_DISPMANX_WINDOW_T;
+
+  
+
 class BCMRPiSurface {
 public:
     BCMRPiSurface(const IntSize&, uint32_t);

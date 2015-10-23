@@ -32,10 +32,15 @@
 #include <EGL/egl.h>
 #include "IntSize.h"
 
+#include <unistd.h>
+#include <sys/types.h>
+
 namespace WebCore {
 
 PlatformDisplayBCMRPi::PlatformDisplayBCMRPi()
 {
+    printf("[%d]PlatformDisplayBCMRPi::PlatformDisplayBCMRPi()\n", getpid());
+
     m_eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (m_eglDisplay == EGL_NO_DISPLAY) {
         fprintf(stderr, "PlatformDisplayBCMRPi: could not create the EGL display\n");
@@ -47,6 +52,8 @@ PlatformDisplayBCMRPi::PlatformDisplayBCMRPi()
 
 std::unique_ptr<BCMRPiSurface> PlatformDisplayBCMRPi::createSurface(const IntSize& size, uint32_t elementHandle)
 {
+
+    printf("[%d]PlatformDisplayBCMRPi::createSurface()\n", getpid());
     return std::make_unique<BCMRPiSurface>(size, elementHandle);
 }
 

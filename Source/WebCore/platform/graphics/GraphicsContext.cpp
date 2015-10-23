@@ -312,6 +312,23 @@ void GraphicsContext::setUpdatingControlTints(bool b)
 
 float GraphicsContext::drawText(const FontCascade& font, const TextRun& run, const FloatPoint& point, int from, int to)
 {
+
+    #if 0
+    char text[128];
+    int i;
+    if (run.is8Bit()) {
+        i = run.length() < 127 ? run.length() : 127;
+        strncpy(text, (char*)run.characters8(), i);
+    } else {
+        char* p = (char*)run.characters16();
+        for (i = 0 ; i < (run.length() < 127 ? run.length() : 127) ; i++) {
+            text[i] = p[0+i*2];
+        }
+    }
+    text[i]=0;
+    fprintf(stderr, "GraphicsContext::drawText() \"%s\"\n", text);
+    #endif
+
     if (paintingDisabled())
         return 0;
 

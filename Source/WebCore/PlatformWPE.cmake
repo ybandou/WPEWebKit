@@ -48,6 +48,9 @@ list(APPEND WebCore_INCLUDE_DIRECTORIES
     ${WTF_DIR}
 )
 
+set(WebCore_SDP_PROCESSOR_SCRIPTS ${WEBCORE_DIR}/Modules/mediastream/sdp.js)
+set(WebCore_SDP_PROCESSOR_SCRIPTS_DEPENDENCIES ${WEBCORE_DIR}/platform/mediastream/gtk/SDPProcessorScriptResource.cpp)
+
 list(APPEND WebCore_SOURCES
     loader/soup/CachedRawResourceSoup.cpp
     loader/soup/SubresourceLoaderSoup.cpp
@@ -72,6 +75,9 @@ list(APPEND WebCore_SOURCES
     platform/audio/gstreamer/AudioSourceProviderGStreamer.cpp
     platform/audio/gstreamer/FFTFrameGStreamer.cpp
     platform/audio/gstreamer/WebKitWebAudioSourceGStreamer.cpp
+
+    platform/geoclue/GeolocationProviderGeoclue1.cpp
+    platform/geoclue/GeolocationProviderGeoclue2.cpp
 
     platform/graphics/GLContext.cpp
     platform/graphics/GraphicsContext3DPrivate.cpp
@@ -112,6 +118,7 @@ list(APPEND WebCore_SOURCES
     platform/graphics/gstreamer/MediaPlayerPrivateGStreamer.cpp
     platform/graphics/gstreamer/MediaPlayerPrivateGStreamerBase.cpp
     platform/graphics/gstreamer/MediaPlayerPrivateGStreamerMSE.cpp
+    platform/graphics/gstreamer/MediaPlayerPrivateGStreamerOwr.cpp
     platform/graphics/gstreamer/MediaSourceGStreamer.cpp
     platform/graphics/gstreamer/SourceBufferPrivateGStreamer.cpp
     platform/graphics/gstreamer/TextCombinerGStreamer.cpp
@@ -175,6 +182,7 @@ list(APPEND WebCore_SOURCES
 
     platform/mediastream/glib/SDPProcessorScriptResourceGLib.cpp
 
+    platform/mediastream/openwebrtc/MediaEndpointOwr.cpp
     platform/mediastream/openwebrtc/OpenWebRTCUtilities.cpp
     platform/mediastream/openwebrtc/RealtimeMediaSourceCenterOwr.cpp
 
@@ -318,6 +326,15 @@ if (ENABLE_WEB_AUDIO)
     )
     list(APPEND WebCore_LIBRARIES
         ${GSTREAMER_FFT_LIBRARIES}
+    )
+endif ()
+
+if (ENABLE_MEDIA_STREAM)
+    list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES
+        ${OPENWEBRTC_INCLUDE_DIRS}
+    )
+    list(APPEND WebCore_LIBRARIES
+        ${OPENWEBRTC_LIBRARIES}
     )
 endif ()
 

@@ -173,6 +173,8 @@ list(APPEND WebCore_SOURCES
 
     platform/linux/MemoryPressureHandlerLinux.cpp
 
+    platform/mediastream/glib/SDPProcessorScriptResourceGLib.cpp
+
     platform/mediastream/openwebrtc/OpenWebRTCUtilities.cpp
     platform/mediastream/openwebrtc/RealtimeMediaSourceCenterOwr.cpp
 

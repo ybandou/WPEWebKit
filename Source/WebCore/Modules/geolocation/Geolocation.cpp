@@ -43,6 +43,9 @@
 #include <wtf/CurrentTime.h>
 #include <wtf/Ref.h>
 
+#include <iostream>
+using namespace std;
+
 namespace WebCore {
 
 static const char permissionDeniedErrorMessage[] = "User denied Geolocation";
@@ -305,13 +308,19 @@ Geoposition* Geolocation::lastPosition()
 
 void Geolocation::getCurrentPosition(RefPtr<PositionCallback>&& successCallback, RefPtr<PositionErrorCallback>&& errorCallback, RefPtr<PositionOptions>&& options)
 {
-    if (!frame())
+    cerr << "Geolocation::getCurrentPosition ENTER" << endl;
+
+    if (!frame()) {
+        cerr << "Geolocation::getCurrentPosition EXIT 1" << endl;
         return;
+    }
 
     RefPtr<GeoNotifier> notifier = GeoNotifier::create(*this, WTFMove(successCallback), WTFMove(errorCallback), WTFMove(options));
     startRequest(notifier.get());
 
     m_oneShots.add(notifier);
+
+    cerr << "Geolocation::getCurrentPosition EXIT 2" << endl;
 }
 
 int Geolocation::watchPosition(RefPtr<PositionCallback>&& successCallback, RefPtr<PositionErrorCallback>&& errorCallback, RefPtr<PositionOptions>&& options)
@@ -334,20 +343,31 @@ void Geolocation::startRequest(GeoNotifier* notifier)
 {
     // Check whether permissions have already been denied. Note that if this is the case,
     // the permission state can not change again in the lifetime of this page.
-    if (isDenied())
+    if (isDenied()) {
+        cerr << "Geolocation::startRequest 1" << endl;
         notifier->setFatalError(PositionError::create(PositionError::PERMISSION_DENIED, ASCIILiteral(permissionDeniedErrorMessage)));
-    else if (haveSuitableCachedPosition(notifier->options()))
+    }
+    else if (haveSuitableCachedPosition(notifier->options())) {
         notifier->setUseCachedPosition();
-    else if (notifier->hasZeroTimeout())
+        cerr << "Geolocation::startRequest 2" << endl;
+    }
+    else if (notifier->hasZeroTimeout()) {
+       cerr << "Geolocation::startRequest 3" << endl;
         notifier->startTimerIfNeeded();
+    }
     else if (!isAllowed()) {
+       cerr << "Geolocation::startRequest 4" << endl;
         // if we don't yet have permission, request for permission before calling startUpdating()
         m_pendingForPermissionNotifiers.add(notifier);
         requestPermission();
-    } else if (startUpdating(notifier))
+    } else if (startUpdating(notifier)) {
+       cerr << "Geolocation::startRequest 5" << endl;
         notifier->startTimerIfNeeded();
-    else
+    }
+    else {
+       cerr << "Geolocation::startRequest 6" << endl;
         notifier->setFatalError(PositionError::create(PositionError::POSITION_UNAVAILABLE, ASCIILiteral(failedToStartServiceErrorMessage)));
+    }
 }
 
 void Geolocation::fatalErrorOccurred(GeoNotifier* notifier)
@@ -591,17 +611,26 @@ void Geolocation::handleError(PositionError* error)
 
 void Geolocation::requestPermission()
 {
-    if (m_allowGeolocation > Unknown)
+    if (m_allowGeolocation > Unknown) {
+        cerr << "Geolocation::requestPermission 1" << endl;
         return;
+    }
 
     Page* page = this->page();
-    if (!page)
+    if (!page) {
+       cerr << "Geolocation::requestPermission 2" << endl;
         return;
+    }
 
     m_allowGeolocation = InProgress;
 
     // Ask the embedder: it maintains the geolocation challenge policy itself.
-    GeolocationController::from(page)->requestPermission(this);
+    GeolocationController * controller = GeolocationController::from(page);
+    cerr << "Geolocation::requestPermission, controller: " << controller << endl;
+
+    controller->requestPermission(this);
+
+    cerr << "Geolocation::requestPermission 3" << endl;
 }
 
 void Geolocation::makeSuccessCallbacks()

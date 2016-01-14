@@ -40,6 +40,9 @@
 
 using namespace WebCore;
 
+#include <iostream>
+using namespace std;
+
 namespace WebKit {
 
 static uint64_t generateGeolocationID()
@@ -55,10 +58,13 @@ GeolocationPermissionRequestManager::GeolocationPermissionRequestManager(WebPage
 
 void GeolocationPermissionRequestManager::startRequestForGeolocation(Geolocation* geolocation)
 {
+    cerr << "GeolocationPermissionRequestManager::startRequestForGeolocation 1" << endl;
+
     Frame* frame = geolocation->frame();
 
     ASSERT_WITH_MESSAGE(frame, "It is not well understood in which cases the Geolocation is alive after its frame goes away. If you hit this assertion, please add a test covering this case.");
     if (!frame) {
+        cerr << "GeolocationPermissionRequestManager::startRequestForGeolocation 2" << endl;
         geolocation->setIsAllowed(false);
         return;
     }
@@ -68,12 +74,16 @@ void GeolocationPermissionRequestManager::startRequestForGeolocation(Geolocation
     m_geolocationToIDMap.set(geolocation, geolocationID);
     m_idToGeolocationMap.set(geolocationID, geolocation);
 
+    cerr << "GeolocationPermissionRequestManager::startRequestForGeolocation 3" << endl;
+
     WebFrame* webFrame = WebFrame::fromCoreFrame(*frame);
     ASSERT(webFrame);
 
     SecurityOrigin* origin = frame->document()->securityOrigin();
 
     m_page->send(Messages::WebPageProxy::RequestGeolocationPermissionForFrame(geolocationID, webFrame->frameID(), origin->databaseIdentifier()));
+
+    cerr << "GeolocationPermissionRequestManager::startRequestForGeolocation 4" << endl;
 }
 
 void GeolocationPermissionRequestManager::cancelRequestForGeolocation(Geolocation* geolocation)

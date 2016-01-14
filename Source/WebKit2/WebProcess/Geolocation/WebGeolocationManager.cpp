@@ -38,6 +38,9 @@
 
 using namespace WebCore;
 
+#include <iostream>
+using namespace std;
+
 namespace WebKit {
 
 const char* WebGeolocationManager::supplementName()
@@ -110,6 +113,8 @@ void WebGeolocationManager::didChangePosition(const WebGeolocationPosition::Data
 
 void WebGeolocationManager::didFailToDeterminePosition(const String& errorMessage)
 {
+   cerr << "WebGeolocationManager::didFailToDeterminePosition 1" << endl;
+
 #if ENABLE(GEOLOCATION)
     // FIXME: Add localized error string.
     RefPtr<GeolocationError> error = GeolocationError::create(GeolocationError::PositionUnavailable, errorMessage);
@@ -124,6 +129,8 @@ void WebGeolocationManager::didFailToDeterminePosition(const String& errorMessag
 #else
     UNUSED_PARAM(errorMessage);
 #endif // ENABLE(GEOLOCATION)
+
+    cerr << "WebGeolocationManager::didFailToDeterminePosition 2" << endl;
 }
 
 #if PLATFORM(IOS)

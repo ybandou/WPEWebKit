@@ -28,6 +28,9 @@
 #include "config.h"
 #include "GeoNotifier.h"
 
+#include <iostream>
+using namespace std;
+
 #if ENABLE(GEOLOCATION)
 
 #include "Geolocation.h"
@@ -85,8 +88,12 @@ void GeoNotifier::runSuccessCallback(Geoposition* position)
 
 void GeoNotifier::runErrorCallback(PositionError* error)
 {
-    if (m_errorCallback)
+   cerr << "GeoNotifier::runErrorCallback 1" << endl;
+
+    if (m_errorCallback) {
+        cerr << "GeoNotifier::runErrorCallback 2" << endl;
         m_errorCallback->handleEvent(error);
+    }
 }
 
 void GeoNotifier::startTimerIfNeeded()

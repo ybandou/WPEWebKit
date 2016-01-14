@@ -32,6 +32,9 @@
 #include "GeolocationError.h"
 #include "GeolocationPosition.h"
 
+#include <iostream>
+using namespace std;
+
 namespace WebCore {
 
 GeolocationController::GeolocationController(Page& page, GeolocationClient& client)
@@ -83,11 +86,15 @@ void GeolocationController::removeObserver(Geolocation* observer)
 
 void GeolocationController::requestPermission(Geolocation* geolocation)
 {
+    cerr << "GeolocationController::requestPermission 1" << endl;
+
     if (!m_page.isVisible()) {
+       cerr << "GeolocationController::requestPermission 2" << endl;
         m_pendedPermissionRequest.add(geolocation);
         return;
     }
 
+    cerr << "GeolocationController::requestPermission 3" << endl;
     m_client.requestPermission(geolocation);
 }
 

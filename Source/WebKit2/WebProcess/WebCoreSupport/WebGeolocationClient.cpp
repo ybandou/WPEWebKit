@@ -36,6 +36,9 @@
 
 using namespace WebCore;
 
+#include <iostream>
+using namespace std;
+
 namespace WebKit {
 
 WebGeolocationClient::~WebGeolocationClient()
@@ -71,7 +74,11 @@ GeolocationPosition* WebGeolocationClient::lastPosition()
 
 void WebGeolocationClient::requestPermission(Geolocation* geolocation)
 {
+    cerr << "WebGeolocationClient::requestPermission 1" << endl;
+
     m_page->geolocationPermissionRequestManager().startRequestForGeolocation(geolocation);
+
+    cerr << "WebGeolocationClient::requestPermission 2" << endl;
 }
 
 void WebGeolocationClient::cancelPermissionRequest(Geolocation* geolocation)

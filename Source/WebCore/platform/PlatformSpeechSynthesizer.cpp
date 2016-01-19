@@ -40,6 +40,37 @@ const Vector<RefPtr<PlatformSpeechSynthesisVoice>>& PlatformSpeechSynthesizer::v
     return m_voiceList;
 }
 
+// TODO: from here on all methods are hacked in, needs some testing.
+PlatformSpeechSynthesizer::PlatformSpeechSynthesizer(PlatformSpeechSynthesizerClient* client)
+    : m_voiceListIsInitialized(false)
+    , m_speechSynthesizerClient(client)
+{
+}
+
+PlatformSpeechSynthesizer::~PlatformSpeechSynthesizer()
+{
+}
+
+void PlatformSpeechSynthesizer::pause()
+{
+}
+
+void PlatformSpeechSynthesizer::initializeVoiceList()
+{
+}
+
+void PlatformSpeechSynthesizer::resume()
+{
+}
+
+void PlatformSpeechSynthesizer::speak(WTF::PassRefPtr<WebCore::PlatformSpeechSynthesisUtterance>)
+{
+}
+
+void PlatformSpeechSynthesizer::cancel()
+{
+}
+
 } // namespace WebCore
 
 #endif // ENABLE(SPEECH_SYNTHESIS)

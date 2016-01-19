@@ -70,13 +70,13 @@ public:
 
     // FIXME: We have multiple virtual functions just so we can support a mock for testing.
     // Seems wasteful. Would be nice to find a better way.
-    WEBCORE_EXPORT virtual ~PlatformSpeechSynthesizer();
+    WEBCORE_EXPORT /* virtual */ ~PlatformSpeechSynthesizer();
     
     const Vector<RefPtr<PlatformSpeechSynthesisVoice>>& voiceList() const;
-    virtual void speak(PassRefPtr<PlatformSpeechSynthesisUtterance>);
-    virtual void pause();
-    virtual void resume();
-    virtual void cancel();
+    /* virtual */ void speak(PassRefPtr<PlatformSpeechSynthesisUtterance>);
+    /* virtual */ void pause();
+    /* virtual */ void resume();
+    /* virtual */ void cancel();
     
     PlatformSpeechSynthesizerClient* client() const { return m_speechSynthesizerClient; }
 
@@ -84,7 +84,7 @@ protected:
     Vector<RefPtr<PlatformSpeechSynthesisVoice>> m_voiceList;
 
 private:
-    virtual void initializeVoiceList();
+    /* virtual */ void initializeVoiceList();
 
     bool m_voiceListIsInitialized;
     PlatformSpeechSynthesizerClient* m_speechSynthesizerClient;

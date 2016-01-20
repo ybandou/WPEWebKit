@@ -351,6 +351,7 @@ public:
 #endif
 
 #if ENABLE(MEDIA_STREAM)
+    void enableMockMediaEndpoint();
     void enableMockRTCPeerConnectionHandler();
     void setMockMediaCaptureDevicesEnabled(bool);
 #endif

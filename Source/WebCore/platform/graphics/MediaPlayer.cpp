@@ -53,6 +53,9 @@
 
 #if USE(GSTREAMER)
 #include "MediaPlayerPrivateGStreamer.h"
+#if ENABLE(MEDIA_STREAM) && USE(OPENWEBRTC)
+#include "MediaPlayerPrivateGStreamerOwr.h"
+#endif
 #define PlatformMediaEngineClassName MediaPlayerPrivateGStreamer
 #if ENABLE(VIDEO) && ENABLE(MEDIA_SOURCE) && ENABLE(VIDEO_TRACK)
 #include "MediaPlayerPrivateGStreamerMSE.h"
@@ -219,6 +222,10 @@ static void buildMediaEnginesVector()
     MediaPlayerPrivateHolePunchDummy::registerMediaEngine(addMediaEngine);
 #endif
 
+#if ENABLE(MEDIA_STREAM) && USE(GSTREAMER) && USE(OPENWEBRTC)
+    MediaPlayerPrivateGStreamerOwr::registerMediaEngine(addMediaEngine);
+#endif
+
 #if defined(PlatformMediaEngineClassName)
     PlatformMediaEngineClassName::registerMediaEngine(addMediaEngine);
 #endif
@@ -255,13 +262,13 @@ static const AtomicString& applicationOctetStream()
 
 static const AtomicString& textPlain()
 {
-    static NeverDestroyed<const AtomicString> textPlain("text/plain", AtomicString::ConstructFromLiteral);
+    DEPRECATED_DEFINE_STATIC_LOCAL(const AtomicString, textPlain, ("text/plain", AtomicString::ConstructFromLiteral));
     return textPlain;
 }
 
 static const AtomicString& codecs()
 {
-    static NeverDestroyed<const AtomicString> codecs("codecs", AtomicString::ConstructFromLiteral);
+    DEPRECATED_DEFINE_STATIC_LOCAL(const AtomicString, codecs, ("codecs", AtomicString::ConstructFromLiteral));
     return codecs;
 }
 
@@ -271,7 +278,7 @@ static const MediaPlayerFactory* bestMediaEngineForSupportParameters(const Media
         return nullptr;
 
     // 4.8.10.3 MIME types - In the absence of a specification to the contrary, the MIME type "application/octet-stream"
-    // when used with parameters, e.g. "application/octet-stream;codecs=theora", is a type that the user agent knows
+    // when used with parameters, e.g. "application/octet-stream;codecs=theora", is a type that the user agent knows 
     // it cannot render.
     if (parameters.type == applicationOctetStream()) {
         if (!parameters.codecs.isEmpty())

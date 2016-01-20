@@ -33,18 +33,25 @@
 
 #if ENABLE(MEDIA_STREAM)
 
-#include "NotImplemented.h"
+#include "MediaEndpoint.h"
+#include "MediaEndpointConfiguration.h"
 #include "PeerConnectionBackend.h"
-#include "RTCSessionDescription.h"
+#include "SessionDescription.h"
+#include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
 
 namespace WebCore {
 
 class MediaStreamTrack;
+class SDPProcessor;
 
-class MediaEndpointPeerConnection : public PeerConnectionBackend {
+typedef Vector<RefPtr<PeerMediaDescription>> MediaDescriptionVector;
+typedef Vector<RefPtr<RTCRtpSender>> RtpSenderVector;
+
+class MediaEndpointPeerConnection : public PeerConnectionBackend, public MediaEndpointClient {
 public:
     MediaEndpointPeerConnection(PeerConnectionBackendClient*);
+    ~MediaEndpointPeerConnection();
 
     void createOffer(RTCOfferOptions&, PeerConnection::SessionDescriptionPromise&&) override;
     void createAnswer(RTCAnswerOptions&, PeerConnection::SessionDescriptionPromise&&) override;
@@ -68,9 +75,64 @@ public:
 
     void stop() override;
 
-    bool isNegotiationNeeded() const override { return false; };
-    void markAsNeedingNegotiation() override;
-    void clearNegotiationNeededState() override { notImplemented(); };
+    bool isNegotiationNeeded() const override { return m_negotiationNeeded; };
+    void markAsNeedingNegotiation();
+    void clearNegotiationNeededState() override { m_negotiationNeeded = false; };
+
+private:
+    void runTask(std::function<void()>);
+    void startRunningTasks();
+
+    void createOfferTask(RTCOfferOptions&, PeerConnection::SessionDescriptionPromise&);
+    void createAnswerTask(RTCAnswerOptions&, PeerConnection::SessionDescriptionPromise&);
+
+    void setLocalDescriptionTask(RTCSessionDescription&, PeerConnection::VoidPromise&);
+    void setRemoteDescriptionTask(RTCSessionDescription&, PeerConnection::VoidPromise&);
+
+    void addIceCandidateTask(RTCIceCandidate&, PeerConnection::VoidPromise&);
+
+    void replaceTrackTask(RTCRtpSender&, MediaStreamTrack&, PeerConnection::VoidPromise&);
+
+    bool localDescriptionTypeValidForState(SessionDescription::Type) const;
+    bool remoteDescriptionTypeValidForState(SessionDescription::Type) const;
+    SessionDescription::Type parseDescriptionType(const String& typeName) const;
+
+    SessionDescription* internalLocalDescription() const;
+    SessionDescription* internalRemoteDescription() const;
+    RefPtr<RTCSessionDescription> createRTCSessionDescription(SessionDescription*) const;
+
+    // MediaEndpointClient
+    virtual void gotDtlsFingerprint(const String& fingerprint, const String& fingerprintFunction) override;
+    virtual void gotIceCandidate(unsigned mdescIndex, RefPtr<IceCandidate>&&) override;
+    virtual void doneGatheringCandidates(unsigned mdescIndex) override;
+    virtual void gotRemoteSource(unsigned mdescIndex, RefPtr<RealtimeMediaSource>&&) override;
+
+    PeerConnectionBackendClient* m_client;
+    std::unique_ptr<MediaEndpoint> m_mediaEndpoint;
+
+    std::function<void()> m_initialDeferredTask;
+
+    std::unique_ptr<SDPProcessor> m_sdpProcessor;
+
+    Vector<RefPtr<MediaPayload>> m_defaultAudioPayloads;
+    Vector<RefPtr<MediaPayload>> m_defaultVideoPayloads;
+
+    String m_cname;
+    String m_iceUfrag;
+    String m_icePassword;
+    String m_dtlsFingerprint;
+    String m_dtlsFingerprintFunction;
+    unsigned m_sdpSessionVersion;
+
+    RefPtr<SessionDescription> m_currentLocalDescription;
+    RefPtr<SessionDescription> m_pendingLocalDescription;
+
+    RefPtr<SessionDescription> m_currentRemoteDescription;
+    RefPtr<SessionDescription> m_pendingRemoteDescription;
+
+    RefPtr<RTCConfiguration> m_configuration;
+
+    bool m_negotiationNeeded;
 };
 
 } // namespace WebCore

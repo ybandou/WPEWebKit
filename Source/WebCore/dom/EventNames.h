@@ -43,7 +43,6 @@ namespace WebCore {
     macro(abort) \
     macro(active) \
     macro(addsourcebuffer) \
-    macro(addstream) \
     macro(addtrack) \
     macro(animationend) \
     macro(animationiteration) \
@@ -169,7 +168,6 @@ namespace WebCore {
     macro(ratechange) \
     macro(readystatechange) \
     macro(removesourcebuffer) \
-    macro(removestream) \
     macro(removetrack) \
     macro(reset) \
     macro(resize) \

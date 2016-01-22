@@ -240,6 +240,11 @@ public:
         emitInst(0x3c000000 | (rt << OP_SH_RT) | (imm & 0xffff));
     }
 
+    void clz(RegisterID rd, RegisterID rs)
+    {
+        emitInst(0x70000020 | (rd << OP_SH_RD) | (rs << OP_SH_RS) | (rd << OP_SH_RT));
+    }
+
     void addiu(RegisterID rt, RegisterID rs, int imm)
     {
         emitInst(0x24000000 | (rt << OP_SH_RT) | (rs << OP_SH_RS) | (imm & 0xffff));
@@ -476,11 +481,6 @@ public:
     void appendJump()
     {
         m_jumps.append(m_buffer.label());
-    }
-
-    void clz(RegisterID rd, RegisterID rs)
-    {
-        emitInst(0x70000020 | (rd << OP_SH_RD) | (rd << OP_SH_RT) | (rs << OP_SH_RS));
     }
 
     void addd(FPRegisterID fd, FPRegisterID fs, FPRegisterID ft)

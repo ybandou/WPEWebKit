@@ -86,6 +86,13 @@ RegisterSet RegisterSet::macroScratchRegisters()
     return RegisterSet(MacroAssembler::s_scratchRegister);
 #elif CPU(ARM64)
     return RegisterSet(MacroAssembler::dataTempRegister, MacroAssembler::memoryTempRegister);
+#elif CPU(MIPS)
+    RegisterSet result;
+    result.set(MacroAssembler::immTempRegister);
+    result.set(MacroAssembler::dataTempRegister);
+    result.set(MacroAssembler::addrTempRegister);
+    result.set(MacroAssembler::cmpTempRegister);
+    return result;
 #else
     return RegisterSet();
 #endif
@@ -150,15 +157,6 @@ RegisterSet RegisterSet::calleeSaveRegisters()
     result.set(ARMRegisters::r9);
     result.set(ARMRegisters::r10);
 #elif CPU(MIPS)
-    result.set(MIPSRegisters::s0);
-    result.set(MIPSRegisters::s1);
-    result.set(MIPSRegisters::s2);
-    result.set(MIPSRegisters::s3);
-    result.set(MIPSRegisters::s4);
-    result.set(MIPSRegisters::s5);
-    result.set(MIPSRegisters::s6);
-    result.set(MIPSRegisters::s7);
-    result.set(MIPSRegisters::fp);
 #else
     UNREACHABLE_FOR_PLATFORM();
 #endif

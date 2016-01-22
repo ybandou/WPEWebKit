@@ -120,6 +120,8 @@ public:
 
     void scheduleDataStarveTimer();
     void cancelDataStarveTimer();
+    void scheduleLastSampleTimer();
+    void cancelLastSampleTimer();
 
 private:
     void resetPipeline();
@@ -376,7 +378,8 @@ bool MediaPlayerPrivateGStreamerMSE::doSeek()
         m_seeking = false;
         return false;
     }
-    if (getStateResult == GST_STATE_CHANGE_ASYNC
+    if ((getStateResult == GST_STATE_CHANGE_ASYNC
+            && !(state == GST_STATE_PLAYING && newState == GST_STATE_PAUSED))
             || state < GST_STATE_PAUSED
             || m_isEndReached
             || !m_gstSeekCompleted) {
@@ -411,6 +414,19 @@ bool MediaPlayerPrivateGStreamerMSE::doSeek()
 
     // Stop accepting new samples until actual seek is finished
     webkit_media_src_set_readyforsamples(WEBKIT_MEDIA_SRC(m_source.get()), false);
+
+    // Correct seek time if it helps to fix a small gap
+    if (!timeIsBuffered(seekTime)) {
+        // Look if a near future time (<0.1 sec.) is buffered and change the seek target time
+        if (m_mediaSource) {
+            const MediaTime miniGap = MediaTime::createWithDouble(0.1);
+            MediaTime nearest = m_mediaSource->buffered()->nearest(seekTime);
+            if (nearest.isValid() && nearest > seekTime && (nearest - seekTime) <= miniGap && timeIsBuffered(nearest + miniGap)) {
+                LOG_MEDIA_MESSAGE("[Seek] Changed the seek target time from %f to %f, a near point in the future", seekTime.toFloat(), nearest.toFloat());
+                seekTime = nearest;
+            }
+        }
+    }
 
     // Check if MSE has samples for requested time and defer actual seek if needed
     if (!timeIsBuffered(seekTime)) {
@@ -476,8 +492,12 @@ void MediaPlayerPrivateGStreamerMSE::maybeFinishSeek()
         return;
     }
 
-    GstStateChangeReturn getStateResult = gst_element_get_state(m_pipeline.get(), NULL, NULL, 0);
-    if (getStateResult == GST_STATE_CHANGE_ASYNC) {
+    GstState state;
+    GstState newState;
+    GstStateChangeReturn getStateResult = gst_element_get_state(m_pipeline.get(), &state, &newState, 0);
+
+    if (getStateResult == GST_STATE_CHANGE_ASYNC
+            && !(state == GST_STATE_PLAYING && newState == GST_STATE_PAUSED)) {
         LOG_MEDIA_MESSAGE("[Seek] Delaying seek finish");
         return;
     }
@@ -631,8 +651,6 @@ void MediaPlayerPrivateGStreamerMSE::updateStates()
             cacheDuration();
         }
 
-        bool didBuffering = m_buffering;
-
         // Update ready and network states.
         switch (state) {
         case GST_STATE_NULL:
@@ -687,7 +705,7 @@ void MediaPlayerPrivateGStreamerMSE::updateStates()
                 m_volumeAndMuteInitialized = true;
             }
 
-            if (didBuffering && !m_buffering && !m_paused && m_playbackRate) {
+            if (!seeking() && !m_buffering && !m_paused && m_playbackRate) {
                 LOG_MEDIA_MESSAGE("[Buffering] Restarting playback.");
                 changePipelineState(GST_STATE_PLAYING);
             }
@@ -1260,19 +1278,10 @@ AppendPipeline::~AppendPipeline()
     g_mutex_unlock(&m_padAddRemoveMutex);
 
     LOG_MEDIA_MESSAGE("%p", this);
-    if (m_dataStarvedTimeoutTag) {
-        LOG_MEDIA_MESSAGE("m_dataStarvedTimeoutTag=%u", m_dataStarvedTimeoutTag);
-        // TODO: Maybe notify appendComplete here?
-        g_source_remove(m_dataStarvedTimeoutTag);
-        m_dataStarvedTimeoutTag = 0;
-    }
 
-    if (m_lastSampleTimeoutTag) {
-        LOG_MEDIA_MESSAGE("m_lastSampleTimeoutTag=%u", m_lastSampleTimeoutTag);
-        // TODO: Maybe notify appendComplete here?
-        g_source_remove(m_lastSampleTimeoutTag);
-        m_lastSampleTimeoutTag = 0;
-    }
+    cancelDataStarveTimer();
+    // TODO: Maybe notify appendComplete here?
+    cancelLastSampleTimer();
 
     if (m_pipeline) {
         GRefPtr<GstBus> bus = adoptGRef(gst_pipeline_get_bus(GST_PIPELINE(m_pipeline)));
@@ -1420,9 +1429,25 @@ void AppendPipeline::cancelDataStarveTimer()
     if (!m_dataStarvedTimeoutTag)
         return;
 
-    LOG_MEDIA_MESSAGE("Cancelling data starve timer");
+    LOG_MEDIA_MESSAGE("Canceling data starve timer");
     g_source_remove(m_dataStarvedTimeoutTag);
     m_dataStarvedTimeoutTag = 0;
+}
+
+void AppendPipeline::scheduleLastSampleTimer()
+{
+    if (m_lastSampleTimeoutTag)
+        cancelLastSampleTimer();
+    m_lastSampleTimeoutTag = g_timeout_add(s_lastSampleTimeoutMsec, GSourceFunc(appendPipelineLastSampleTimeout), this);
+}
+
+void AppendPipeline::cancelLastSampleTimer()
+{
+    if (!m_lastSampleTimeoutTag)
+        return;
+
+    g_source_remove(m_lastSampleTimeoutTag);
+    m_lastSampleTimeoutTag = 0;
 }
 
 void AppendPipeline::setAppendStage(AppendStage newAppendStage)
@@ -1482,10 +1507,7 @@ void AppendPipeline::setAppendStage(AppendStage newAppendStage)
         case Invalid:
             ok = true;
             cancelDataStarveTimer();
-            if (m_lastSampleTimeoutTag) {
-                g_source_remove(m_lastSampleTimeoutTag);
-                m_lastSampleTimeoutTag = 0;
-            }
+            cancelLastSampleTimer();
             break;
         default:
             break;
@@ -1511,21 +1533,14 @@ void AppendPipeline::setAppendStage(AppendStage newAppendStage)
         case Sampling:
             ok = true;
             cancelDataStarveTimer();
-
-            if (m_lastSampleTimeoutTag) {
+            if (m_lastSampleTimeoutTag)
                 TRACE_MEDIA_MESSAGE("lastSampleTimeoutTag already exists while transitioning Ongoing-->Sampling");
-                g_source_remove(m_lastSampleTimeoutTag);
-                m_lastSampleTimeoutTag = 0;
-            }
-            m_lastSampleTimeoutTag = g_timeout_add(s_lastSampleTimeoutMsec, GSourceFunc(appendPipelineLastSampleTimeout), this);
+            scheduleLastSampleTimer();
             break;
         case Invalid:
             ok = true;
             cancelDataStarveTimer();
-            if (m_lastSampleTimeoutTag) {
-                g_source_remove(m_lastSampleTimeoutTag);
-                m_lastSampleTimeoutTag = 0;
-            }
+            cancelLastSampleTimer();
             break;
         default:
             break;
@@ -1555,18 +1570,11 @@ void AppendPipeline::setAppendStage(AppendStage newAppendStage)
         switch (newAppendStage) {
         case Sampling:
             ok = true;
-            if (m_lastSampleTimeoutTag) {
-                g_source_remove(m_lastSampleTimeoutTag);
-                m_lastSampleTimeoutTag = 0;
-            }
-            m_lastSampleTimeoutTag = g_timeout_add(s_lastSampleTimeoutMsec, GSourceFunc(appendPipelineLastSampleTimeout), this);
+            scheduleLastSampleTimer();
             break;
         case LastSample:
             ok = true;
-            if (m_lastSampleTimeoutTag) {
-                g_source_remove(m_lastSampleTimeoutTag);
-                m_lastSampleTimeoutTag = 0;
-            }
+            cancelLastSampleTimer();
             m_mediaSourceClient->didReceiveAllPendingSamples(m_sourceBufferPrivate.get());
             if (m_abortPending)
                 nextAppendStage = Aborting;
@@ -1575,10 +1583,7 @@ void AppendPipeline::setAppendStage(AppendStage newAppendStage)
             break;
         case Invalid:
             ok = true;
-            if (m_lastSampleTimeoutTag) {
-                g_source_remove(m_lastSampleTimeoutTag);
-                m_lastSampleTimeoutTag = 0;
-            }
+            cancelLastSampleTimer();
             break;
         default:
             break;

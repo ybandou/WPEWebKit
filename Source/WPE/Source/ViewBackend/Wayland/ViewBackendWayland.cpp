@@ -90,6 +90,7 @@ const struct wl_callback_listener g_callbackListener = {
     [](void* data, struct wl_callback* callback, uint32_t)
     {
         auto& callbackData = *static_cast<ViewBackendWayland::CallbackListenerData*>(data);
+        callbackData.bufferFactory->frameComplete();
         if (callbackData.client)
             callbackData.client->frameComplete();
         callbackData.frameCallback = nullptr;
@@ -116,6 +117,7 @@ ViewBackendWayland::ViewBackendWayland()
     }
 
     m_bufferFactory = Graphics::BufferFactory::create();
+    m_callbackData.bufferFactory = m_bufferFactory.get();
 
     // Ensure the Pasteboard singleton is constructed early.
     Pasteboard::Pasteboard::singleton();
@@ -129,7 +131,7 @@ ViewBackendWayland::~ViewBackendWayland()
 
     if (m_callbackData.frameCallback)
         wl_callback_destroy(m_callbackData.frameCallback);
-    m_callbackData = { nullptr, nullptr };
+    m_callbackData = { nullptr, nullptr, nullptr };
 
     m_resizingData = { nullptr, 0, 0 };
 

@@ -71,6 +71,7 @@ public:
 
     struct CallbackListenerData {
         Client* client;
+        Graphics::BufferFactory* bufferFactory;
         struct wl_callback* frameCallback;
     };
 
@@ -88,7 +89,7 @@ private:
     struct ivi_surface* m_iviSurface { nullptr };
 
     BufferListenerData m_bufferData { nullptr, decltype(m_bufferData.map){ } };
-    CallbackListenerData m_callbackData { nullptr, nullptr };
+    CallbackListenerData m_callbackData { nullptr, nullptr, nullptr };
     ResizingData m_resizingData { nullptr, 0, 0 };
 
     std::unique_ptr<Graphics::BufferFactory> m_bufferFactory;

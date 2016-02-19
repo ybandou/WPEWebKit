@@ -31,6 +31,7 @@
 
 #include "ivi-application-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
+#include "wayland-dispmanx-client-protocol.h"
 #include "wayland-drm-client-protocol.h"
 #include "nsc-client-protocol.h"
 #include <WPE/Input/Handling.h>
@@ -107,6 +108,9 @@ const struct wl_registry_listener g_registryListener = {
 
         if (!std::strcmp(interface, "wl_data_device_manager"))
             interfaces.data_device_manager = static_cast<struct wl_data_device_manager*>(wl_registry_bind(registry, name, &wl_data_device_manager_interface, 2));
+
+        if (!std::strcmp(interface, "wl_dispmanx"))
+            interfaces.dispmanx = static_cast<struct wl_dispmanx*>(wl_registry_bind(registry, name, &wl_dispmanx_interface, 1));
 
         if (!std::strcmp(interface, "wl_drm"))
             interfaces.drm = static_cast<struct wl_drm*>(wl_registry_bind(registry, name, &wl_drm_interface, 2));

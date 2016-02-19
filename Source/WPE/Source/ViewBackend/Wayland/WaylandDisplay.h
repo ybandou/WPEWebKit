@@ -40,6 +40,7 @@ struct ivi_application;
 struct wl_compositor;
 struct wl_data_device_manager;
 struct wl_display;
+struct wl_dispmanx;
 struct wl_drm;
 struct wl_keyboard;
 struct wl_pointer;
@@ -71,6 +72,7 @@ public:
     struct Interfaces {
         struct wl_compositor* compositor;
         struct wl_data_device_manager* data_device_manager;
+        struct wl_dispmanx* dispmanx;
         struct wl_drm* drm;
         struct wl_seat* seat;
         struct xdg_shell* xdg;

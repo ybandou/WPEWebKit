@@ -162,6 +162,7 @@ if (USE_WPE_BUFFER_MANAGEMENT_BCM_RPI)
     )
 
     list(APPEND WPE_SOURCES
+        Source/Graphics/BCMRPiBM/BufferDataBCMRPiBM.cpp
         Source/Graphics/BCMRPiBM/RenderingBackendBCMRPiBM.cpp
     )
 endif ()

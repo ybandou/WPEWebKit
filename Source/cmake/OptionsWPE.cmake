@@ -87,7 +87,7 @@ endif ()
 find_package(OpenGLES2 REQUIRED)
 find_package(EGL REQUIRED)
 
-if (USE_WPE_BACKEND_BCM_RPI)
+if (USE_WPE_BACKEND_BCM_RPI OR USE_WPE_BUFFER_MANAGEMENT_BCM_RPI)
     find_package(BCMHost REQUIRED)
 endif ()
 

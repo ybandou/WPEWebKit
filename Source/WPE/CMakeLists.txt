@@ -202,6 +202,7 @@ if (USE_WPE_BACKEND_WAYLAND)
         Source/ViewBackend/Wayland/WaylandDisplay.cpp
 
         Source/ViewBackend/Wayland/Protocols/ivi-application-protocol.c
+        Source/ViewBackend/Wayland/Protocols/wayland-dispmanx-protocol.c
         Source/ViewBackend/Wayland/Protocols/wayland-drm-protocol.c
         Source/ViewBackend/Wayland/Protocols/xdg-shell-protocol.c
         Source/ViewBackend/Wayland/Protocols/nsc-protocol.c

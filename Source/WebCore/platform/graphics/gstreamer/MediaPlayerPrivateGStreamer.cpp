@@ -1186,7 +1186,11 @@ void MediaPlayerPrivateGStreamer::handleMessage(GstMessage* message)
 void MediaPlayerPrivateGStreamer::processBufferingStats(GstMessage* message)
 {
     m_buffering = true;
+    int lastbufferingPercentage = m_bufferingPercentage;
     gst_message_parse_buffering(message, &m_bufferingPercentage);
+
+    if (m_bufferingPercentage < lastbufferingPercentage)
+    	m_bufferingPercentage = lastbufferingPercentage;
 
     LOG_MEDIA_MESSAGE("[Buffering] Buffering: %d%%.", m_bufferingPercentage);
 
@@ -1312,6 +1316,8 @@ void MediaPlayerPrivateGStreamer::fillTimerFired()
 
     if (stop != -1)
         fillStatus = 100.0 * stop / GST_FORMAT_PERCENT_MAX;
+
+    if (fillStatus > 100.0) fillStatus = 100.0;
 
     LOG_MEDIA_MESSAGE("[Buffering] Download buffer filled up to %f%%", fillStatus);
 

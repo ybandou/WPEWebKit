@@ -28,6 +28,115 @@
 
 #include <algorithm>
 
+#include <stdio.h>
+#include <string.h>
+
+const char * overrideEnvVar = "WPE_CACHE_OVERRIDE";
+const bool writeValuesToFile = true;
+const char * dumpFile = "/tmp/dump_wpe_cache.txt";
+
+// Example line to set env var:
+// export WPE_CACHE_OVERRIDE='cacheTotalCapacity=123:cacheMinDeadCapacity=234:cacheMaxDeadCapacity=345:pageCacheCapacity=456:urlCacheMemoryCapacity=567:urlCacheDiskCapacity=678'
+
+static void WriteLineToFile(const char * text)
+{
+   char buffer[256];
+   sprintf(buffer, "%s\n", text);
+
+   FILE * outFile = fopen(dumpFile, "a");
+   fwrite(buffer, 1, strlen(buffer), outFile);
+   fclose(outFile);
+}
+
+static void WriteValueToFile(const char * name, unsigned long value)
+{
+   char buffer[256];
+   sprintf(buffer, "%s %lu\n", name, value);
+
+   FILE * outFile = fopen(dumpFile, "a");
+   fwrite(buffer, 1, strlen(buffer), outFile);
+   fclose(outFile);
+}
+
+static int GetValueFromEnvString(const char * envString, const char * name, int currentValue)
+{
+   const int envStringLength = strlen(envString);
+
+   // See if value is listed in env string, if not, return current value.
+   const char * nameStart = strstr(envString, name);
+   if (nameStart == nullptr) {
+      return currentValue;
+   }
+
+   // Set index after name.
+   int index = nameStart - envString + strlen(name);
+
+   // Check if we didn't reach end of string.
+   if (index >= envStringLength) {
+      return currentValue;
+   }
+
+   // Check if there is a '='.
+   if (envString[index] != '=') {
+      return currentValue;
+   }
+
+   // Move to first char after '='.
+   ++index;
+
+   // Store beginning of number.
+   int numberBegin = index;
+
+   // Find end of number.
+   while (true) {
+      // Check if we reached end of string.
+      if (index >= envStringLength) {
+         break;
+      }
+
+      // Check if we still see a digit.
+      if ((envString[index] < '0') || (envString[index] > '9')) {
+         break;
+      }
+
+      // Move to next char.
+      ++index;
+   }
+
+   // if first char was already not a digit, bail out.
+   if (numberBegin == index) {
+      return currentValue;
+   }
+
+   const int bufferSize = 64;
+   char buffer[bufferSize];        //unsigned& cacheTotalCapacity, unsigned& cacheMinDeadCapacity, unsigned& cacheMaxDeadCapacity, std::chrono::seconds& deadDecodedDataDeletionInterval,
+   //unsigned& pageCacheCapacity, unsigned long& urlCacheMemoryCapacity, unsigned long& urlCacheDiskCapacity)
+   //WriteValueToFile("deadDecodedDataDeletionInterval", deadDecodedDataDeletionInterval);
+
+
+
+   int numberLength = index - numberBegin;
+
+   // Check buffer size.
+   if (numberLength >= bufferSize) {
+      return currentValue;
+   }
+
+   // Copy part of env string containing new value.
+   // TODO: could we use atoi straight on env string instead?
+   memcpy(buffer, envString + numberBegin, numberLength);
+   buffer[numberLength] = '\0';
+
+   int newValue = atoi(buffer);
+
+   // Check if something went wrong in atoi (or zero was defined).
+   if (newValue == 0) {
+      return currentValue;
+   }
+
+   return newValue;
+}
+
 namespace WebKit {
 
 void calculateCacheSizes(CacheModel cacheModel, uint64_t memorySize, uint64_t diskFreeSize,
@@ -138,6 +247,10 @@ void calculateCacheSizes(CacheModel cacheModel, uint64_t memorySize, uint64_t di
         cacheMaxDeadCapacity = std::max(24u, cacheMaxDeadCapacity);
 
         deadDecodedDataDeletionInterval = std::chrono::seconds { 60 };
+        //unsigned& cacheTotalCapacity, unsigned& cacheMinDeadCapacity, unsigned& cacheMaxDeadCapacity, std::chrono::seconds& deadDecodedDataDeletionInterval,
+        //unsigned& pageCacheCapacity, unsigned long& urlCacheMemoryCapacity, unsigned long& urlCacheDiskCapacity)
+        //WriteValueToFile("deadDecodedDataDeletionInterval", deadDecodedDataDeletionInterval);
+
 
 #if PLATFORM(IOS)
         if (memorySize >= 1024)
@@ -170,6 +283,38 @@ void calculateCacheSizes(CacheModel cacheModel, uint64_t memorySize, uint64_t di
             urlCacheDiskCapacity = 75 * 1024 * 1024;
         else
             urlCacheDiskCapacity = 50 * 1024 * 1024;
+
+        const char * envString = getenv(overrideEnvVar);
+        if (envString == NULL) {
+           break;
+        }
+
+        if (writeValuesToFile) {
+           WriteLineToFile("before modification");
+           WriteValueToFile("cacheTotalCapacity", cacheTotalCapacity);
+           WriteValueToFile("cacheMinDeadCapacity", cacheMinDeadCapacity);
+           WriteValueToFile("cacheMaxDeadCapacity", cacheMaxDeadCapacity);
+           WriteValueToFile("pageCacheCapacity", pageCacheCapacity);
+           WriteValueToFile("urlCacheMemoryCapacity", urlCacheMemoryCapacity);
+           WriteValueToFile("urlCacheDiskCapacity", urlCacheDiskCapacity);
+        }
+
+        cacheTotalCapacity = GetValueFromEnvString(envString, "cacheTotalCapacity", cacheTotalCapacity);
+        cacheMinDeadCapacity = GetValueFromEnvString(envString, "cacheMinDeadCapacity", cacheMinDeadCapacity);
+        cacheMaxDeadCapacity = GetValueFromEnvString(envString, "cacheMaxDeadCapacity", cacheMaxDeadCapacity);
+        pageCacheCapacity = GetValueFromEnvString(envString, "pageCacheCapacity", pageCacheCapacity);
+        urlCacheMemoryCapacity = GetValueFromEnvString(envString, "urlCacheMemoryCapacity", urlCacheMemoryCapacity);
+        urlCacheDiskCapacity = GetValueFromEnvString(envString, "urlCacheDiskCapacity", urlCacheDiskCapacity);
+
+        if (writeValuesToFile) {
+           WriteLineToFile("after modification");
+           WriteValueToFile("cacheTotalCapacity", cacheTotalCapacity);
+           WriteValueToFile("cacheMinDeadCapacity", cacheMinDeadCapacity);
+           WriteValueToFile("cacheMaxDeadCapacity", cacheMaxDeadCapacity);
+           WriteValueToFile("pageCacheCapacity", pageCacheCapacity);
+           WriteValueToFile("urlCacheMemoryCapacity", urlCacheMemoryCapacity);
+           WriteValueToFile("urlCacheDiskCapacity", urlCacheDiskCapacity);
+        }
 
         break;
     }

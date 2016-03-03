@@ -34,7 +34,8 @@ namespace WebKit {
 enum CacheModel {
     CacheModelDocumentViewer,
     CacheModelDocumentBrowser,
-    CacheModelPrimaryWebBrowser
+    CacheModelPrimaryWebBrowser,
+    CacheModelEnvVarOverride
 };
 
 void calculateCacheSizes(CacheModel cacheModel, uint64_t memorySize, uint64_t diskFreeSize,

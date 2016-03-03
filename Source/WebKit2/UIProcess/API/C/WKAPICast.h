@@ -209,6 +209,8 @@ inline CacheModel toCacheModel(WKCacheModel wkCacheModel)
         return CacheModelDocumentBrowser;
     case kWKCacheModelPrimaryWebBrowser:
         return CacheModelPrimaryWebBrowser;
+    case kWKCacheModelEnvVarOverride:
+        return CacheModelEnvVarOverride;
     }
 
     ASSERT_NOT_REACHED();

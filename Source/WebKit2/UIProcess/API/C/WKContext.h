@@ -39,7 +39,8 @@ extern "C" {
 enum {
     kWKCacheModelDocumentViewer = 0,
     kWKCacheModelDocumentBrowser = 1,
-    kWKCacheModelPrimaryWebBrowser = 2
+    kWKCacheModelPrimaryWebBrowser = 2,
+    kWKCacheModelEnvVarOverride = 3
 };
 typedef uint32_t WKCacheModel;
 

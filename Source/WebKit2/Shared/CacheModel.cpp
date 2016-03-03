@@ -32,6 +32,8 @@
 #include <string.h>
 
 const char * overrideEnvVar = "WPE_CACHE_OVERRIDE";
+
+// Enables turning on/off of writing before and after values to file.
 const bool writeValuesToFile = true;
 const char * dumpFile = "/tmp/dump_wpe_cache.txt";
 
@@ -215,7 +217,12 @@ void calculateCacheSizes(CacheModel cacheModel, uint64_t memorySize, uint64_t di
 
         break;
     }
-    case CacheModelPrimaryWebBrowser: {
+    case CacheModelPrimaryWebBrowser:
+    case CacheModelEnvVarOverride: {
+        // Even if we want to override some values from environment string,
+        // still set them according to primary webbrowser, this way we can decide
+        // to modify only a subset.
+
         // Page cache capacity (in pages)
         if (memorySize >= 1024)
             pageCacheCapacity = 3;
@@ -247,10 +254,6 @@ void calculateCacheSizes(CacheModel cacheModel, uint64_t memorySize, uint64_t di
         cacheMaxDeadCapacity = std::max(24u, cacheMaxDeadCapacity);
 
         deadDecodedDataDeletionInterval = std::chrono::seconds { 60 };
-        //unsigned& cacheTotalCapacity, unsigned& cacheMinDeadCapacity, unsigned& cacheMaxDeadCapacity, std::chrono::seconds& deadDecodedDataDeletionInterval,
-        //unsigned& pageCacheCapacity, unsigned long& urlCacheMemoryCapacity, unsigned long& urlCacheDiskCapacity)
-        //WriteValueToFile("deadDecodedDataDeletionInterval", deadDecodedDataDeletionInterval);
-
 
 #if PLATFORM(IOS)
         if (memorySize >= 1024)
@@ -284,43 +287,45 @@ void calculateCacheSizes(CacheModel cacheModel, uint64_t memorySize, uint64_t di
         else
             urlCacheDiskCapacity = 50 * 1024 * 1024;
 
-        const char * envString = getenv(overrideEnvVar);
-        if (envString == NULL) {
-           break;
-        }
-
-        if (writeValuesToFile) {
-           WriteLineToFile("before modification");
-           WriteValueToFile("cacheTotalCapacity", cacheTotalCapacity);
-           WriteValueToFile("cacheMinDeadCapacity", cacheMinDeadCapacity);
-           WriteValueToFile("cacheMaxDeadCapacity", cacheMaxDeadCapacity);
-           WriteValueToFile("pageCacheCapacity", pageCacheCapacity);
-           WriteValueToFile("urlCacheMemoryCapacity", urlCacheMemoryCapacity);
-           WriteValueToFile("urlCacheDiskCapacity", urlCacheDiskCapacity);
-        }
-
-        cacheTotalCapacity = GetValueFromEnvString(envString, "cacheTotalCapacity", cacheTotalCapacity);
-        cacheMinDeadCapacity = GetValueFromEnvString(envString, "cacheMinDeadCapacity", cacheMinDeadCapacity);
-        cacheMaxDeadCapacity = GetValueFromEnvString(envString, "cacheMaxDeadCapacity", cacheMaxDeadCapacity);
-        pageCacheCapacity = GetValueFromEnvString(envString, "pageCacheCapacity", pageCacheCapacity);
-        urlCacheMemoryCapacity = GetValueFromEnvString(envString, "urlCacheMemoryCapacity", urlCacheMemoryCapacity);
-        urlCacheDiskCapacity = GetValueFromEnvString(envString, "urlCacheDiskCapacity", urlCacheDiskCapacity);
-
-        if (writeValuesToFile) {
-           WriteLineToFile("after modification");
-           WriteValueToFile("cacheTotalCapacity", cacheTotalCapacity);
-           WriteValueToFile("cacheMinDeadCapacity", cacheMinDeadCapacity);
-           WriteValueToFile("cacheMaxDeadCapacity", cacheMaxDeadCapacity);
-           WriteValueToFile("pageCacheCapacity", pageCacheCapacity);
-           WriteValueToFile("urlCacheMemoryCapacity", urlCacheMemoryCapacity);
-           WriteValueToFile("urlCacheDiskCapacity", urlCacheDiskCapacity);
-        }
-
         break;
     }
     default:
         ASSERT_NOT_REACHED();
     };
+
+    // Override values if they are set via environment string.
+    if (cacheModel == CacheModelEnvVarOverride) {
+        const char * envString = getenv(overrideEnvVar);
+
+        if (envString != NULL) {
+            if (writeValuesToFile) {
+                WriteLineToFile("before modification");
+                WriteValueToFile("cacheTotalCapacity", cacheTotalCapacity);
+                WriteValueToFile("cacheMinDeadCapacity", cacheMinDeadCapacity);
+                WriteValueToFile("cacheMaxDeadCapacity", cacheMaxDeadCapacity);
+                WriteValueToFile("pageCacheCapacity", pageCacheCapacity);
+                WriteValueToFile("urlCacheMemoryCapacity", urlCacheMemoryCapacity);
+                WriteValueToFile("urlCacheDiskCapacity", urlCacheDiskCapacity);
+            }
+
+            cacheTotalCapacity = GetValueFromEnvString(envString, "cacheTotalCapacity", cacheTotalCapacity);
+            cacheMinDeadCapacity = GetValueFromEnvString(envString, "cacheMinDeadCapacity", cacheMinDeadCapacity);
+            cacheMaxDeadCapacity = GetValueFromEnvString(envString, "cacheMaxDeadCapacity", cacheMaxDeadCapacity);
+            pageCacheCapacity = GetValueFromEnvString(envString, "pageCacheCapacity", pageCacheCapacity);
+            urlCacheMemoryCapacity = GetValueFromEnvString(envString, "urlCacheMemoryCapacity", urlCacheMemoryCapacity);
+            urlCacheDiskCapacity = GetValueFromEnvString(envString, "urlCacheDiskCapacity", urlCacheDiskCapacity);
+
+            if (writeValuesToFile) {
+                WriteLineToFile("after modification");
+                WriteValueToFile("cacheTotalCapacity", cacheTotalCapacity);
+                WriteValueToFile("cacheMinDeadCapacity", cacheMinDeadCapacity);
+                WriteValueToFile("cacheMaxDeadCapacity", cacheMaxDeadCapacity);
+                WriteValueToFile("pageCacheCapacity", pageCacheCapacity);
+                WriteValueToFile("urlCacheMemoryCapacity", urlCacheMemoryCapacity);
+                WriteValueToFile("urlCacheDiskCapacity", urlCacheDiskCapacity);
+            }
+        }
+    }
 }
 
 } // namespace WebKit

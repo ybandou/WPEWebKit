@@ -79,8 +79,8 @@ typedef WKStringRef (*WKBundlePagePlugInCreateStartLabelSubtitleCallback)(WKStri
 typedef WKStringRef (*WKBundlePagePlugInCreateExtraStyleSheetCallback)(const void *clientInfo);
 typedef WKStringRef (*WKBundlePagePlugInCreateExtraScriptCallback)(const void *clientInfo);
 typedef void (*WKBundlePageDidClickAutoFillButtonCallback)(WKBundlePageRef page, WKBundleNodeHandleRef inputElement, WKTypeRef* userData, const void *clientInfo);
-typedef void (*KBundlePageWillAddDetailedMessageToConsoleCallbacWk)(WKBundlePageRef page, WKConsoleMessageSource, WKConsoleMessageLevel, WKStringRef message, uint32_t lineNumber, uint32_t columnNumber, WKStringRef url, const void *clientInfo);
-typedef void (*WKBundlePageDocumentVisibilityEventCallback)(WKBundlePageRef page, const void *clientInfo);
+typedef void (*WKBundlePageWillAddDetailedMessageToConsoleCallback)(WKBundlePageRef page, WKConsoleMessageSource, WKConsoleMessageLevel, WKStringRef message, uint32_t lineNumber, uint32_t columnNumber, WKStringRef url, const void *clientInfo);
+typedef void (*WKBundlePageDocumentVisibilityCallback)(WKBundlePageRef page, const void *clientInfo);
 
 typedef struct WKBundlePageUIClientBase {
     int                                                                 version;
@@ -279,7 +279,7 @@ typedef struct WKBundlePageUIClientV5 {
 
 
     // version 5
-    WKBundlePageDocumentVisibilityCallback                              setDocumentVisibility
+    WKBundlePageDocumentVisibilityCallback                              setDocumentVisibility;
 } WKBundlePageUIClientV5;
 
 #endif // WKBundlePageUIClient_h

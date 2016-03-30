@@ -693,19 +693,19 @@ WKArrayRef WKBundlePageCopyOriginsWithApplicationCache(WKBundlePageRef page)
     return toAPI(&API::Array::create(WTFMove(originIdentifiers)).leakRef());
 }
 
-void WKBundlePageDocumentVisibility(WKBundlePageRef pageRef/*, bool on */);
+void WKBundlePageDocumentVisibility(WKBundlePageRef pageRef/*, bool on */)
 {
     if (nullptr != pageRef)
     {
-        WebCore::Page page = toImpl(pageRef)->corePage();
+        WebCore::Page* page = toImpl(pageRef)->corePage();
 
         if (nullptr != page)
         {
             WebCore::Frame& core = page->mainFrame();
 
-            if ((nullptr != core) || (nullptr != core.document()))
+            if (nullptr != core.document())
             {
-                core.document()->isibilityStateChanged();
+                core.document()->visibilityStateChanged();
             }
         }
     }

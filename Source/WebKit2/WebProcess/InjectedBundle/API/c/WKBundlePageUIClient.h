@@ -79,7 +79,8 @@ typedef WKStringRef (*WKBundlePagePlugInCreateStartLabelSubtitleCallback)(WKStri
 typedef WKStringRef (*WKBundlePagePlugInCreateExtraStyleSheetCallback)(const void *clientInfo);
 typedef WKStringRef (*WKBundlePagePlugInCreateExtraScriptCallback)(const void *clientInfo);
 typedef void (*WKBundlePageDidClickAutoFillButtonCallback)(WKBundlePageRef page, WKBundleNodeHandleRef inputElement, WKTypeRef* userData, const void *clientInfo);
-typedef void (*WKBundlePageWillAddDetailedMessageToConsoleCallback)(WKBundlePageRef page, WKConsoleMessageSource, WKConsoleMessageLevel, WKStringRef message, uint32_t lineNumber, uint32_t columnNumber, WKStringRef url, const void *clientInfo);
+typedef void (*KBundlePageWillAddDetailedMessageToConsoleCallbacWk)(WKBundlePageRef page, WKConsoleMessageSource, WKConsoleMessageLevel, WKStringRef message, uint32_t lineNumber, uint32_t columnNumber, WKStringRef url, const void *clientInfo);
+typedef void (*WKBundlePageDocumentVisibilityEventCallback)(WKBundlePageRef page, const void *clientInfo);
 
 typedef struct WKBundlePageUIClientBase {
     int                                                                 version;
@@ -237,5 +238,48 @@ typedef struct WKBundlePageUIClientV4 {
     WKBundlePageWillAddDetailedMessageToConsoleCallback                 willAddDetailedMessageToConsole;
 } WKBundlePageUIClientV4;
 
+typedef struct WKBundlePageUIClientV5 {
+    WKBundlePageUIClientBase                                            base;
+
+    // Version 0.
+    WKBundlePageWillAddMessageToConsoleCallback                         willAddMessageToConsole;
+    WKBundlePageWillSetStatusbarTextCallback                            willSetStatusbarText;
+    WKBundlePageWillRunJavaScriptAlertCallback                          willRunJavaScriptAlert;
+    WKBundlePageWillRunJavaScriptConfirmCallback                        willRunJavaScriptConfirm;
+    WKBundlePageWillRunJavaScriptPromptCallback                         willRunJavaScriptPrompt;
+    WKBundlePageMouseDidMoveOverElementCallback                         mouseDidMoveOverElement;
+    WKBundlePageDidScrollCallback                                       pageDidScroll;
+    void*                                                               unused1;
+    WKBundlePageGenerateFileForUploadCallback                           shouldGenerateFileForUpload;
+    WKBundlePageGenerateFileForUploadCallback                           generateFileForUpload;
+    void*                                                               unused2;
+    WKBundlePageStatusBarIsVisibleCallback                              statusBarIsVisible;
+    WKBundlePageMenuBarIsVisibleCallback                                menuBarIsVisible;
+    WKBundlePageToolbarsAreVisibleCallback                              toolbarsAreVisible;
+
+    // Version 1.
+    WKBundlePageReachedAppCacheOriginQuotaCallback                      didReachApplicationCacheOriginQuota;
+
+    // Version 2.
+    WKBundlePageExceededDatabaseQuotaCallback                           didExceedDatabaseQuota;
+    WKBundlePagePlugInCreateStartLabelTitleCallback                     createPlugInStartLabelTitle;
+    WKBundlePagePlugInCreateStartLabelSubtitleCallback                  createPlugInStartLabelSubtitle;
+    WKBundlePagePlugInCreateExtraStyleSheetCallback                     createPlugInExtraStyleSheet;
+    WKBundlePagePlugInCreateExtraScriptCallback                         createPlugInExtraScript;
+
+    // Version 3.
+    void*                                                               unused3;
+    void*                                                               unused4;
+    void*                                                               unused5;
+
+    WKBundlePageDidClickAutoFillButtonCallback                          didClickAutoFillButton;
+
+    // Version 4.
+    WKBundlePageWillAddDetailedMessageToConsoleCallback                 willAddDetailedMessageToConsole;
+
+
+    // version 5
+    WKBundlePageDocumentVisibilityCallback                              setDocumentVisibility
+} WKBundlePageUIClientV5;
 
 #endif // WKBundlePageUIClient_h

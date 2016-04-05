@@ -278,6 +278,26 @@
 
 2016-04-12  Guillaume Emont  <guijemont@igalia.com>
 
+        [mips] Take advantage of integer divide instruction for ArithDiv and ArithMod.
+        Need the bug URL (OOPS!).
+
+        This is an improved forward port of a patch by Julien Brianceau from
+        https://github.com/Metrological/qtwebkit/commit/8fc64042dfdf7e3ef050f9b64cb77e90f549de32
+        This gives a 2.6% (92ms) improvement on sunspider on my test device.
+
+        Reviewed by NOBODY (OOPS!).
+
+        * assembler/AbstractMacroAssembler.h:
+        (JSC::isMIPS):
+        (JSC::optimizeForMIPS):
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+        * dfg/DFGSpeculativeJIT.cpp:
+        (JSC::DFG::SpeculativeJIT::compileArithDiv):
+        (JSC::DFG::SpeculativeJIT::compileArithMod):
+
+2016-04-11  Guillaume Emont  <guijemont@igalia.com>
+
         MIPS: add MacroAssemblerMIPS::store8(TrustedImm32,ImplicitAddress)
         https://bugs.webkit.org/show_bug.cgi?id=156481
 

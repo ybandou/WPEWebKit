@@ -986,7 +986,6 @@ set(WebCore_SOURCES
     Modules/speech/SpeechRecognition.cpp
     Modules/speech/SpeechRecognitionResult.cpp
     Modules/speech/SpeechRecognitionResultList.cpp
-    Modules/speech/SpeechRecognitionController.cpp
 
     Modules/vibration/NavigatorVibration.cpp
     Modules/vibration/Vibration.cpp

@@ -29,12 +29,9 @@
 
 #if ENABLE(SPEECH_RECOGNITION)
 
-#include "SpeechRecognition.h"
-
 #include "Document.h"
 #include "ExceptionCode.h"
 #include "Page.h"
-#include "SpeechRecognitionController.h"
 #include "SpeechRecognitionError.h"
 #include "SpeechRecognitionEvent.h"
 

@@ -287,12 +287,12 @@ RefPtr<IDBRequest> IDBObjectStore::putOrAdd(JSC::ExecState& state, JSC::JSValue 
         return nullptr;
     }
 
-    if (serializedValue->hasBlobURLs()) {
-        // FIXME: Add Blob/File/FileList support
-        ec.code = IDBDatabaseException::DataCloneError;
-        ec.message = ASCIILiteral("Failed to store record in an IDBObjectStore: BlobURLs are not yet supported.");
-        return nullptr;
-    }
+//    if (serializedValue->hasBlobURLs()) {
+//        // FIXME: Add Blob/File/FileList support
+//        ec.code = IDBDatabaseException::DataCloneError;
+//        ec.message = ASCIILiteral("Failed to store record in an IDBObjectStore: BlobURLs are not yet supported.");
+//        return nullptr;
+//    }
 
     if (key && !key->isValid()) {
         ec.code = IDBDatabaseException::DataError;

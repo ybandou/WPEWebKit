@@ -41,6 +41,11 @@ namespace WebCore {
 class PlatformSpeechSynthesisProviderEfl;
 }
 #endif
+#if PLATFORM(WPE)
+namespace WebCore {
+class PlatformSpeechSynthesisProviderWPE;
+}
+#endif
 
 namespace WebCore {
 
@@ -94,6 +99,9 @@ private:
 #endif
 #if PLATFORM(EFL)
     std::unique_ptr<PlatformSpeechSynthesisProviderEfl> m_platformSpeechWrapper;
+#endif
+#if PLATFORM(WPE)
+    std::unique_ptr<PlatformSpeechSynthesisProviderWPE> m_platformSpeechWrapper;
 #endif
 };
     

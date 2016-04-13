@@ -30,7 +30,6 @@ public:
 private:
     bool m_fliteInited;
     float m_speechDuration ; /*private member to track speeh time*/
-   //ThreadIdentifier  m_speakThread;
     PlatformSpeechSynthesizer* m_platformSpeechSynthesizer;
     RefPtr<PlatformSpeechSynthesisUtterance> m_utterance;
     enum SpeechEvent {
@@ -68,6 +67,9 @@ private:
 
 
 };
+    void fireSpeechEvent(SpeechEvent);
+};
+
 } // namespace WebCore
 
 #endif // ENABLE(SPEECH_SYNTHESIS)

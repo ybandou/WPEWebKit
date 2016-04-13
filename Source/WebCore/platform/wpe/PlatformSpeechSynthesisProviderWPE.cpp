@@ -1,5 +1,9 @@
 
 #include "config.h"
+<<<<<<< HEAD
+=======
+#include "PlatformSpeechSynthesisProviderWPE.h"
+>>>>>>> Added synthesizer WPE files
 #if ENABLE(SPEECH_SYNTHESIS)
 #ifndef FLITE_C_INCLUDED
 #define FLITE_C_INCLUDED
@@ -14,6 +18,7 @@ extern "C" {
 #include <wtf/text/CString.h>
 #include <unistd.h>
 
+<<<<<<< HEAD
 #include "PlatformSpeechSynthesisProviderWPE.h"
 
 /*********** APLAY *********/
@@ -87,6 +92,8 @@ static unsigned int *hw_map = NULL; /* chmap to follow */
 
 
 /**********************************************************************/
+=======
+>>>>>>> Added synthesizer WPE files
 
 namespace WebCore {
 
@@ -182,9 +189,14 @@ void PlatformSpeechSynthesisProviderWPE::initializeVoiceList(Vector<RefPtr<Platf
 }
 
 void PlatformSpeechSynthesisProviderWPE::pause()
+<<<<<<< HEAD
 { 
     printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
     do_pause();
+=======
+{
+    notImplemented();
+>>>>>>> Added synthesizer WPE files
 }
 
 /***********************************************************************
@@ -212,6 +224,7 @@ void PlatformSpeechSynthesisProviderWPE::resume()
 
 void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesisUtterance> utterance)
 {
+<<<<<<< HEAD
    // m_utterance = utterance;
     cst_voice *v;
     if(! m_fliteInited)
@@ -219,10 +232,16 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
     if(!utterance)
         printf(" utterance is not set \n");
    #if 0 
+=======
+    m_utterance = utterance;
+    cst_voice *v;
+    
+>>>>>>> Added synthesizer WPE files
     if (! m_fliteInited || !utterance) {
         fireSpeechEvent(SpeechError);
         return;
     }
+<<<<<<< HEAD
     #endif
     v = register_cmu_us_kal(NULL); //TODO: 
                                    // this has to be set based on user settings
@@ -232,6 +251,17 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
     fireSpeechEvent(SpeechStart);
     sleep(int(m_speechDuration));
     fireSpeechEvent(SpeechEnd);
+=======
+    
+    v = register_cmu_us_kal(NULL); //TODO: 
+                                   // this has to be set based on user settings
+    m_speechDuration =  flite_text_to_speech((m_utterance->text()).utf8().data(),v,"play");
+    printf ("This is line %d of file %s (function %s) speak for  duration= %f\n",__LINE__, __FILE__, __func__,m_speechDuration);
+    fireSpeechEvent(SpeechStart);
+    sleep(int(m_speechDuration));
+    fireSpeechEvent(SpeechEnd);
+
+>>>>>>> Added synthesizer WPE files
 }
 
 /***********************************************************************
@@ -289,6 +319,7 @@ void PlatformSpeechSynthesisProviderWPE::fireSpeechEvent(SpeechEvent speechEvent
     };
 }
 
+<<<<<<< HEAD
 /* Aplay playback */
 /*
  *      Subroutine to clean up before exit.
@@ -926,6 +957,9 @@ void PlatformSpeechSynthesisProviderWPE::playback(char *name)
 	if (fd != 0)
 		close(fd);
   }  
+=======
+
+>>>>>>> Added synthesizer WPE files
 } // namespace WebCore
 
 #endif //speech synthesis

@@ -238,6 +238,20 @@ list(APPEND WebCore_INCLUDE_DIRECTORIES
     ${WPE_DIR}
 )
 
+if (ENABLE_SPEECH_SYNTHESIS)
+    list(APPEND WebCore_SYSTEM_INCLUDE_DIRECTORIES
+          ${CFLITE_INCLUDE_DIR}
+    )
+   list(APPEND WebCore_LIBRARIES
+         ${CFLITE_LIBRARIES}
+    )
+    list(APPEND WebCore_SOURCES
+        platform/wpe/PlatformSpeechSynthesizerWPE.cpp
+        platform/wpe/PlatformSpeechSynthesisProviderWPE.cpp
+    )
+
+endif ()
+
 if (ENABLE_SUBTLE_CRYPTO)
     list(APPEND WebCore_SOURCES
         crypto/CryptoAlgorithm.cpp

@@ -35,7 +35,7 @@
 
 namespace WebCore {
 
-class SpeechRecognitionResult : public ScriptWrappable, public RefCounted<SpeechRecognitionResult> {
+class SpeechRecognitionResult : public RefCounted<SpeechRecognitionResult> {
 public:
     ~SpeechRecognitionResult();
     static PassRefPtr<SpeechRecognitionResult> create(const Vector<RefPtr<SpeechRecognitionAlternative> >&, bool final);

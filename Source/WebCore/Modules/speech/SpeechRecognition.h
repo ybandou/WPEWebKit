@@ -88,7 +88,7 @@ public:
  
     // ActiveDOMObject.
     bool hasPendingActivity() const;
-    void stop(); 
+    void stop();
 
     using RefCounted<SpeechRecognition>::ref;
     using RefCounted<SpeechRecognition>::deref;

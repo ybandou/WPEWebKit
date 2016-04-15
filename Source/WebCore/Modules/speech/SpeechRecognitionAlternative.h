@@ -34,15 +34,15 @@ namespace WebCore {
 
 class ScriptExecutionContext;
 
-class SpeechRecognitionAlternative : public ScriptWrappable, public RefCounted<SpeechRecognitionAlternative> {
+class SpeechRecognitionAlternative : public RefCounted<SpeechRecognitionAlternative> {
 public:
     static PassRefPtr<SpeechRecognitionAlternative> create(const String&, double);
 
     const String& transcript() const { return m_transcript; }
     double confidence() const { return m_confidence; }
 
-private:
     SpeechRecognitionAlternative(const String&, double);
+private:
 
     String m_transcript;
     double m_confidence;

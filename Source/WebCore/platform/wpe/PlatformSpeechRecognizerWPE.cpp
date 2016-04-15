@@ -31,6 +31,9 @@ void PlatformSpeechRecognizer::abort()
 
 void PlatformSpeechRecognizer::stop()
 {
+    printf("Inside:%s:%s:%d\n", __FILE__, __func__, __LINE__);
+    ASSERT(m_platformSpeechWrapper);
+    m_platformSpeechWrapper->stop();
 }
 
 }

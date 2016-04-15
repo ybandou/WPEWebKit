@@ -49,6 +49,7 @@ PassRefPtr<SpeechRecognition> SpeechRecognition::create()
 void SpeechRecognition::start(ExceptionCode& exceptionCode)
 {
     printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
+    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
     if (m_started) {
         exceptionCode = INVALID_STATE_ERR;
@@ -63,22 +64,36 @@ void SpeechRecognition::start(ExceptionCode& exceptionCode)
         m_platformSpeechRecognizer = std::make_unique<PlatformSpeechRecognizer>(this);
 
     m_platformSpeechRecognizer->start();
+    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
+
+    m_started = true;
+    m_stopping = false;
+    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
 }
 
 void SpeechRecognition::stopFunction()
 {
+
+    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
+    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
+
     if (m_started && !m_stopping) {
+
+    printf("Inside stop check  %s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
         m_stopping = true;
-        /* Add code to stop */
+        m_started = false;
+        m_platformSpeechRecognizer->stop();
     }
+    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
+
 }
 
 void SpeechRecognition::abort()
 {
     if (m_started && !m_stopping) {
         m_stopping = true;
-        /* Add code to abort */
+        m_started = false;
     }
 }
 
@@ -114,6 +129,8 @@ void SpeechRecognition::didEndAudio()
 
 void SpeechRecognition::didReceiveResults(const Vector<RefPtr<SpeechRecognitionResult> >& newFinalResults, const Vector<RefPtr<SpeechRecognitionResult> >& currentInterimResults)
 {
+
+    printf("\n%s:%s:%d\n",__FILE__, __func__, __LINE__);
     unsigned long resultIndex = m_finalResults.size();
 
     for (size_t i = 0; i < newFinalResults.size(); ++i)
@@ -123,6 +140,7 @@ void SpeechRecognition::didReceiveResults(const Vector<RefPtr<SpeechRecognitionR
     for (size_t i = 0; i < currentInterimResults.size(); ++i)
         results.append(currentInterimResults[i]);
 
+    printf("\n%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(SpeechRecognitionEvent::createResult(resultIndex, results));
 }
 
@@ -174,6 +192,7 @@ bool SpeechRecognition::hasPendingActivity() const
 }
 
 SpeechRecognition::SpeechRecognition()
+    //: ActiveDOMObject(context)
     : m_grammars(SpeechGrammarList::create()) // FIXME: The spec is not clear on the default value for the grammars attribute.
     , m_continuous(false)
     , m_interimResults(false)

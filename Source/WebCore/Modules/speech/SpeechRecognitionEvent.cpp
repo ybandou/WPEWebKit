@@ -42,16 +42,21 @@ PassRefPtr<SpeechRecognitionEvent> SpeechRecognitionEvent::create()
 
 PassRefPtr<SpeechRecognitionEvent> SpeechRecognitionEvent::create(const AtomicString& eventName, const SpeechRecognitionEventInit& initializer)
 {
+    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
+
     return adoptRef(new SpeechRecognitionEvent(eventName, initializer));
 }
 
 SpeechRecognitionEvent& SpeechRecognitionEvent::createResult(unsigned long resultIndex, const Vector<RefPtr<SpeechRecognitionResult> >& results)
 {
+    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
     return (*new SpeechRecognitionEvent(eventNames().resultEvent, resultIndex, SpeechRecognitionResultList::create(results)));
 }
 
 SpeechRecognitionEvent& SpeechRecognitionEvent::createNoMatch(PassRefPtr<SpeechRecognitionResult> result)
 {
+    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
+
     if (result) {
         Vector<RefPtr<SpeechRecognitionResult> > results;
         results.append(result);
@@ -69,6 +74,8 @@ EventInterface SpeechRecognitionEvent::eventInterface() const
 SpeechRecognitionEvent::SpeechRecognitionEvent()
     : m_resultIndex(0)
 {
+    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
+
 }
 
 SpeechRecognitionEvent::SpeechRecognitionEvent(const AtomicString& eventName, const SpeechRecognitionEventInit& initializer)
@@ -76,6 +83,8 @@ SpeechRecognitionEvent::SpeechRecognitionEvent(const AtomicString& eventName, co
     , m_resultIndex(initializer.resultIndex)
     , m_results(initializer.results)
 {
+    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
+
 }
 
 SpeechRecognitionEvent::SpeechRecognitionEvent(const AtomicString& eventName, unsigned long resultIndex, PassRefPtr<SpeechRecognitionResultList> results)
@@ -83,6 +92,8 @@ SpeechRecognitionEvent::SpeechRecognitionEvent(const AtomicString& eventName, un
     , m_resultIndex(resultIndex)
     , m_results(results)
 {
+    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
+
 }
 
 SpeechRecognitionEvent::~SpeechRecognitionEvent()

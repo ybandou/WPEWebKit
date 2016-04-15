@@ -32,6 +32,9 @@ namespace WebCore {
 
 PassRefPtr<SpeechRecognitionAlternative>  SpeechRecognitionAlternative::create(const String& transcript, double confidence)
 {
+    
+    printf("%s:%s:%d   \n", __FILE__, __func__, __LINE__); 
+
     return adoptRef(new SpeechRecognitionAlternative(transcript, confidence));
 }
 
@@ -39,6 +42,7 @@ SpeechRecognitionAlternative::SpeechRecognitionAlternative(const String& transcr
     : m_transcript(transcript)
     , m_confidence(confidence)
 {
+    printf("%s:%s:%d\n", __FILE__, __func__, __LINE__); 
 }
 
 } // namespace WebCore

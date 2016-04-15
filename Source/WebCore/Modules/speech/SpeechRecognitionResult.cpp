@@ -36,6 +36,8 @@ SpeechRecognitionResult::~SpeechRecognitionResult()
 
 PassRefPtr<SpeechRecognitionResult> SpeechRecognitionResult::create(const Vector<RefPtr<SpeechRecognitionAlternative> >& alternatives, bool final)
 {
+    printf("%s:%s:%d\n", __FILE__, __func__, __LINE__); 
+
     return adoptRef(new SpeechRecognitionResult(alternatives, final));
 }
 
@@ -51,6 +53,8 @@ SpeechRecognitionResult::SpeechRecognitionResult(const Vector<RefPtr<SpeechRecog
     : m_final(final)
     , m_alternatives(alternatives)
 {
+    printf("%s:%s:%d\n", __FILE__, __func__, __LINE__); 
+
 }
 
 } // namespace WebCore

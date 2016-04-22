@@ -30,10 +30,6 @@
 
 namespace WebCore {
 
-SpeechRecognitionResult::~SpeechRecognitionResult()
-{
-}
-
 PassRefPtr<SpeechRecognitionResult> SpeechRecognitionResult::create(const Vector<RefPtr<SpeechRecognitionAlternative> >& alternatives, bool final)
 {
     printf("%s:%s:%d\n", __FILE__, __func__, __LINE__); 

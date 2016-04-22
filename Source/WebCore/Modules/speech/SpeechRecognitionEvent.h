@@ -50,11 +50,11 @@ public:
     static PassRefPtr<SpeechRecognitionEvent> create(const AtomicString&, const SpeechRecognitionEventInit&);
     virtual ~SpeechRecognitionEvent();
 
-    static SpeechRecognitionEvent& createResult(unsigned long resultIndex, const Vector<RefPtr<SpeechRecognitionResult> >& results);
+    static Ref<SpeechRecognitionEvent> createResult(unsigned long resultIndex, const Vector<RefPtr<SpeechRecognitionResult> >& results);
     static SpeechRecognitionEvent& createNoMatch(PassRefPtr<SpeechRecognitionResult>);
 
-    unsigned long resultIndex() const { return m_resultIndex; }
-    SpeechRecognitionResultList* results() const { return m_results.get(); }
+    unsigned long resultIndex() const { printf(":%s:%s:%d: m_resultIndex = %d\n", __FILE__, __func__, __LINE__, m_resultIndex); return m_resultIndex; }
+    SpeechRecognitionResultList* results() const { /*printf(":%s:%s:%d: m_resultIndex = %d\n", __FILE__, __func__, __LINE__, m_results.get());*/ return m_results.get(); }
 
     // These two methods are here to satisfy the specification which requires these attrubutes to exist.
     Document* interpretation() { return 0; }

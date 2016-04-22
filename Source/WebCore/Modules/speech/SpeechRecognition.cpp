@@ -29,6 +29,8 @@
 
 #if ENABLE(SPEECH_RECOGNITION)
 
+#include "SpeechRecognition.h"
+
 #include "Document.h"
 #include "ExceptionCode.h"
 #include "Page.h"
@@ -38,45 +40,43 @@
 namespace WebCore {
 
 
-PassRefPtr<SpeechRecognition> SpeechRecognition::create()
+PassRefPtr<SpeechRecognition> SpeechRecognition::create(ScriptExecutionContext* context)
 {
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
+    printf("%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
 
-    RefPtr<SpeechRecognition> speechRecognition(adoptRef(new SpeechRecognition()));
+    RefPtr<SpeechRecognition> speechRecognition(adoptRef(new SpeechRecognition(context)));
     return speechRecognition.release();
 }
 
 void SpeechRecognition::start(ExceptionCode& exceptionCode)
 {
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
     if (m_started) {
         exceptionCode = INVALID_STATE_ERR;
         return;
     }
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
+    printf("%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
 
+    //setPendingActivity(this);
     m_finalResults.clear();
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
     
     if (!m_platformSpeechRecognizer)
         m_platformSpeechRecognizer = std::make_unique<PlatformSpeechRecognizer>(this);
 
     m_platformSpeechRecognizer->start();
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
 
     m_started = true;
     m_stopping = false;
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
 }
 
 void SpeechRecognition::stopFunction()
 {
 
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
+    printf("%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
     if (m_started && !m_stopping) {
 
@@ -85,7 +85,7 @@ void SpeechRecognition::stopFunction()
         m_started = false;
         m_platformSpeechRecognizer->stop();
     }
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
 }
 
@@ -99,39 +99,45 @@ void SpeechRecognition::abort()
 
 void SpeechRecognition::didStartAudio()
 {
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(Event::create(eventNames().audiostartEvent, /*canBubble=*/false, /*cancelable=*/false));
 }
 
 void SpeechRecognition::didStartSound()
 {
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(Event::create(eventNames().soundstartEvent, /*canBubble=*/false, /*cancelable=*/false));
 }
 
 void SpeechRecognition::didStartSpeech()
 {
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(Event::create(eventNames().speechstartEvent, /*canBubble=*/false, /*cancelable=*/false));
 }
 
 void SpeechRecognition::didEndSpeech()
 {
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(Event::create(eventNames().speechendEvent, /*canBubble=*/false, /*cancelable=*/false));
 }
 
 void SpeechRecognition::didEndSound()
 {
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(Event::create(eventNames().soundendEvent, /*canBubble=*/false, /*cancelable=*/false));
 }
 
 void SpeechRecognition::didEndAudio()
 {
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(Event::create(eventNames().audioendEvent, /*canBubble=*/false, /*cancelable=*/false));
 }
 
 void SpeechRecognition::didReceiveResults(const Vector<RefPtr<SpeechRecognitionResult> >& newFinalResults, const Vector<RefPtr<SpeechRecognitionResult> >& currentInterimResults)
 {
-
-    printf("\n%s:%s:%d\n",__FILE__, __func__, __LINE__);
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     unsigned long resultIndex = m_finalResults.size();
+    printf("%s:%s:%d resultIndex = %d\n",__FILE__, __func__, __LINE__, resultIndex);
 
     for (size_t i = 0; i < newFinalResults.size(); ++i)
         m_finalResults.append(newFinalResults[i]);
@@ -140,7 +146,7 @@ void SpeechRecognition::didReceiveResults(const Vector<RefPtr<SpeechRecognitionR
     for (size_t i = 0; i < currentInterimResults.size(); ++i)
         results.append(currentInterimResults[i]);
 
-    printf("\n%s:%s:%d\n",__FILE__, __func__, __LINE__);
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     dispatchEvent(SpeechRecognitionEvent::createResult(resultIndex, results));
 }
 
@@ -157,25 +163,28 @@ void SpeechRecognition::didReceiveError(SpeechRecognitionError& error)
 
 void SpeechRecognition::didStart()
 {
-    dispatchEvent(Event::create(eventNames().startEvent, /*canBubble=*/false, /*cancelable=*/false));
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+    dispatchEvent(Event::create(eventNames().startEvent/*m_startEvent*/, /*canBubble=*/false, /*cancelable=*/false));
 }
 
 void SpeechRecognition::didEnd()
 {
+    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     m_started = false;
     m_stopping = false;
     if (!m_stoppedByActiveDOMObject)
         dispatchEvent(Event::create(eventNames().endEvent, /*canBubble=*/false, /*cancelable=*/false));
+    //unsetPendingActivity(this);
 }
 
 EventTargetInterface SpeechRecognition::eventTargetInterface() const
 {
-    return (EventTargetInterface)0;// EventTargetNames::SpeechRecognition;
+    return SpeechRecognitionEventTargetInterfaceType;//(EventTargetInterface)0;// EventTargetNames::SpeechRecognition;
 }
 
 ScriptExecutionContext* SpeechRecognition::scriptExecutionContext() const
 {
-    return 0;
+    return ActiveDOMObject::scriptExecutionContext();
 }
 
 void SpeechRecognition::stop()
@@ -191,9 +200,9 @@ bool SpeechRecognition::hasPendingActivity() const
     return m_started;
 }
 
-SpeechRecognition::SpeechRecognition()
-    //: ActiveDOMObject(context)
-    : m_grammars(SpeechGrammarList::create()) // FIXME: The spec is not clear on the default value for the grammars attribute.
+SpeechRecognition::SpeechRecognition(ScriptExecutionContext* context)
+    : ActiveDOMObject(context)
+    , m_grammars(SpeechGrammarList::create()) // FIXME: The spec is not clear on the default value for the grammars attribute.
     , m_continuous(false)
     , m_interimResults(false)
     , m_maxAlternatives(1)
@@ -201,11 +210,11 @@ SpeechRecognition::SpeechRecognition()
     , m_started(false)
     , m_stopping(false)
 {
-    //Document* document = downcast<Document>(scriptExecutionContext());
+  //  Document* document = downcast<Document>(scriptExecutionContext());
 
-    //Page* page = document->page();
-    //ASSERT(page);
-    printf("@@@@@@@@@@@@@@@@@@%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
+//    Page* page = document->page();
+    ASSERT(page);
+    printf("%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
 
 
     // FIXME: Need to hook up with Page to get notified when the visibility changes.

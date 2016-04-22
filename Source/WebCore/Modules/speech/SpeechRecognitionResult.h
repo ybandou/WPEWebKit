@@ -28,7 +28,6 @@
 
 #if ENABLE(SPEECH_RECOGNITION)
 
-#include "ScriptWrappable.h"
 #include "SpeechRecognitionAlternative.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
@@ -37,18 +36,18 @@ namespace WebCore {
 
 class SpeechRecognitionResult : public RefCounted<SpeechRecognitionResult> {
 public:
-    ~SpeechRecognitionResult();
     static PassRefPtr<SpeechRecognitionResult> create(const Vector<RefPtr<SpeechRecognitionAlternative> >&, bool final);
 
     unsigned long length() { return m_alternatives.size(); }
     SpeechRecognitionAlternative* item(unsigned long index);
-    bool isFinal() { return m_final; }
+    bool final() { return m_final; }
 
-private:
     SpeechRecognitionResult(const Vector<RefPtr<SpeechRecognitionAlternative> >&, bool final);
+    ~SpeechRecognitionResult();
+private:
 
-    Vector<RefPtr<SpeechRecognitionAlternative> > m_alternatives;
     bool m_final;
+    Vector<RefPtr<SpeechRecognitionAlternative> > m_alternatives;
 };
 
 } // namespace WebCore

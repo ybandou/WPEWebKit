@@ -47,10 +47,10 @@ PassRefPtr<SpeechRecognitionEvent> SpeechRecognitionEvent::create(const AtomicSt
     return adoptRef(new SpeechRecognitionEvent(eventName, initializer));
 }
 
-SpeechRecognitionEvent& SpeechRecognitionEvent::createResult(unsigned long resultIndex, const Vector<RefPtr<SpeechRecognitionResult> >& results)
+Ref<SpeechRecognitionEvent> SpeechRecognitionEvent::createResult(unsigned long resultIndex, const Vector<RefPtr<SpeechRecognitionResult> >& results)
 {
-    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
-    return (*new SpeechRecognitionEvent(eventNames().resultEvent, resultIndex, SpeechRecognitionResultList::create(results)));
+    printf("%s:%s:%d resultIndex = %d \n\n", __FILE__, __func__, __LINE__, resultIndex);
+    return adoptRef(*new SpeechRecognitionEvent(eventNames().resultEvent, resultIndex, SpeechRecognitionResultList::create(results)));
 }
 
 SpeechRecognitionEvent& SpeechRecognitionEvent::createNoMatch(PassRefPtr<SpeechRecognitionResult> result)

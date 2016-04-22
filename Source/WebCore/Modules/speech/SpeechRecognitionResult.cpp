@@ -54,7 +54,6 @@ SpeechRecognitionResult::SpeechRecognitionResult(const Vector<RefPtr<SpeechRecog
     , m_alternatives(alternatives)
 {
     printf("%s:%s:%d\n", __FILE__, __func__, __LINE__); 
-
 }
 
 } // namespace WebCore

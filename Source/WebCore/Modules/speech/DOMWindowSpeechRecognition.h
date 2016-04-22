@@ -29,6 +29,7 @@
 #if ENABLE(SPEECH_RECOGNITION)
 
 #include "DOMWindowProperty.h"
+#include "Frame.h"
 #include "SpeechRecognition.h"
 #include "Supplementable.h"
 
@@ -45,7 +46,7 @@ public:
     static DOMWindowSpeechRecognition* from(DOMWindow*);
     
 private:
-    SpeechRecognition* speechRecognition();
+    SpeechRecognition* speechRecognition(ScriptExecutionContext*);
     static const char* supplementName();
     
     RefPtr<SpeechRecognition> m_speechRecognition;

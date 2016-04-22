@@ -40,7 +40,7 @@ public:
     double confidence() const { return m_confidence; }
 
     SpeechRecognitionAlternative(const String&, double);
-    ~SpeechRecognitionAlternative(){}
+    virtual ~SpeechRecognitionAlternative(){}
 private:
 
     String m_transcript;

@@ -39,11 +39,11 @@ public:
     static PassRefPtr<SpeechRecognitionResult> create(const Vector<RefPtr<SpeechRecognitionAlternative> >&, bool final);
 
     unsigned long length() { return m_alternatives.size(); }
-    SpeechRecognitionAlternative* item(unsigned long index);
+    SpeechRecognitionAlternative* item(in unsigned long index);
     bool final() { return m_final; }
 
     SpeechRecognitionResult(const Vector<RefPtr<SpeechRecognitionAlternative> >&, bool final);
-    ~SpeechRecognitionResult();
+    virtual ~SpeechRecognitionResult() {}
 private:
 
     bool m_final;

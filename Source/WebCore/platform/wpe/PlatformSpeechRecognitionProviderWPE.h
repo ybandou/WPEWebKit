@@ -7,6 +7,7 @@
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 #include <wtf/Deque.h>
+#include <wtf/threads/BinarySemaphore.h>
 
 extern "C" {
 #include <sphinxbase/err.h>
@@ -56,24 +57,24 @@ private:
     };
 
 
-    void (*m_callBack)(char const *);
-    int  initSpeech();
-    void deinitSpeech();
-    void recognizeFromDevice( void (*)(char const *) );
+    int  initSpeechRecognition();
+    void deinitSpeechRecognition();
+    void recognizeFromDevice();
     
     /* pocket sphinx specific */
-    cmd_ln_t     *m_config;
-    ad_rec_t     *m_audioDevice;
-    ps_decoder_t *m_recognizer;
+    cmd_ln_t       *m_config;
+    ad_rec_t       *m_audioDevice;
+    ps_decoder_t   *m_recognizer;
 
-    pthread_t       m_fireEventThread;
-    FireEventStatus m_fireEventStatus;
-    static void*    fireEventThread(void*);
+    BinarySemaphore   m_waitForEvents;
+    FireEventStatus   m_fireEventStatus;
+    ThreadIdentifier  m_fireEventThread;
+    static void       fireEventThread(void*);
+    void              fireSpeechEvent(const auto&);//TODO: input paramter type has to be modified to avoid warning
 
-
-    pthread_t         m_recognitionThread;
+    ThreadIdentifier  m_recognitionThread;
     RecognitionStatus m_recognitionStatus;
-    static void*      recognitionThread (void*);
+    static void       recognitionThread (void*);
     
     Vector <std::pair<SpeechEvent, const char*>> m_speechEventQueue;
 

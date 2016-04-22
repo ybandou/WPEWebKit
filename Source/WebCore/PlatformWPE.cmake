@@ -278,8 +278,8 @@ if (ENABLE_SUBTLE_CRYPTO)
 endif ()
 
 if (ENABLE_SPEECH_RECOGNITION)
-      list (APPEND WebCore_SOURCES
-          platform/wpe/PlatformSpeechRecognizerWPE.cpp
-          platform/wpe/PlatformSpeechRecognitionProviderWPE.cpp
-      )
+    list (APPEND WebCore_SOURCES
+        platform/wpe/PlatformSpeechRecognizerWPE.cpp
+        platform/wpe/PlatformSpeechRecognitionProviderWPE.cpp
+    )
 endif ()

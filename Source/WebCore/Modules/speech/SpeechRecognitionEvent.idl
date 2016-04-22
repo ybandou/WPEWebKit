@@ -24,11 +24,10 @@
  */
 
 [
-    NoInterfaceObject,
     Conditional=SPEECH_RECOGNITION,
 ] interface SpeechRecognitionEvent : Event {
-    [InitializedByEventConstructor] readonly attribute unsigned long resultIndex;
-    [InitializedByEventConstructor] readonly attribute SpeechRecognitionResultList results;
+    readonly attribute unsigned long resultIndex;
+    readonly attribute SpeechRecognitionResultList results;
 
     readonly attribute Document interpretation;
     readonly attribute Document emma;

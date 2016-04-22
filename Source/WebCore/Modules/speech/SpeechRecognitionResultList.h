@@ -28,20 +28,19 @@
 
 #if  ENABLE(SPEECH_RECOGNITION)
 
-#include "ScriptWrappable.h"
 #include "SpeechRecognitionResult.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace WebCore {
 
-class SpeechRecognitionResultList : public ScriptWrappable, public RefCounted<SpeechRecognitionResultList> {
+class SpeechRecognitionResultList : public RefCounted<SpeechRecognitionResultList> {
 public:
     static PassRefPtr<SpeechRecognitionResultList> create(const Vector<RefPtr<SpeechRecognitionResult> >&);
 
     unsigned long length() { return m_results.size(); }
     SpeechRecognitionResult* item(unsigned long index);
-
+    ~SpeechRecognitionResultList() {}
 private:
     explicit SpeechRecognitionResultList(const Vector<RefPtr<SpeechRecognitionResult> >&);
 
@@ -51,4 +50,5 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(SPEECH_RECOGNITION)
+
 #endif // SpeechRecognitionResultList_h

@@ -28,7 +28,7 @@
 
 #if ENABLE(SPEECH_RECOGNITION)
 
-#include <PlatformSpeechRecognizer.h>
+#include "PlatformSpeechRecognizer.h"
 #include "ActiveDOMObject.h"
 #include "EventTarget.h"
 #include "SpeechGrammarList.h"
@@ -44,11 +44,11 @@ class SpeechRecognitionController;
 class SpeechRecognitionError;
 class SpeechRecognitionResult;
 class SpeechRecognitionResultList;
-class PlatformSpeechRecognizerClient;
+//class PlatformSpeechRecognizerClient;
 
-class SpeechRecognition : public PlatformSpeechRecognizerClient, public RefCounted<SpeechRecognition>, public EventTarget {
+class SpeechRecognition : public PlatformSpeechRecognizerClient, public RefCounted<SpeechRecognition>, public ActiveDOMObject, public EventTarget {
 public:
-    static PassRefPtr<SpeechRecognition> create();
+    static PassRefPtr<SpeechRecognition> create(ScriptExecutionContext*);
     ~SpeechRecognition();
 
     // Attributes.
@@ -83,27 +83,31 @@ public:
 
 
     // EventTarget.
-    EventTargetInterface eventTargetInterface() const override;
-    ScriptExecutionContext* scriptExecutionContext() const override;   
+    virtual EventTargetInterface eventTargetInterface() const override;
+    virtual ScriptExecutionContext* scriptExecutionContext() const override;
  
     // ActiveDOMObject.
+    //virtual 
     bool hasPendingActivity() const;
-    void stop();
+    virtual void stop() override;
 
+    virtual const char* activeDOMObjectName() const override  { return 0; }
+    virtual bool canSuspendForDocumentSuspension() const override {return false;}
+   
     using RefCounted<SpeechRecognition>::ref;
     using RefCounted<SpeechRecognition>::deref;
 
 private:
     friend class RefCounted<SpeechRecognition>;
 
-    SpeechRecognition();
+    SpeechRecognition(ScriptExecutionContext*);
 
 
     // EventTarget
-    void refEventTarget() override { ref(); }
-    void derefEventTarget() override { deref(); }
-    EventTargetData* eventTargetData() override { return &m_eventTargetData; }
-    EventTargetData& ensureEventTargetData() override { return m_eventTargetData; }
+    virtual void refEventTarget() override { ref(); }
+    virtual void derefEventTarget() override { deref(); }
+    virtual EventTargetData* eventTargetData() override { return &m_eventTargetData; }
+    virtual EventTargetData& ensureEventTargetData() override { return m_eventTargetData; }
 
     RefPtr<SpeechGrammarList> m_grammars;
     String m_lang;
@@ -117,6 +121,7 @@ private:
     bool m_stoppedByActiveDOMObject;
     bool m_started;
     bool m_stopping;
+    AtomicString m_startEvent;
     Vector<RefPtr<SpeechRecognitionResult> > m_finalResults;
 
 };

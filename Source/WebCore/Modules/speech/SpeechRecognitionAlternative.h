@@ -27,12 +27,10 @@
 #define SpeechRecognitionAlternative_h
 
 #if ENABLE(SPEECH_RECOGNITION)
-#include "ScriptWrappable.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
 
-class ScriptExecutionContext;
 
 class SpeechRecognitionAlternative : public RefCounted<SpeechRecognitionAlternative> {
 public:
@@ -42,6 +40,7 @@ public:
     double confidence() const { return m_confidence; }
 
     SpeechRecognitionAlternative(const String&, double);
+    ~SpeechRecognitionAlternative(){}
 private:
 
     String m_transcript;

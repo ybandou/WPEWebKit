@@ -1,9 +1,12 @@
 
 #include "config.h"
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 #include "PlatformSpeechSynthesisProviderWPE.h"
 >>>>>>> Added synthesizer WPE files
+=======
+>>>>>>> SpeechSynthesis aplay play/pause added
 #if ENABLE(SPEECH_SYNTHESIS)
 #ifndef FLITE_C_INCLUDED
 #define FLITE_C_INCLUDED
@@ -19,6 +22,9 @@ extern "C" {
 #include <unistd.h>
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> SpeechSynthesis aplay play/pause added
 #include "PlatformSpeechSynthesisProviderWPE.h"
 
 /*********** APLAY *********/
@@ -92,8 +98,11 @@ static unsigned int *hw_map = NULL; /* chmap to follow */
 
 
 /**********************************************************************/
+<<<<<<< HEAD
 =======
 >>>>>>> Added synthesizer WPE files
+=======
+>>>>>>> SpeechSynthesis aplay play/pause added
 
 namespace WebCore {
 
@@ -190,6 +199,7 @@ void PlatformSpeechSynthesisProviderWPE::initializeVoiceList(Vector<RefPtr<Platf
 
 void PlatformSpeechSynthesisProviderWPE::pause()
 <<<<<<< HEAD
+<<<<<<< HEAD
 { 
     printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
     do_pause();
@@ -197,6 +207,11 @@ void PlatformSpeechSynthesisProviderWPE::pause()
 {
     notImplemented();
 >>>>>>> Added synthesizer WPE files
+=======
+{ 
+    printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+    do_pause();
+>>>>>>> SpeechSynthesis aplay play/pause added
 }
 
 /***********************************************************************
@@ -225,6 +240,7 @@ void PlatformSpeechSynthesisProviderWPE::resume()
 void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesisUtterance> utterance)
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
    // m_utterance = utterance;
     cst_voice *v;
     if(! m_fliteInited)
@@ -237,10 +253,20 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
     cst_voice *v;
     
 >>>>>>> Added synthesizer WPE files
+=======
+   // m_utterance = utterance;
+    cst_voice *v;
+    if(! m_fliteInited)
+        printf("m_fliteInited is not set \n");
+    if(!utterance)
+        printf(" utterance is not set \n");
+   #if 0 
+>>>>>>> SpeechSynthesis aplay play/pause added
     if (! m_fliteInited || !utterance) {
         fireSpeechEvent(SpeechError);
         return;
     }
+<<<<<<< HEAD
 <<<<<<< HEAD
     #endif
     v = register_cmu_us_kal(NULL); //TODO: 
@@ -253,15 +279,22 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
     fireSpeechEvent(SpeechEnd);
 =======
     
+=======
+    #endif
+>>>>>>> SpeechSynthesis aplay play/pause added
     v = register_cmu_us_kal(NULL); //TODO: 
                                    // this has to be set based on user settings
-    m_speechDuration =  flite_text_to_speech((m_utterance->text()).utf8().data(),v,"play");
+    m_speechDuration =  flite_text_to_speech((m_utterance->text()).utf8().data(),v,"/tmp/speechsynth.wav");
     printf ("This is line %d of file %s (function %s) speak for  duration= %f\n",__LINE__, __FILE__, __func__,m_speechDuration);
+    speechMain();
     fireSpeechEvent(SpeechStart);
     sleep(int(m_speechDuration));
     fireSpeechEvent(SpeechEnd);
+<<<<<<< HEAD
 
 >>>>>>> Added synthesizer WPE files
+=======
+>>>>>>> SpeechSynthesis aplay play/pause added
 }
 
 /***********************************************************************
@@ -320,6 +353,9 @@ void PlatformSpeechSynthesisProviderWPE::fireSpeechEvent(SpeechEvent speechEvent
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> SpeechSynthesis aplay play/pause added
 /* Aplay playback */
 /*
  *      Subroutine to clean up before exit.
@@ -837,6 +873,7 @@ off64_t PlatformSpeechSynthesisProviderWPE::calc_count(void)
 {
         printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
         off64_t count;
+<<<<<<< HEAD
 
         if (timelimit == 0) {
                 count = pbrec_count;
@@ -960,6 +997,128 @@ void PlatformSpeechSynthesisProviderWPE::playback(char *name)
 =======
 
 >>>>>>> Added synthesizer WPE files
+=======
+
+        if (timelimit == 0) {
+                count = pbrec_count;
+        } else {
+                count = snd_pcm_format_size(hwparams.format, hwparams.rate * hwparams.channels);
+                count *= (off64_t)timelimit;
+        }
+        return count < pbrec_count ? count : pbrec_count;
+}
+
+/***********************************************************************
+* @brief : playing raw data 
+* @Function Name : void playback_go(int fd, size_t loaded, off64_t count, char *name)
+*
+* @param int fd -  device
+* @param  size_t loaded 
+* @param  off64_t count 
+* @param  char *name 
+***********************************************************************/
+
+void PlatformSpeechSynthesisProviderWPE::playback_go(int fd, size_t loaded, off64_t count, char *name)
+{
+        printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+	int l, r;
+	off64_t written = 0;
+	off64_t c;
+	set_params();
+
+	while (loaded > chunk_bytes && written < count ) {
+		if (pcm_write(audiobuf + written, chunk_size) <= 0)
+			return;
+		written += chunk_bytes;
+		loaded -= chunk_bytes;
+	}
+	if (written > 0 && loaded > 0)
+		memmove(audiobuf, audiobuf + written, loaded);
+
+	l = loaded;
+	while (written < count ) {
+		do {
+			c = count - written;
+			if (c > chunk_bytes)
+				c = chunk_bytes;
+			c -= l;
+
+			if (c == 0)
+				break;
+			r = safe_read(fd, audiobuf + l, c);
+			if (r < 0) {
+				perror(name);
+				prg_exit(EXIT_FAILURE);
+			}
+			fdcount += r;
+			if (r == 0)
+				break;
+			l += r;
+		} while ((size_t)l < chunk_bytes);
+		l = l * 8 / bits_per_frame;
+		r = pcm_write(audiobuf, l);
+		if (r != l)
+			break;
+		r = r * bits_per_frame / 8;
+		written += r;
+		l = 0;
+	}
+	snd_pcm_nonblock(handle, 0);
+	snd_pcm_drain(handle);
+	snd_pcm_nonblock(handle, nonblock);
+}
+
+
+/***********************************************************************
+* @brief : let's play WAVE 
+* @Function Name : void playback(char *name)
+*
+* @param char *name - name of wav file to be palyed back
+***********************************************************************/
+
+void PlatformSpeechSynthesisProviderWPE::playback(char *name)
+{
+        printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+	size_t dta;
+	ssize_t dtawave;
+
+	pbrec_count = LLONG_MAX;
+	fdcount = 0;
+        printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+	if ((fd = open(name, O_RDONLY, 0)) == -1) {
+		perror(name);
+		prg_exit(EXIT_FAILURE);
+	}
+        printf ("This is line %d of file %s (function %s) File opened is %s \n",__LINE__, __FILE__, __func__,name);
+	/* read the file header */
+	dta = sizeof(AuHeader);
+	if ((size_t)safe_read(fd, audiobuf, dta) != dta) {
+                printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+		//error(_("read error"));
+		prg_exit(EXIT_FAILURE);
+	}else{
+                printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+        }
+
+	dta = sizeof(VocHeader);
+	if ((size_t)safe_read(fd, audiobuf + sizeof(AuHeader),
+		 dta - sizeof(AuHeader)) != dta - sizeof(AuHeader)) {
+		//error(_("read error"));
+		prg_exit(EXIT_FAILURE);;
+	
+	}else{
+                printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+        }
+	/* read bytes for WAVE-header */
+	if ((dtawave = test_wavefile(fd, audiobuf, dta)) >= 0) {
+                printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+		pbrec_count = calc_count();
+		playback_go(fd, dtawave, pbrec_count,name);
+	}
+	if (fd != 0)
+		close(fd);
+  }  
+>>>>>>> SpeechSynthesis aplay play/pause added
 } // namespace WebCore
 
 #endif //speech synthesis

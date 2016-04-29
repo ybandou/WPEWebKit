@@ -49,6 +49,9 @@ public:
     virtual void abort();
 
     PlatformSpeechRecognizerClient* client() const { return m_speechRecognizerClient; }
+    
+    void setContinuous(bool continuous);
+    void setInterimResults(bool interimResults);
 
 private:
 

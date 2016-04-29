@@ -50,7 +50,7 @@ Ref<RTCRtpSender> RTCRtpSender::create(const String& trackKind, Vector<String>&&
     return adoptRef(*new RTCRtpSender(nullptr, trackKind, WTFMove(mediaStreamIds), client));
 }
 
-RTCRtpSender::RTCRtpSender(RefPtr<MediaStreamTrack>&& track, const String& trackKind, Vector<String>&& mediaStreamIds, RTCRtpSenderClient& client)
+RTCRtpSender::RTCRtpSender(Ref<MediaStreamTrack>&& track, const String& trackKind, Vector<String>&& mediaStreamIds, RTCRtpSenderClient& client)
     : RTCRtpSenderReceiverBase()
     , m_trackKind(trackKind)
     , m_mediaStreamIds(WTFMove(mediaStreamIds))
@@ -70,13 +70,8 @@ void RTCRtpSender::setTrack(RefPtr<MediaStreamTrack>&& track)
     m_track = WTFMove(track);
 }
 
-void RTCRtpSender::replaceTrack(RefPtr<MediaStreamTrack>&& withTrack, PeerConnection::VoidPromise&& promise, ExceptionCode& ec)
+void RTCRtpSender::replaceTrack(Ref<MediaStreamTrack>&& withTrack, PeerConnection::VoidPromise&& promise, ExceptionCode& ec)
 {
-    if (!withTrack) {
-        ec = TypeError;
-        return;
-    }
-
     if (isStopped()) {
         promise.reject(DOMError::create("InvalidStateError: Sender is stopped"));
         return;

@@ -129,13 +129,8 @@ Vector<RefPtr<MediaStream>> RTCPeerConnection::privateGetRemoteStreams() const
     return m_backend->getRemoteStreams();
 }
 
-RefPtr<RTCRtpSender> RTCPeerConnection::privateAddTrack(RefPtr<MediaStreamTrack>&& track, Vector<MediaStream*> streams, ExceptionCode& ec)
+RefPtr<RTCRtpSender> RTCPeerConnection::privateAddTrack(Ref<MediaStreamTrack>&& track, Vector<MediaStream*> streams, ExceptionCode& ec)
 {
-    if (!track) {
-        ec = TypeError;
-        return nullptr;
-    }
-
     if (m_signalingState == SignalingState::Closed) {
         ec = INVALID_STATE_ERR;
         return nullptr;
@@ -195,22 +190,17 @@ RefPtr<RTCRtpSender> RTCPeerConnection::privateAddTrack(RefPtr<MediaStreamTrack>
     return sender;
 }
 
-void RTCPeerConnection::privateRemoveTrack(RTCRtpSender* sender, ExceptionCode& ec)
+void RTCPeerConnection::privateRemoveTrack(RTCRtpSender& sender, ExceptionCode& ec)
 {
-    if (!sender) {
-        ec = TypeError;
-        return;
-    }
-
     if (m_signalingState == SignalingState::Closed) {
         ec = INVALID_STATE_ERR;
         return;
     }
 
-    if (!getSenders().contains(sender))
+    if (!getSenders().contains(&sender))
         return;
 
-    sender->stop();
+    sender.stop();
 
     m_backend->markAsNeedingNegotiation();
 }
@@ -312,15 +302,14 @@ void RTCPeerConnection::queuedCreateAnswer(const Dictionary& answerOptions, Sess
     m_backend->createAnswer(*options, WTFMove(promise));
 }
 
-void RTCPeerConnection::queuedSetLocalDescription(RTCSessionDescription* description, PeerConnection::VoidPromise&& promise)
+void RTCPeerConnection::queuedSetLocalDescription(RTCSessionDescription& description, PeerConnection::VoidPromise&& promise)
 {
     if (m_signalingState == SignalingState::Closed) {
         promise.reject(DOMError::create("InvalidStateError"));
         return;
     }
 
-    ASSERT(description);
-    m_backend->setLocalDescription(*description, WTFMove(promise));
+    m_backend->setLocalDescription(description, WTFMove(promise));
 }
 
 RefPtr<RTCSessionDescription> RTCPeerConnection::localDescription() const
@@ -338,15 +327,14 @@ RefPtr<RTCSessionDescription> RTCPeerConnection::pendingLocalDescription() const
     return m_backend->pendingLocalDescription();
 }
 
-void RTCPeerConnection::queuedSetRemoteDescription(RTCSessionDescription* description, PeerConnection::VoidPromise&& promise)
+void RTCPeerConnection::queuedSetRemoteDescription(RTCSessionDescription& description, PeerConnection::VoidPromise&& promise)
 {
     if (m_signalingState == SignalingState::Closed) {
         promise.reject(DOMError::create("InvalidStateError"));
         return;
     }
 
-    ASSERT(description);
-    m_backend->setRemoteDescription(*description, WTFMove(promise));
+    m_backend->setRemoteDescription(description, WTFMove(promise));
 }
 
 RefPtr<RTCSessionDescription> RTCPeerConnection::remoteDescription() const
@@ -364,15 +352,14 @@ RefPtr<RTCSessionDescription> RTCPeerConnection::pendingRemoteDescription() cons
     return m_backend->pendingRemoteDescription();
 }
 
-void RTCPeerConnection::queuedAddIceCandidate(RTCIceCandidate* rtcCandidate, VoidPromise&& promise)
+void RTCPeerConnection::queuedAddIceCandidate(RTCIceCandidate& rtcCandidate, VoidPromise&& promise)
 {
     if (m_signalingState == SignalingState::Closed) {
         promise.reject(DOMError::create("InvalidStateError"));
         return;
     }
 
-    ASSERT(rtcCandidate);
-    m_backend->addIceCandidate(*rtcCandidate, WTFMove(promise));
+    m_backend->addIceCandidate(rtcCandidate, WTFMove(promise));
 }
 
 String RTCPeerConnection::signalingState() const
@@ -459,14 +446,14 @@ void RTCPeerConnection::setConfiguration(const Dictionary& configuration, Except
     m_backend->setConfiguration(*m_configuration);
 }
 
-void RTCPeerConnection::privateGetStats(MediaStreamTrack* selector, PeerConnection::StatsPromise&& promise)
+void RTCPeerConnection::privateGetStats(MediaStreamTrack& selector, PeerConnection::StatsPromise&& promise)
 {
-    m_backend->getStats(selector, WTFMove(promise));
+    m_backend->getStats(&selector, WTFMove(promise));
 }
 
 void RTCPeerConnection::privateGetStats(PeerConnection::StatsPromise&& promise)
 {
-    privateGetStats(nullptr, WTFMove(promise));
+    m_backend->getStats(nullptr, WTFMove(promise));
 }
 
 RefPtr<RTCDataChannel> RTCPeerConnection::createDataChannel(String, const Dictionary&, ExceptionCode& ec)

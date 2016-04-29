@@ -48,7 +48,7 @@ public:
 
 class RTCRtpSender : public RTCRtpSenderReceiverBase {
 public:
-    static Ref<RTCRtpSender> create(RefPtr<MediaStreamTrack>&&, Vector<String>&& mediaStreamIds, RTCRtpSenderClient&);
+    static Ref<RTCRtpSender> create(Ref<MediaStreamTrack>&&, Vector<String>&& mediaStreamIds, RTCRtpSenderClient&);
     static Ref<RTCRtpSender> create(const String& trackKind, Vector<String>&& mediaStreamIds, RTCRtpSenderClient&);
 
     const String& trackId() const { return m_trackId; }
@@ -61,10 +61,10 @@ public:
     void stop() { m_client = nullptr; }
     void setTrack(RefPtr<MediaStreamTrack>&&);
 
-    void replaceTrack(RefPtr<MediaStreamTrack>&&, PeerConnection::VoidPromise&&, ExceptionCode&);
+    void replaceTrack(Ref<MediaStreamTrack>&&, PeerConnection::VoidPromise&&, ExceptionCode&);
 
 private:
-    RTCRtpSender(RefPtr<MediaStreamTrack>&&, const String& trackKind, Vector<String>&& mediaStreamIds, RTCRtpSenderClient&);
+    RTCRtpSender(Ref<MediaStreamTrack>&&, const String& trackKind, Vector<String>&& mediaStreamIds, RTCRtpSenderClient&);
 
     String m_trackId;
     String m_trackKind;

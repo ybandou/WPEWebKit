@@ -1,27 +1,3 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
- * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 
 #ifndef SpeechRecognition_h
 #define SpeechRecognition_h
@@ -40,16 +16,11 @@
 namespace WebCore {
 
 class ScriptExecutionContext;
-class SpeechRecognitionController;
-class SpeechRecognitionError;
-class SpeechRecognitionResult;
-class SpeechRecognitionResultList;
-//class PlatformSpeechRecognizerClient;
 
 class SpeechRecognition : public PlatformSpeechRecognizerClient, public RefCounted<SpeechRecognition>, public ActiveDOMObject, public EventTarget {
 public:
     static PassRefPtr<SpeechRecognition> create(ScriptExecutionContext*);
-    ~SpeechRecognition();
+    virtual ~SpeechRecognition() {}
 
     // Attributes.
     PassRefPtr<SpeechGrammarList> grammars() { return m_grammars; }
@@ -65,7 +36,7 @@ public:
 
     // Callable by the user.
     void start(ExceptionCode&);
-    void stopFunction();
+    virtual void stop() override;
     void abort();
 
     // Called by the SpeechRecognizer.
@@ -89,7 +60,6 @@ public:
     // ActiveDOMObject.
     //virtual 
     bool hasPendingActivity() const;
-    virtual void stop() override;
 
     virtual const char* activeDOMObjectName() const override  { return 0; }
     virtual bool canSuspendForDocumentSuspension() const override {return false;}

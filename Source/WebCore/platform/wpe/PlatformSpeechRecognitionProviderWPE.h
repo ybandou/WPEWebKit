@@ -31,6 +31,8 @@ public:
     void start();
     void stop();
     void abort();
+    void setContinuous(bool continuous) { m_continuous = continuous;}
+    void setInterimResults(bool interimResults) {m_interimResults = interimResults;}
 
 private:
     enum SpeechEvent {
@@ -46,6 +48,7 @@ private:
         ReceiveNoMatch,
         ReceiveError
     };
+    
     enum RecognitionStatus {
         RecognitionStarted,
         RecognitionStopped,
@@ -61,22 +64,30 @@ private:
     void deinitSpeechRecognition();
     void recognizeFromDevice();
     
-    /* pocket sphinx specific */
+    /* pocketsphinx specific */
     cmd_ln_t       *m_config;
     ad_rec_t       *m_audioDevice;
     ps_decoder_t   *m_recognizer;
+
+    bool              m_continuous;
+    bool              m_finalResults;
+    bool              m_interimResults;
 
     BinarySemaphore   m_waitForEvents;
     FireEventStatus   m_fireEventStatus;
     ThreadIdentifier  m_fireEventThread;
     static void       fireEventThread(void*);
-    void              fireSpeechEvent(const auto&);//TODO: input paramter type has to be modified to avoid warning
+    void              fireSpeechEvent(std::pair<SpeechEvent, const char*>);
 
+    ThreadIdentifier  m_readThread;
     ThreadIdentifier  m_recognitionThread;
     RecognitionStatus m_recognitionStatus;
+    static void       readThread(void*);
     static void       recognitionThread (void*);
     
+    Vector <std::pair<int16*, int32>> m_speechInputQueue;
     Vector <std::pair<SpeechEvent, const char*>> m_speechEventQueue;
+    Vector <std::pair<SpeechRecognitionError::ErrorCode, const char*>> m_speechErrorQueue;
 
     PlatformSpeechRecognizer* m_platformSpeechRecognizer;
 };

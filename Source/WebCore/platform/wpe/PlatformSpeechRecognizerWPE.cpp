@@ -1,4 +1,8 @@
+
 #include "config.h"
+
+#if ENABLE(SPEECH_RECOGNITION)
+
 #include "PlatformSpeechRecognizer.h"
 #include "PlatformSpeechRecognitionProviderWPE.h"
 
@@ -27,6 +31,9 @@ void PlatformSpeechRecognizer::start()
 
 void PlatformSpeechRecognizer::abort()
 {
+    printf("Inside:%s:%s:%d\n", __FILE__, __func__, __LINE__);
+    ASSERT(m_platformSpeechWrapper);
+    m_platformSpeechWrapper->abort();
 } 
 
 void PlatformSpeechRecognizer::stop()
@@ -36,4 +43,20 @@ void PlatformSpeechRecognizer::stop()
     m_platformSpeechWrapper->stop();
 }
 
+void PlatformSpeechRecognizer::setContinuous(bool continuous)
+{
+    printf("Inside:%s:%s:%d\n", __FILE__, __func__, __LINE__);
+    fflush(stdout);
+    m_platformSpeechWrapper->setContinuous(continuous);
 }
+
+void PlatformSpeechRecognizer::setInterimResults(bool interimResults)
+{
+    printf("Inside:%s:%s:%d\n", __FILE__, __func__, __LINE__);
+    fflush(stdout);
+    m_platformSpeechWrapper->setInterimResults(interimResults);
+}
+
+} //WebCore
+
+#endif //SPEECH_RECOGNITION

@@ -1,4 +1,3 @@
-
 #include "config.h"
 
 #if ENABLE(SPEECH_RECOGNITION)
@@ -9,6 +8,18 @@
 
 #include <PlatformSpeechRecognizer.h>
 #include "PlatformSpeechRecognitionProviderWPE.h"
+
+#define FireErrorEvent(context, event, errCode, errMessage)                        \
+    do {                                                                           \
+        context->m_speechErrorQueue.append (std::make_pair(errCode, errMessage));  \
+        context->m_speechEventQueue.append (std::make_pair(event, ""));            \
+        context->m_waitForEvents.signal();                                         \
+    } while(0);
+
+#define FireSpeechEvent(context, event)         \
+    context->m_speechEventQueue.append (event); \
+    context->m_waitForEvents.signal();
+
 
 static const arg_t contArgsDef[] = {
     POCKETSPHINX_OPTIONS,
@@ -31,7 +42,11 @@ static const arg_t contArgsDef[] = {
 namespace WebCore {
 
 PlatformSpeechRecognitionProviderWPE::PlatformSpeechRecognitionProviderWPE(PlatformSpeechRecognizer* client)
-    : m_fireEventThread(0)
+    : m_continuous(false)
+    , m_finalResults(false)
+    , m_interimResults(false)
+    , m_fireEventThread(0)
+    , m_readThread(0)
     , m_recognitionThread(0)
     , m_platformSpeechRecognizer(client)
 
@@ -45,7 +60,6 @@ PlatformSpeechRecognitionProviderWPE::PlatformSpeechRecognitionProviderWPE(Platf
     if (!(m_fireEventThread = createThread(fireEventThread, this, "WebCore: SpeechEventFiringThread"))) {
         printf("Error in creating Speech Event Firing Thread\n");
     }     
-
 }
 
 PlatformSpeechRecognitionProviderWPE::~PlatformSpeechRecognitionProviderWPE()
@@ -75,7 +89,7 @@ int PlatformSpeechRecognitionProviderWPE::initSpeechRecognition()
     }
 
     /* Open Microphone device */
-    if ((m_audioDevice = ad_open_dev("plughw:1", 16000)) == NULL) {
+    if ((m_audioDevice = ad_open_dev("plughw:1", 16000)) == NULL) { //TODO: avoid device hardcoding
         printf("Failed to open audio device\n");
         return -1;
     }
@@ -99,99 +113,170 @@ void PlatformSpeechRecognitionProviderWPE::recognizeFromDevice()
         m_recognitionStatus = RecognitionStarted;
 
         printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
+        if (!(m_readThread = createThread(readThread, this, "WebCore: SpeechRecognitionReadThread"))) {
+            printf("Error in creating Recognition Thread\n");
+        }     
+
         if (!(m_recognitionThread = createThread(recognitionThread, this, "WebCore: SpeechRecognitionThread"))) {
             printf("Error in creating Recognition Thread\n");
+            m_recognitionStatus = RecognitionStopped;
+            m_readThread = 0;
         }     
     }
 }     
 
+void PlatformSpeechRecognitionProviderWPE::readThread (void* context)
+{
+    int32  adLen;
+    int16 *adBuf;
+ 
+    PlatformSpeechRecognitionProviderWPE *providerContext = (PlatformSpeechRecognitionProviderWPE*) context;
+    if (ad_start_rec( providerContext->m_audioDevice) < 0) {
+        printf("Failed to start recording\n");
+        FireErrorEvent(providerContext, ReceiveError, SpeechRecognitionError::ErrorCodeAudioCapture, "Failed to start recording");
+        return;
+    }
+    printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
+
+    FireSpeechEvent(providerContext, std::make_pair(Start, ""));
+    FireSpeechEvent(providerContext, std::make_pair(StartAudio,""));
+
+    adBuf = new int16[2048]();
+    
+    while (providerContext->m_recognitionStatus == RecognitionStarted) {
+        if ((adLen = ad_read(providerContext->m_audioDevice, adBuf, 2048)) < 0) {
+            printf("Failed to read audio");
+            FireErrorEvent(providerContext, ReceiveError, SpeechRecognitionError::ErrorCodeAudioCapture, "Failed to read audio");
+        }
+        
+        if (providerContext->m_recognitionStatus == RecognitionAborted)
+            break;
+
+        if (!adLen)
+            continue;
+
+        providerContext->m_speechInputQueue.append(std::make_pair(adBuf, adLen));
+        adBuf = new int16[2048]();
+    }
+
+    delete[] adBuf; adBuf = NULL;
+    
+    if (ad_stop_rec( providerContext->m_audioDevice) < 0) {
+        printf("Failed to stop recording\n");
+        FireErrorEvent(providerContext, ReceiveError, SpeechRecognitionError::ErrorCodeAudioCapture, "Failed to stop recording");
+    }
+    return;
+}
+
 void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
 {
-    int16 adBuf[2048];
-    uint8 uttStarted, inSpeech;
-    int32 data;
+    int16 *adBuf;
+    int32  adLen = 0;
     char const *text;
+    uint8 uttStarted, inSpeech;
     PlatformSpeechRecognitionProviderWPE *providerContext = (PlatformSpeechRecognitionProviderWPE*) context;
    
     printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
 
-    if (ad_start_rec( providerContext->m_audioDevice) < 0)
-        printf("Failed to start recording\n");
-    printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
-
-    providerContext->m_speechEventQueue.append (std::make_pair(Start,""));
-    providerContext->m_waitForEvents.signal();
-
-
-    if (ps_start_utt(providerContext->m_recognizer) < 0)
+    if (ps_start_utt(providerContext->m_recognizer) < 0) {
         printf("Failed to start utterance\n");
+        FireErrorEvent(providerContext, ReceiveError, SpeechRecognitionError::ErrorCodeAudioCapture, "Failed to start utterance");
+    }
+
     printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
-
-    providerContext->m_speechEventQueue.append (std::make_pair(StartAudio,""));
-    providerContext->m_waitForEvents.signal();
-
     uttStarted = FALSE;
     printf("Ready....\n");
 
-    while ( providerContext->m_recognitionStatus == RecognitionStarted ) {
-        if ((data = ad_read(providerContext->m_audioDevice, adBuf, 2048)) < 0) {
-        
-            E_FATAL("Failed to read audio\n");
-            printf("Failed to read audio");
-        }
+    FireSpeechEvent(providerContext, std::make_pair(StartSound,""));
 
-        ps_process_raw(providerContext->m_recognizer, adBuf, data, false, false);
-        inSpeech = ps_get_in_speech(providerContext->m_recognizer);
-
-
-        if (inSpeech && !uttStarted) {
-
-            printf("%s:%s:%d  in_speech = %d utt_started=%d \n",__FILE__, __func__, __LINE__, inSpeech, uttStarted);
-            uttStarted = true;
-            printf("Listening...\n");
-
-            providerContext->m_speechEventQueue.append (std::make_pair(StartSound,""));
-            providerContext->m_waitForEvents.signal();
-        }
-
-        if (!inSpeech && uttStarted) {
+    while (providerContext->m_recognitionStatus == RecognitionStarted) { 
+        while (providerContext->m_speechInputQueue.size() >= 1) {
+            adBuf = providerContext->m_speechInputQueue[0].first;
+            adLen = providerContext->m_speechInputQueue[0].second;
+                        
+            ps_process_raw(providerContext->m_recognizer, adBuf, adLen, false, false);
             
-            /* speech -> silence transition, time to start new utterance  */
-            ps_end_utt(providerContext->m_recognizer);
+            //remove from vector and delete audio buffer
+            providerContext->m_speechInputQueue.removeFirst(providerContext->m_speechInputQueue[0]);
+            delete[] adBuf; adBuf = NULL;
 
-            providerContext->m_speechEventQueue.append (std::make_pair(StartSpeech,""));
-            text = ps_get_hyp(providerContext->m_recognizer, NULL );
-            if (text != NULL) {
-                printf("%s\n", text);
-                providerContext->m_speechEventQueue.append (std::make_pair(ReceiveResults, text));
-                providerContext->m_waitForEvents.signal();
-                fflush(stdout);
-                /* Fire speech end events */
- 
-                printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+            inSpeech = ps_get_in_speech(providerContext->m_recognizer);
+
+            if (providerContext->m_recognitionStatus == RecognitionAborted)
+                break;
+
+            if (inSpeech && !uttStarted) {
+                printf("%s:%s:%d  in_speech = %d utt_started=%d \n",__FILE__, __func__, __LINE__, inSpeech, uttStarted);
+                uttStarted = true;
+                printf("Listening...\n");
+
+                FireSpeechEvent(providerContext, std::make_pair(StartSpeech,""));
             }
 
-            printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
-            if (ps_start_utt(providerContext->m_recognizer) < 0)
-                E_FATAL("Failed to start utterance\n");
-            uttStarted = FALSE;
-            providerContext->m_speechEventQueue.append (std::make_pair(EndSound,""));
-            providerContext->m_waitForEvents.signal();
+            if (providerContext->m_recognitionStatus == RecognitionAborted)
+                break; 
 
-            E_INFO("Ready....\n");
+            if (uttStarted) { //interim speech
+                 text = ps_get_hyp(providerContext->m_recognizer, NULL );
+                 if (text != NULL) {
+                    printf("Interim result %s\n", text);
+                    FireSpeechEvent(providerContext, std::make_pair(ReceiveResults, text));
+                    fflush(stdout);
+
+                    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+                }
+            }
+
+            if (providerContext->m_recognitionStatus == RecognitionAborted)
+                break; 
+
+            if (!inSpeech && uttStarted) {
+                printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+                /* speech -> silence transition, time to start new utterance  */
+                ps_end_utt(providerContext->m_recognizer);
+
+                FireSpeechEvent(providerContext, std::make_pair(EndSpeech,""));
+                FireSpeechEvent(providerContext, std::make_pair(EndSound,""));
+
+                text = ps_get_hyp(providerContext->m_recognizer, NULL );
+                if (providerContext->m_recognitionStatus == RecognitionAborted)
+                    break;
+
+                if (text != NULL) {
+                    printf("%s\n", text);
+                    // Set flag to indicate final result
+                    providerContext->m_finalResults = true; 
+
+                    FireSpeechEvent(providerContext, std::make_pair(ReceiveResults, text));
+                    fflush(stdout);
+                    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+                }
+                printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+
+                if (!providerContext->m_continuous)
+                    break;
+
+                printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+                fflush(stdout);
+
+                if (ps_start_utt(providerContext->m_recognizer) < 0) {
+                    printf("Failed to start utterance\n");
+                    FireErrorEvent(providerContext, ReceiveError, SpeechRecognitionError::ErrorCodeAudioCapture, "Failed to start utterance");
+                }
+                uttStarted = FALSE;
+                printf("Ready....\n");
+
+                fflush(stdout);
+                FireSpeechEvent(providerContext, std::make_pair(StartSound,""));    
+            }
         }
        //usleep(100 * 1000);
-    }
+    } 
 
-    if (ad_stop_rec( providerContext->m_audioDevice) < 0)
-        printf("Failed to start recording\n");
-
-    providerContext->m_speechEventQueue.append (std::make_pair(EndAudio,""));
-    providerContext->m_speechEventQueue.append (std::make_pair(End,""));
-    providerContext->m_waitForEvents.signal();
+    FireSpeechEvent(providerContext, std::make_pair(EndAudio,""));
+    FireSpeechEvent(providerContext, std::make_pair(End,""));
 
     printf("%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
-
     return;
 }
 
@@ -205,15 +290,28 @@ void PlatformSpeechRecognitionProviderWPE::start()
 
 void PlatformSpeechRecognitionProviderWPE::abort()
 {
+    printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
+    if (m_recognitionThread) {
+        m_recognitionStatus = RecognitionAborted;
+        waitForThreadCompletion (m_readThread);
+        waitForThreadCompletion (m_recognitionThread);   
+        m_recognitionThread = m_readThread = 0; 
+        for (const auto& speechInput: m_speechInputQueue) {
+            delete[] speechInput.first;
+            m_speechInputQueue.removeFirst(speechInput);
+        }            
+    }
 }
 
 void PlatformSpeechRecognitionProviderWPE::stop()
 {
     printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
     if (m_recognitionThread) {
+        printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
         m_recognitionStatus = RecognitionStopped;
+        waitForThreadCompletion (m_readThread);
         waitForThreadCompletion (m_recognitionThread);   
-        m_recognitionThread = 0;
+        m_recognitionThread = m_readThread = 0; 
     }
 }
 
@@ -223,24 +321,21 @@ void PlatformSpeechRecognitionProviderWPE::fireEventThread(void* context)
 
     printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
     while (providerContext->m_fireEventStatus == FireEventStarted) {
-
         while (providerContext->m_waitForEvents.wait(0)) {
-
-            for (const auto& eventQueue: providerContext->m_speechEventQueue) {
-
-                callOnMainThread([providerContext, eventQueue] { 
-                    providerContext->fireSpeechEvent(eventQueue);  
+            for (const auto& firedEvent: providerContext->m_speechEventQueue) {
+                callOnMainThread([providerContext, firedEvent] { 
+                    providerContext->fireSpeechEvent(firedEvent);  
                 });
-                providerContext->m_speechEventQueue.removeFirst(eventQueue);
+                providerContext->m_speechEventQueue.removeFirst(firedEvent);
             }
         }
     }
     return;
 }
 
-void PlatformSpeechRecognitionProviderWPE::fireSpeechEvent(const auto& eventQueue) //TODO: input paramter type has to be modified to avoid warning
+void PlatformSpeechRecognitionProviderWPE::fireSpeechEvent(std::pair<SpeechEvent, const char*> firedEvent) 
 {
-    SpeechEvent speechEvent = eventQueue.first;
+    SpeechEvent speechEvent = firedEvent.first;
      
     switch (speechEvent) {
     case Start:
@@ -261,7 +356,9 @@ void PlatformSpeechRecognitionProviderWPE::fireSpeechEvent(const auto& eventQueu
         break;
     case End:
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
+        m_recognitionStatus = RecognitionStopped;
         m_platformSpeechRecognizer->client()->didEnd();
+        m_recognitionThread = 0;
         break;
     case EndAudio:
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
@@ -277,30 +374,42 @@ void PlatformSpeechRecognitionProviderWPE::fireSpeechEvent(const auto& eventQueu
         break;
     case ReceiveResults: {
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
-        String transcripts (eventQueue.second);
+        String transcripts (firedEvent.second);
         double confidence;
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
-
-        Vector<RefPtr<SpeechRecognitionAlternative> > alternatives;
-        alternatives.append(SpeechRecognitionAlternative::create(transcripts, confidence));
-        printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
+        if (m_recognitionStatus == RecognitionAborted)
+                break;
 
         Vector<RefPtr<SpeechRecognitionResult>> finalResults;
         Vector<RefPtr<SpeechRecognitionResult>> interimResults;
-                 
+        Vector<RefPtr<SpeechRecognitionAlternative> > alternatives;
+        alternatives.append(SpeechRecognitionAlternative::create(transcripts, confidence));
+
+        if (m_interimResults) {
+            printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
+            interimResults.append(SpeechRecognitionResult::create(alternatives, false)); 
+        }
+        if (m_finalResults) {
+            printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
+            finalResults.append(SpeechRecognitionResult::create(alternatives, m_finalResults)); 
+            m_finalResults = false;
+        }   
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
-        finalResults.append(SpeechRecognitionResult::create(alternatives, true)); 
         m_platformSpeechRecognizer->client()->didReceiveResults(finalResults, interimResults);
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
         break;
-                }
+    }
     case ReceiveNoMatch:
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
 //        m_platformSpeechRecognizer->client()->didReceiveNoMatch();
         break;
     case ReceiveError:
         printf("%s:%s:%d \n",__FILE__, __func__, __LINE__);
-//        m_platformSpeechRecognizer->client()->didReceiveError();
+        if (m_speechErrorQueue.size() >= 1) {
+             String errMessage (m_speechErrorQueue[0].second);
+             m_platformSpeechRecognizer->client()->didReceiveError(SpeechRecognitionError::create(m_speechErrorQueue[0].first, errMessage));
+             m_speechErrorQueue.removeFirst(m_speechErrorQueue[0]);
+        }
         break;
     default:
         printf("%s:%s:%d invalid event %d\n",__FILE__, __func__, __LINE__, speechEvent);

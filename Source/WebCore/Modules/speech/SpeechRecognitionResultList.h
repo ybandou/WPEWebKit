@@ -15,7 +15,7 @@ public:
     static PassRefPtr<SpeechRecognitionResultList> create(const Vector<RefPtr<SpeechRecognitionResult> >&);
 
     unsigned long length() { return m_results.size(); }
-    SpeechRecognitionResult* item(in unsigned long index);
+    SpeechRecognitionResult* item(unsigned long index);
     virtual ~SpeechRecognitionResultList() {}
 
 private:

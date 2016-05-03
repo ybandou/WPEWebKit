@@ -4,7 +4,6 @@
 
 #if  ENABLE(SPEECH_RECOGNITION)
 
-//#include "ScriptWrappable.h"
 #include "URL.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"

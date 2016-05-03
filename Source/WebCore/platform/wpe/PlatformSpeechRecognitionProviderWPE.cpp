@@ -161,10 +161,14 @@ void PlatformSpeechRecognitionProviderWPE::readThread (void* context)
 
     delete[] adBuf; adBuf = NULL;
     
+    printf("%s:%s:%d quesize = %d \n", __FILE__, __func__, __LINE__, providerContext->m_speechInputQueue.size());
     if (ad_stop_rec( providerContext->m_audioDevice) < 0) {
         printf("Failed to stop recording\n");
         FireErrorEvent(providerContext, ReceiveError, SpeechRecognitionError::ErrorCodeAudioCapture, "Failed to stop recording");
     }
+
+    providerContext->m_readThread = 0; 
+
     return;
 }
 
@@ -221,9 +225,8 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
                  if (text != NULL) {
                     printf("Interim result %s\n", text);
                     FireSpeechEvent(providerContext, std::make_pair(ReceiveResults, text));
+                    printf("%s:%s:%d quesize = %d \n", __FILE__, __func__, __LINE__, providerContext->m_speechInputQueue.size());
                     fflush(stdout);
-
-                    printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
                 }
             }
 
@@ -248,13 +251,13 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
                     providerContext->m_finalResults = true; 
 
                     FireSpeechEvent(providerContext, std::make_pair(ReceiveResults, text));
-                    fflush(stdout);
                     printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
+                    fflush(stdout);
                 }
                 printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
 
                 if (!providerContext->m_continuous)
-                    break;
+                    goto EndSpeech;
 
                 printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
                 fflush(stdout);
@@ -273,14 +276,30 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
        //usleep(100 * 1000);
     } 
 
+    ps_end_utt(providerContext->m_recognizer);
+
+EndSpeech:
     FireSpeechEvent(providerContext, std::make_pair(EndAudio,""));
     FireSpeechEvent(providerContext, std::make_pair(End,""));
 
+    providerContext->m_recognitionThread = 0; 
+    providerContext->clearSpeechQueue(); 
     printf("%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
     return;
 }
 
+void PlatformSpeechRecognitionProviderWPE::clearSpeechQueue()
+{
+    int16 *adBuf;
+    while (m_speechInputQueue.size() >= 1) {
+        adBuf = m_speechInputQueue[0].first;
 
+        //remove from vector and delete audio buffer
+        m_speechInputQueue.removeFirst(m_speechInputQueue[0]);
+        delete[] adBuf; adBuf = NULL;
+        printf("%s:%s:%d quesize = %d \n", __FILE__, __func__, __LINE__, m_speechInputQueue.size());
+    }    
+}
 
 void PlatformSpeechRecognitionProviderWPE::start()
 {
@@ -292,14 +311,11 @@ void PlatformSpeechRecognitionProviderWPE::abort()
 {
     printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
     if (m_recognitionThread) {
+    printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
         m_recognitionStatus = RecognitionAborted;
         waitForThreadCompletion (m_readThread);
         waitForThreadCompletion (m_recognitionThread);   
-        m_recognitionThread = m_readThread = 0; 
-        for (const auto& speechInput: m_speechInputQueue) {
-            delete[] speechInput.first;
-            m_speechInputQueue.removeFirst(speechInput);
-        }            
+        m_recognitionThread = m_readThread = 0;    
     }
 }
 
@@ -309,9 +325,6 @@ void PlatformSpeechRecognitionProviderWPE::stop()
     if (m_recognitionThread) {
         printf("%s:%s:%d \n", __FILE__, __func__, __LINE__);
         m_recognitionStatus = RecognitionStopped;
-        waitForThreadCompletion (m_readThread);
-        waitForThreadCompletion (m_recognitionThread);   
-        m_recognitionThread = m_readThread = 0; 
     }
 }
 

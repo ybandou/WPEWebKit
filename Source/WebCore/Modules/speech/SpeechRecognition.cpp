@@ -25,8 +25,8 @@ PassRefPtr<SpeechRecognition> SpeechRecognition::create(ScriptExecutionContext* 
 
 void SpeechRecognition::start(ExceptionCode& exceptionCode)
 {
-    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
     if (m_started) {
         exceptionCode = INVALID_STATE_ERR;
         return;
@@ -46,6 +46,7 @@ void SpeechRecognition::start(ExceptionCode& exceptionCode)
     m_stoppedByActiveDOMObject = false;
     m_started = true;
     m_stopping = false;
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 }
 
 void SpeechRecognition::stop()
@@ -57,7 +58,6 @@ void SpeechRecognition::stop()
         m_stopping = true;
         m_started = false;
         m_platformSpeechRecognizer->stop();
-        m_stoppedByActiveDOMObject = true;
     }
     printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 
@@ -65,13 +65,16 @@ void SpeechRecognition::stop()
 
 void SpeechRecognition::abort()
 {
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
     if (m_started && !m_stopping) {
         m_stopping = true;
         m_started = false;
 
+        printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
         m_stoppedByActiveDOMObject = true;
         m_platformSpeechRecognizer->abort();
     }
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
 }
 
 void SpeechRecognition::didStartAudio()
@@ -138,6 +141,7 @@ void SpeechRecognition::didReceiveNoMatch(PassRefPtr<SpeechRecognitionResult> re
 
 void SpeechRecognition::didReceiveError(SpeechRecognitionError& error)
 {
+    printf("%s:%s:%d  m_started = %d m_stopping=%d \n\n",__FILE__, __func__, __LINE__, m_started, m_stopping );
     dispatchEvent(error);
     m_started = false;
 }
@@ -153,8 +157,10 @@ void SpeechRecognition::didEnd()
     printf("%s:%s:%d\n",__FILE__, __func__, __LINE__);
     m_started = false;
     m_stopping = false;
-    if (!m_stoppedByActiveDOMObject)
+    if (!m_stoppedByActiveDOMObject) {
         dispatchEvent(Event::create(eventNames().endEvent, false, false));
+        m_stoppedByActiveDOMObject = true;
+    }
 }
 
 EventTargetInterface SpeechRecognition::eventTargetInterface() const

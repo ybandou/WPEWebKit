@@ -85,10 +85,12 @@ private:
     static void       readThread(void*);
     static void       recognitionThread (void*);
     
+          
     Vector <std::pair<int16*, int32>> m_speechInputQueue;
     Vector <std::pair<SpeechEvent, const char*>> m_speechEventQueue;
     Vector <std::pair<SpeechRecognitionError::ErrorCode, const char*>> m_speechErrorQueue;
-
+    void clearSpeechQueue();
+ 
     PlatformSpeechRecognizer* m_platformSpeechRecognizer;
 };
 

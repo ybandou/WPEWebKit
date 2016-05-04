@@ -19,7 +19,7 @@ class ScriptExecutionContext;
 
 class SpeechRecognition : public PlatformSpeechRecognizerClient, public RefCounted<SpeechRecognition>, public ActiveDOMObject, public EventTarget {
 public:
-    static PassRefPtr<SpeechRecognition> create(ScriptExecutionContext*);
+    static PassRefPtr<SpeechRecognition> create(ScriptExecutionContext&);
     virtual ~SpeechRecognition() {}
 
     // Attributes.
@@ -69,9 +69,7 @@ public:
 
 private:
     friend class RefCounted<SpeechRecognition>;
-
-    SpeechRecognition(ScriptExecutionContext*);
-
+    SpeechRecognition(ScriptExecutionContext&);
 
     // EventTarget
     virtual void refEventTarget() override { ref(); }

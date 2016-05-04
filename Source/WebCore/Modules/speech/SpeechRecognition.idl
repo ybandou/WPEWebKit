@@ -1,9 +1,9 @@
 
 [
-    NoInterfaceObject,
+    Conditional=SPEECH_RECOGNITION,
     ActiveDOMObject,
-    Constructor,
-    Conditional=SPEECH_RECOGNITION
+    ConstructorCallWith=ScriptExecutionContext,
+    Constructor
 ] interface SpeechRecognition : EventTarget {
     attribute DOMString lang;
     attribute boolean continuous;

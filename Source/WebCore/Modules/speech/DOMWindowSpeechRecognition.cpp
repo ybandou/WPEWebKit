@@ -47,7 +47,7 @@ SpeechRecognition* DOMWindowSpeechRecognition::speechRecognition(ScriptExecution
     printf("Inside %s:%s:%d\n", __FILE__, __func__, __LINE__);
 
     if (!m_speechRecognition && frame())
-        m_speechRecognition = SpeechRecognition::create(context);
+        m_speechRecognition = SpeechRecognition::create(*context);
     return m_speechRecognition.get();
 }
     

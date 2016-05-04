@@ -15,7 +15,7 @@
 
 namespace WebCore {
 
-PassRefPtr<SpeechRecognition> SpeechRecognition::create(ScriptExecutionContext* context)
+PassRefPtr<SpeechRecognition> SpeechRecognition::create(ScriptExecutionContext& context)
 {
     printf("%s:%s:%d\n\n",__FILE__, __func__, __LINE__ );
 
@@ -178,8 +178,8 @@ bool SpeechRecognition::hasPendingActivity() const
     return m_started;
 }
 
-SpeechRecognition::SpeechRecognition(ScriptExecutionContext* context)
-    : ActiveDOMObject(context)
+SpeechRecognition::SpeechRecognition(ScriptExecutionContext& context)
+    : ActiveDOMObject(&context)
     , m_grammars(SpeechGrammarList::create()) // FIXME: The spec is not clear on the default value for the grammars attribute.
     , m_continuous(false)
     , m_interimResults(false)

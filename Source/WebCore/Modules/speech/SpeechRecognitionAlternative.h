@@ -3,6 +3,7 @@
 #define SpeechRecognitionAlternative_h
 
 #if ENABLE(SPEECH_RECOGNITION)
+#include "Logging.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {

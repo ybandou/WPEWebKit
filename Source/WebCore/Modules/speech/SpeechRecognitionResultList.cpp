@@ -8,7 +8,7 @@
 namespace WebCore {
 PassRefPtr<SpeechRecognitionResultList> SpeechRecognitionResultList::create(const Vector<RefPtr<SpeechRecognitionResult> >& results)
 {
-    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
+    LOG(SpeechRecognition, "%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
 
     return adoptRef(new SpeechRecognitionResultList(results));
 }
@@ -25,7 +25,7 @@ SpeechRecognitionResult* SpeechRecognitionResultList::item(unsigned long index)
 SpeechRecognitionResultList::SpeechRecognitionResultList(const Vector<RefPtr<SpeechRecognitionResult> >& results)
     : m_results(results)
 {
-    printf("%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
+    LOG(SpeechRecognition, "%s:%s:%d \n\n", __FILE__, __func__, __LINE__);
 }
 
 } // namespace WebCore

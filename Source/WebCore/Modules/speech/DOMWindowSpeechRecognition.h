@@ -5,6 +5,7 @@
 #if ENABLE(SPEECH_RECOGNITION)
 
 #include "DOMWindowProperty.h"
+#include "Logging.h"
 #include "Frame.h"
 #include "SpeechRecognition.h"
 #include "Supplementable.h"

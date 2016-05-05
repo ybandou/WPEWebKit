@@ -5,6 +5,7 @@
 #if ENABLE(SPEECH_RECOGNITION)
 #include "Event.h"
 #include "EventNames.h"
+#include "Logging.h"
 #include "EventTarget.h"
 #include <wtf/PassRefPtr.h>
 #include "wtf/RefCounted.h"
@@ -41,10 +42,10 @@ public:
 
     const String& error() { return m_error; }
     const String& message() { return m_message; }
-
-    virtual EventInterface eventInterface() const override { return (EventInterface) 0; /*SpeechRecognitionErrorInterfaceType;*/ }
+    virtual EventInterface eventInterface() const override;
 
 private:
+    
     SpeechRecognitionError(const String&, const String&);
     SpeechRecognitionError(const AtomicString&, const SpeechRecognitionErrorInit&);
 

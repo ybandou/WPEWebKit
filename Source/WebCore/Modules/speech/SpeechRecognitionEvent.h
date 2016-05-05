@@ -5,6 +5,7 @@
 #if ENABLE(SPEECH_RECOGNITION)
 #include "Event.h"
 #include "EventNames.h"
+#include "Logging.h"
 #include "SpeechRecognitionResult.h"
 #include "SpeechRecognitionResultList.h"
 #include "wtf/RefPtr.h"

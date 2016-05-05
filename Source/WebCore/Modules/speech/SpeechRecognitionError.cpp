@@ -48,6 +48,12 @@ PassRefPtr<SpeechRecognitionError> SpeechRecognitionError::create(const AtomicSt
     return adoptRef(new SpeechRecognitionError(eventName, initializer));
 }
 
+EventInterface SpeechRecognitionError::eventInterface() const
+{
+    return (EventInterface) 0; /* SpeechRecognitionErrorEventInterfaceType; */
+}
+
+
 SpeechRecognitionError::SpeechRecognitionError(const String& error, const String& message)
     : Event(eventNames().errorEvent, /*canBubble=*/false, /*cancelable=*/false)
     , m_error(error)

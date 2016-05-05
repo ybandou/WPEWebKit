@@ -38,13 +38,13 @@ DOMWindowSpeechRecognition* DOMWindowSpeechRecognition::from(DOMWindow* window)
 // static
 SpeechRecognition* DOMWindowSpeechRecognition::speechRecognition(DOMWindow& window)
 {
-    printf("Inside %s:%s:%d\n", __FILE__, __func__, __LINE__);
+    LOG(SpeechRecognition, "%s:%s:%d\n", __FILE__, __func__, __LINE__);
     return DOMWindowSpeechRecognition::from(&window)->speechRecognition(window.scriptExecutionContext());
 }
 
 SpeechRecognition* DOMWindowSpeechRecognition::speechRecognition(ScriptExecutionContext* context)
 {
-    printf("Inside %s:%s:%d\n", __FILE__, __func__, __LINE__);
+    LOG(SpeechRecognition, "%s:%s:%d\n", __FILE__, __func__, __LINE__);
 
     if (!m_speechRecognition && frame())
         m_speechRecognition = SpeechRecognition::create(*context);

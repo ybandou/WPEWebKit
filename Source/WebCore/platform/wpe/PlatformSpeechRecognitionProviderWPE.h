@@ -3,6 +3,7 @@
 
 #if ENABLE(SPEECH_RECOGNITION)
 
+#include <Logging.h>
 #include <wtf/PassRefPtr.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
@@ -78,6 +79,7 @@ private:
     ThreadIdentifier  m_fireEventThread;
     static void       fireEventThread(void*);
     void              fireSpeechEvent(std::pair<SpeechEvent, const char*>);
+    void              stopFireEventThread();
 
     ThreadIdentifier  m_readThread;
     ThreadIdentifier  m_recognitionThread;

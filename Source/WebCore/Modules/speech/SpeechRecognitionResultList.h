@@ -5,6 +5,7 @@
 #if  ENABLE(SPEECH_RECOGNITION)
 
 #include "SpeechRecognitionResult.h"
+#include "Logging.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 

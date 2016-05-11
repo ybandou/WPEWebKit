@@ -123,28 +123,28 @@ namespace WebCore {
 
             String voiceName = voice->name;
             if(voiceName.contains("kal",true)){
-                printf("Kal sound is heard \n");
+                printf("Kal - en-US - US English Male \n");
                 langSupport = "en-US" ;
                 voiceName = "US English Male";
             } 
             else if(voiceName.contains("rms",true)){
-                printf("rms sound is heard \n");
+                printf("rms - en-US -US English Male \n");
                 langSupport = "en-US" ;
                 voiceName = "US English Male";
             } 
 
             else if(voiceName.contains("awb",true)){
-                printf("awb sound is heard \n");
+                printf("awb - en-Scott - Scottish English Male \n");
                 langSupport = "en-Scott" ;
                 voiceName = "Scottish English Male";
             } 
             else if(voiceName.contains("slt",true)){
-                printf("slt sound is heard \n");
+                printf("slt - en-US - US English Female \n");
                 langSupport = "en-US" ;
                 voiceName = "US English Female";
             } 
             else{
-                printf("Support for this language has to be add \n");
+                printf("Support for this language has to be added \n");
             }
             voiceList.append(PlatformSpeechSynthesisVoice::create(String(voiceId), voiceName, langSupport, true, true));
         }
@@ -212,14 +212,24 @@ void PlatformSpeechSynthesisProviderWPE::pause()
 
     void PlatformSpeechSynthesisProviderWPE::cancel()
     {
-        m_cancelled = 1;
-        if (m_speakThread) {
-            waitForThreadCompletion(m_speakThread);
-            m_speakThread = 0;
+        int err;
+
+        if(m_cancelled == 0){
+            m_cancelled = 1;
+            err = snd_pcm_drop(m_handle); // To clear the buffer for pause->stop
+            if (err < 0)
+                printf( "ERROR  pause release error \n ");
+
+            if (m_speakThread) {
+                waitForThreadCompletion(m_speakThread);
+                m_speakThread = 0;
+            }
+            printf ("SpeechStop :: This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
+            fireSpeechEvent(SpeechCancel);
+            m_utterance = nullptr;
+        }else{
+            printf("ERROR Already Cancelled \n");
         }
-        printf ("SpeechStart :: This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
-        fireSpeechEvent(SpeechCancel);
-        m_utterance = nullptr;
 
 <<<<<<< HEAD
 /***********************************************************************
@@ -923,10 +933,11 @@ void PlatformSpeechSynthesisProviderWPE::playback(char *name)
          ,m_periodFrames(0)
          ,m_bufferFrames(0)
          ,m_pbrecCount(LLONG_MAX)
-         ,m_fdcount(0)
-    {}
+         ,m_fdcount(0){
+    }
 
-    AplayWPE::~AplayWPE(){}
+    AplayWPE::~AplayWPE(){
+    }
 
 
 <<<<<<< HEAD

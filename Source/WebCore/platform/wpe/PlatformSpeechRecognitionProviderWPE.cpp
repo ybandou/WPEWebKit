@@ -12,7 +12,7 @@
 #define FireErrorEvent(context, event, errCode, errMessage)                        \
     do {                                                                           \
         context->m_speechErrorQueue.append (std::make_pair(errCode, errMessage));  \
-        context->m_speechEventQueue.append (std::make_pair(event, ""));            \
+        context->m_speechEventQueue.append (event);     \
         context->m_waitForEvents.signal();                                         \
     } while(0);
 
@@ -43,7 +43,6 @@ namespace WebCore {
 
 PlatformSpeechRecognitionProviderWPE::PlatformSpeechRecognitionProviderWPE(PlatformSpeechRecognizer* client)
     : m_continuous(false)
-    , m_finalResults(false)
     , m_interimResults(false)
     , m_fireEventThread(0)
     , m_readThread(0)
@@ -79,7 +78,12 @@ PlatformSpeechRecognitionProviderWPE::~PlatformSpeechRecognitionProviderWPE()
 int PlatformSpeechRecognitionProviderWPE::initSpeechRecognition()
 {
     /* Initialize PocketSphinx Recognizer module */ 
-    m_config = cmd_ln_init(NULL, contArgsDef, FALSE, NULL, TRUE);
+    m_config = cmd_ln_init(NULL, contArgsDef, TRUE,  
+                           "-topn", "2",
+                           "-maxwpf", "5",
+                           "-maxhmmpf", "3000",
+                           "-pl_window", "4", 
+                           NULL);
 
     LOG(SpeechRecognition, "%s:%s:%d \n", __FILE__, __func__, __LINE__);
    
@@ -145,13 +149,13 @@ void PlatformSpeechRecognitionProviderWPE::readThread (void* context)
     }
     LOG(SpeechRecognition, "%s:%s:%d \n", __FILE__, __func__, __LINE__);
 
-    FireSpeechEvent(providerContext, std::make_pair(Start, ""));
-    FireSpeechEvent(providerContext, std::make_pair(StartAudio,""));
+    FireSpeechEvent(providerContext, Start);
+    FireSpeechEvent(providerContext, StartAudio);
 
-    adBuf = new int16[2048]();
+    adBuf = new int16[4096]();
     
     while (providerContext->m_recognitionStatus == RecognitionStarted) {
-        if ((adLen = ad_read(providerContext->m_audioDevice, adBuf, 2048)) < 0) {
+        if ((adLen = ad_read(providerContext->m_audioDevice, adBuf, 4096)) < 0) {
             LOG(SpeechRecognition, "Failed to read audio");
 
             FireErrorEvent(providerContext, ReceiveError, 
@@ -166,7 +170,7 @@ void PlatformSpeechRecognitionProviderWPE::readThread (void* context)
             continue;
 
         providerContext->m_speechInputQueue.append(std::make_pair(adBuf, adLen));
-        adBuf = new int16[2048]();
+        adBuf = new int16[4096]();
     }
 
     delete[] adBuf; adBuf = NULL;
@@ -193,6 +197,8 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
     int32  adLen = 0;
     char const *text;
     uint8 uttStarted, inSpeech;
+    uint8 silenceCnt = 0, intrimCnt = 0;
+    SpeechHyp *speechHyp;
     PlatformSpeechRecognitionProviderWPE *providerContext = (PlatformSpeechRecognitionProviderWPE*) context;
    
     LOG(SpeechRecognition, "%s:%s:%d \n", __FILE__, __func__, __LINE__);
@@ -207,8 +213,8 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
     LOG(SpeechRecognition, "%s:%s:%d \n", __FILE__, __func__, __LINE__);
     uttStarted = FALSE;
     LOG(SpeechRecognition, "Ready....\n");
-
-    FireSpeechEvent(providerContext, std::make_pair(StartSound,""));
+   
+    FireSpeechEvent(providerContext, StartSound);
 
     while (providerContext->m_recognitionStatus == RecognitionStarted) { 
         while (providerContext->m_speechInputQueue.size() >= 1) {
@@ -225,6 +231,8 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
 
             if (providerContext->m_recognitionStatus == RecognitionAborted)
                 break;
+            LOG(SpeechRecognition, "%s:%s:%d quesize = %d len =%d intrimCnt = %d\n", 
+                                           __FILE__, __func__, __LINE__, providerContext->m_speechInputQueue.size(), adLen, intrimCnt);
 
             if (inSpeech && !uttStarted) {
                 LOG(SpeechRecognition, "%s:%s:%d  in_speech = %d utt_started=%d \n", 
@@ -232,20 +240,8 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
                 LOG(SpeechRecognition, "Listening...\n");
                 
                 uttStarted = true;
-                FireSpeechEvent(providerContext, std::make_pair(StartSpeech,""));
-            }
-
-            if (providerContext->m_recognitionStatus == RecognitionAborted)
-                break; 
-
-            if (uttStarted) { //interim speech
-                 text = ps_get_hyp(providerContext->m_recognizer, NULL );
-                 if (text != NULL) {
-                    LOG(SpeechRecognition, "Interim result %s\n", text);
-                    FireSpeechEvent(providerContext, std::make_pair(ReceiveResults, text));
-                    LOG(SpeechRecognition, "%s:%s:%d quesize = %d \n", 
-                                           __FILE__, __func__, __LINE__, providerContext->m_speechInputQueue.size());
-                }
+                FireSpeechEvent(providerContext, StartSpeech);
+                continue;
             }
 
             if (providerContext->m_recognitionStatus == RecognitionAborted)
@@ -256,8 +252,8 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
                 /* speech -> silence transition, time to start new utterance  */
                 ps_end_utt(providerContext->m_recognizer);
 
-                FireSpeechEvent(providerContext, std::make_pair(EndSpeech,""));
-                FireSpeechEvent(providerContext, std::make_pair(EndSound,""));
+                FireSpeechEvent(providerContext, EndSpeech);
+                FireSpeechEvent(providerContext, EndSound);
 
                 text = ps_get_hyp(providerContext->m_recognizer, NULL );
                 if (providerContext->m_recognitionStatus == RecognitionAborted)
@@ -266,15 +262,24 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
                 if (text != NULL) {
                     LOG(SpeechRecognition, "%s\n", text);
                     // Set flag to indicate final result
-                    providerContext->m_finalResults = true; 
-
-                    FireSpeechEvent(providerContext, std::make_pair(ReceiveResults, text));
+                    speechHyp = new SpeechHyp;
+                    speechHyp->final = true; speechHyp->hyp = text;
+                    speechHyp->confidence = ps_get_prob(providerContext->m_recognizer);
+                    providerContext->m_speechHypQueue.append (speechHyp);
+                    FireSpeechEvent(providerContext, ReceiveResults);
                     LOG(SpeechRecognition, "%s:%s:%d\n", __FILE__, __func__, __LINE__);
                 }
                 LOG(SpeechRecognition, "%s:%s:%d\n", __FILE__, __func__, __LINE__);
 
                 if (!providerContext->m_continuous)
                     goto EndSpeech;
+
+                if ((providerContext->m_recognitionStatus != RecognitionStarted) && 
+                    (silenceCnt >= MAX_SILENCE_PERIOD)) {
+                     goto EndSpeech;
+                }
+                silenceCnt++;  
+                
 
                 LOG(SpeechRecognition, "%s:%s:%d\n", __FILE__, __func__, __LINE__);
 
@@ -285,17 +290,38 @@ void PlatformSpeechRecognitionProviderWPE::recognitionThread (void* context)
                 uttStarted = FALSE;
                 LOG(SpeechRecognition, "Ready....\n");
 
-                FireSpeechEvent(providerContext, std::make_pair(StartSound,""));    
+                FireSpeechEvent(providerContext, StartSound);    
+            } else if (providerContext->m_interimResults && uttStarted && (INTRIM_INTERVAL == intrimCnt++)) { //interim speech
+                LOG(SpeechRecognition, "%s:%s:%d\n", __FILE__, __func__, __LINE__);
+                 text = ps_get_hyp(providerContext->m_recognizer, NULL );
+                 if (text != NULL) {
+                    LOG(SpeechRecognition, "Interim result %s\n", text);
+                    speechHyp = new SpeechHyp;
+                    speechHyp->final = false; speechHyp->hyp = text;
+                    speechHyp->confidence = ps_get_prob(providerContext->m_recognizer);
+                    providerContext->m_speechHypQueue.append (speechHyp);
+
+                    FireSpeechEvent(providerContext, ReceiveResults);
+              
+                    LOG(SpeechRecognition, "%s:%s:%d quesize = %d \n", 
+                                           __FILE__, __func__, __LINE__, providerContext->m_speechInputQueue.size());
+                }
+                intrimCnt = 0;
             }
+
+            if (providerContext->m_recognitionStatus == RecognitionAborted)
+                break; 
+ 
         }
        //usleep(100 * 1000);
     } 
 
     ps_end_utt(providerContext->m_recognizer);
+    //delete text; TODO getting corruption while deleting text need to check
 
 EndSpeech:
-    FireSpeechEvent(providerContext, std::make_pair(EndAudio,""));
-    FireSpeechEvent(providerContext, std::make_pair(End,""));
+    FireSpeechEvent(providerContext, EndAudio);
+    FireSpeechEvent(providerContext, End);
 
     providerContext->m_recognitionThread = 0; 
     providerContext->clearSpeechQueue(); 
@@ -371,9 +397,8 @@ void PlatformSpeechRecognitionProviderWPE::fireEventThread(void* context)
     return;
 }
 
-void PlatformSpeechRecognitionProviderWPE::fireSpeechEvent(std::pair<SpeechEvent, const char*> firedEvent) 
+void PlatformSpeechRecognitionProviderWPE::fireSpeechEvent(SpeechEvent speechEvent) 
 {
-    SpeechEvent speechEvent = firedEvent.first;
      
     switch (speechEvent) {
     case Start:
@@ -412,27 +437,32 @@ void PlatformSpeechRecognitionProviderWPE::fireSpeechEvent(std::pair<SpeechEvent
         break;
     case ReceiveResults: {
         LOG(SpeechRecognition, "%s:%s:%d Event:ReceiveResults \n", __FILE__, __func__, __LINE__);
-        String transcripts (firedEvent.second);
-        double confidence;
-        if (m_recognitionStatus == RecognitionAborted)
-                break;
+        if (m_speechHypQueue.size() >= 1) {
+         
+            SpeechHyp *speechHyp = m_speechHypQueue[0];
+            m_speechHypQueue.removeFirst(speechHyp);
+            String transcripts(speechHyp->hyp); 
 
-        Vector<RefPtr<SpeechRecognitionResult>> finalResults;
-        Vector<RefPtr<SpeechRecognitionResult>> interimResults;
-        Vector<RefPtr<SpeechRecognitionAlternative> > alternatives;
-        alternatives.append(SpeechRecognitionAlternative::create(transcripts, confidence));
+            if (m_recognitionStatus == RecognitionAborted)
+                   break;
 
-        if (m_interimResults) {
-            LOG(SpeechRecognition, "%s:%s:%d Fire IntrimResults \n", __FILE__, __func__, __LINE__);
-            interimResults.append(SpeechRecognitionResult::create(alternatives, false)); 
+            Vector<RefPtr<SpeechRecognitionResult>> finalResults;
+            Vector<RefPtr<SpeechRecognitionResult>> interimResults;
+            Vector<RefPtr<SpeechRecognitionAlternative> > alternatives;
+            alternatives.append(SpeechRecognitionAlternative::create(transcripts, speechHyp->confidence));
+
+            if (speechHyp->final) {
+                LOG(SpeechRecognition, "%s:%s:%d Fire FinalResults \n", __FILE__, __func__, __LINE__);
+                finalResults.append(SpeechRecognitionResult::create(alternatives, true)); 
+            } else if (m_interimResults) {
+                LOG(SpeechRecognition, "%s:%s:%d Fire IntrimResults \n", __FILE__, __func__, __LINE__);
+                interimResults.append(SpeechRecognitionResult::create(alternatives, false)); 
+            }
+            m_platformSpeechRecognizer->client()->didReceiveResults(finalResults, interimResults);
+
+            delete speechHyp;
+            break;
         }
-        if (m_finalResults) {
-            LOG(SpeechRecognition, "%s:%s:%d Fire FinalResults \n", __FILE__, __func__, __LINE__);
-            finalResults.append(SpeechRecognitionResult::create(alternatives, m_finalResults)); 
-            m_finalResults = false;
-        }   
-        m_platformSpeechRecognizer->client()->didReceiveResults(finalResults, interimResults);
-        break;
     }
     case ReceiveNoMatch:
         LOG(SpeechRecognition, "%s:%s:%d Event:ReceiveNoMatch \n", __FILE__, __func__, __LINE__);

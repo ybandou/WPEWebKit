@@ -17,6 +17,15 @@ extern "C" {
 #include <pocketsphinx.h>
 }
 
+#define MAX_SILENCE_PERIOD 2
+#define INTRIM_INTERVAL    6
+
+typedef struct SpeechHyp {
+    bool        final;
+    int32       confidence;
+    const char* hyp;
+} SpeechHyp;
+
 namespace WebCore {
 
 class PlatformSpeechRecognizer;
@@ -78,7 +87,7 @@ private:
     FireEventStatus   m_fireEventStatus;
     ThreadIdentifier  m_fireEventThread;
     static void       fireEventThread(void*);
-    void              fireSpeechEvent(std::pair<SpeechEvent, const char*>);
+    void              fireSpeechEvent(SpeechEvent);
     void              stopFireEventThread();
 
     ThreadIdentifier  m_readThread;
@@ -88,8 +97,9 @@ private:
     static void       recognitionThread (void*);
     
           
+    Vector <SpeechHyp*>   m_speechHypQueue;
+    Vector <SpeechEvent> m_speechEventQueue;
     Vector <std::pair<int16*, int32>> m_speechInputQueue;
-    Vector <std::pair<SpeechEvent, const char*>> m_speechEventQueue;
     Vector <std::pair<SpeechRecognitionError::ErrorCode, const char*>> m_speechErrorQueue;
     void clearSpeechQueue();
  

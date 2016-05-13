@@ -35,7 +35,7 @@
 #define DEFAULT_FORMAT          SND_PCM_FORMAT_U8
 #define DEFAULT_SPEED           8000
 #define FORMAT_WAVE             2
-#define NONBLOCK 0
+#define BLOCK 0
 #define OPENMODE 0
 
 #define COMPOSE_ID(a,b,c,d) ((a) | ((b)<<8) | ((c)<<16) | ((d)<<24))
@@ -87,21 +87,20 @@ namespace WebCore {
         public:
             AplayWPE(PlatformSpeechSynthesisProviderWPE*);
             ~AplayWPE();
-            PlatformSpeechSynthesisProviderWPE* m_speechSynthesisProviderWPE;
             void playback(const char *name);
-            void prgExit(int code);
         private:
-            int m_stopDelay ;
+            PlatformSpeechSynthesisProviderWPE* m_speechSynthesisProviderWPE;
+            int m_stopDelay;
             int m_wavFd;
 
-            unsigned m_periodTime ;
-            unsigned m_bufferTime ;
+            unsigned m_periodTime;
+            unsigned m_bufferTime;
             size_t m_bitsPerSample;
             size_t m_bitsPerFrame;
             size_t m_chunkBytes;
 
-            snd_pcm_uframes_t m_periodFrames ;
-            snd_pcm_uframes_t m_bufferFrames ;
+            snd_pcm_uframes_t m_periodFrames;
+            snd_pcm_uframes_t m_bufferFrames;
 
             off64_t m_pbrecCount;
             off64_t m_fdcount;
@@ -186,22 +185,19 @@ private:
             void cancel();
 
             static void  speakFunctionThread (void*);
-            static  float m_speechDuration ; /*private member to track speeh time*/
 
-            int m_canPause ;
-            int m_isPaused ;
-            int m_cancelled ;
+            int m_canPause;
+            int m_isPaused;
+            int m_cancelled;
             snd_pcm_t *m_handle;
-            u_char *m_audioBuf ;
+            u_char *m_audioBuf;
             snd_pcm_uframes_t m_chunkSize; 
-            snd_pcm_sframes_t (*writeiFunc)(snd_pcm_t *handle, const void *buffer, snd_pcm_uframes_t size);
 
         private:
-            bool m_fliteInited;
             PlatformSpeechSynthesizer* m_platformSpeechSynthesizer;
             RefPtr<PlatformSpeechSynthesisUtterance> m_utterance;
-            ThreadIdentifier m_speakThread ;
-            snd_pcm_stream_t m_stream ;
+            ThreadIdentifier m_speakThread;
+            snd_pcm_stream_t m_stream;
             enum SpeechEvent {
                 SpeechError,
                 SpeechCancel,
@@ -215,7 +211,6 @@ private:
             void fireSpeechEvent(SpeechEvent);
             void doPause(void);
             void doResume(void);
-            int playBackExit();
 
 
 

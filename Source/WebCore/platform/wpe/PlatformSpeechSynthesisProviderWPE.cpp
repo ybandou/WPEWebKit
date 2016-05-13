@@ -65,10 +65,9 @@ static struct {
     snd_pcm_format_t format;
     unsigned int channels;
     unsigned int rate;
-} hwparams, rhwparams;
+} hwparams;
 
 namespace WebCore {
-    float PlatformSpeechSynthesisProviderWPE::m_speechDuration = 0.0;
 
     PlatformSpeechSynthesisProviderWPE::PlatformSpeechSynthesisProviderWPE(PlatformSpeechSynthesizer* client)
         : m_canPause(0)
@@ -77,13 +76,11 @@ namespace WebCore {
           , m_handle(NULL)
           , m_audioBuf(NULL)
           , m_chunkSize(0)
-          , m_fliteInited(false)
           , m_platformSpeechSynthesizer(client)
           , m_speakThread(0)
           , m_stream(SND_PCM_STREAM_PLAYBACK)
     {
         flite_init(); 
-        m_fliteInited = true;
         printf("This is line %d of file %s (function %s) FLITE INITED \n",__LINE__, __FILE__, __func__);
     }
 
@@ -116,34 +113,34 @@ namespace WebCore {
         WTF::String langSupport = "en-US";
 
         flite_voice_list = flite_set_voice_list();
-        for (v = flite_voice_list; v; v = val_cdr(v)){
+        for (v = flite_voice_list; v; v = val_cdr(v)) {
 
             voice = val_voice(val_car(v));
             /*Convert the  voice to human readable form */
 
             String voiceName = voice->name;
-            if(voiceName.contains("kal",true)){
+            if (voiceName.contains("kal", true)) {
                 printf("Kal - en-US - US English Male \n");
-                langSupport = "en-US" ;
+                langSupport = "en-US";
                 voiceName = "US English Male";
             } 
-            else if(voiceName.contains("rms",true)){
+            else if (voiceName.contains("rms", true)) {
                 printf("rms - en-US -US English Male \n");
-                langSupport = "en-US" ;
+                langSupport = "en-US";
                 voiceName = "US English Male";
             } 
 
-            else if(voiceName.contains("awb",true)){
+            else if(voiceName.contains("awb", true)) {
                 printf("awb - en-Scott - Scottish English Male \n");
-                langSupport = "en-Scott" ;
+                langSupport = "en-Scott";
                 voiceName = "Scottish English Male";
             } 
-            else if(voiceName.contains("slt",true)){
+            else if(voiceName.contains("slt", true)) {
                 printf("slt - en-US - US English Female \n");
-                langSupport = "en-US" ;
+                langSupport = "en-US";
                 voiceName = "US English Female";
             } 
-            else{
+            else {
                 printf("Support for this language has to be added \n");
             }
             voiceList.append(PlatformSpeechSynthesisVoice::create(String(voiceId), voiceName, langSupport, true, true));
@@ -154,11 +151,11 @@ namespace WebCore {
     void PlatformSpeechSynthesisProviderWPE::pause()
     { 
         printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
-        if(!m_isPaused){
+        if(!m_isPaused) {
             doPause();
             m_isPaused = 1;
             fireSpeechEvent(SpeechPause);
-        }else{
+        } else {
             printf("Already in Paused state ");
 
         }
@@ -169,11 +166,11 @@ namespace WebCore {
     {
 
         printf ("This is line %d of file %s (function %s)\n",__LINE__, __FILE__, __func__);
-        if(m_isPaused){  
+        if (m_isPaused) {
             doResume();
             m_isPaused = 0;
             fireSpeechEvent(SpeechResume);
-        }else{
+        } else {
             printf("Already in Resume state ");
         }
     }
@@ -185,7 +182,7 @@ namespace WebCore {
             if (!(m_speakThread = createThread(speakFunctionThread ,this, "WebCore: PlatformSpeechSynthesisProviderWPE"))) {
                 printf("ERROR  in creating speaking  Thread\n");
             }
-        }else{
+        } else {
             printf("Speak thread is  already created\n");
         }
 
@@ -214,12 +211,13 @@ void PlatformSpeechSynthesisProviderWPE::pause()
     {
         int err;
 
-        if(m_cancelled == 0){
+        if (m_cancelled == 0) {
             m_cancelled = 1;
-            err = snd_pcm_drop(m_handle); // To clear the buffer for pause->stop
-            if (err < 0)
-                printf( "ERROR  pause release error \n ");
-
+            if (m_isPaused == 1) {
+                err = snd_pcm_drop(m_handle); // To clear the buffer for pause->stop
+                if (err < 0)
+                    printf( "ERROR  pause release error \n ");
+            }
             if (m_speakThread) {
                 waitForThreadCompletion(m_speakThread);
                 m_speakThread = 0;
@@ -317,7 +315,6 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
                 m_platformSpeechSynthesizer->client()->didResumeSpeaking(m_utterance);
                 break;
             case SpeechError:
-                m_fliteInited = false;
             case SpeechCancel:
                 m_platformSpeechSynthesizer->client()->speakingErrorOccurred(m_utterance);
                 break;
@@ -343,8 +340,7 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
         printf ("This is line %d of file %s (function %s) speak for\n",__LINE__, __FILE__, __func__);
 
         //Creating Wav File
-        PlatformSpeechSynthesisProviderWPE :: m_speechDuration =  \
-                                      flite_text_to_speech(providerContext->m_utterance->text().utf8().data(), v, WAV_FILE);
+        flite_text_to_speech(providerContext->m_utterance->text().utf8().data(), v, WAV_FILE);
         providerContext->m_cancelled = 0;
         providerContext->m_isPaused = 0;
 
@@ -352,7 +348,7 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
         providerContext->speechMain();
 
         status = remove(WAV_FILE);
-        if(status){
+        if (status) {
             printf("Unable to delete the WAV file \n");
             perror("Error");
         }
@@ -430,23 +426,20 @@ int PlatformSpeechSynthesisProviderWPE::speechMain()
 >>>>>>> Speech synthesisApi Implementation
         int err;
 
-        m_chunkSize = -1;
-        rhwparams.format = DEFAULT_FORMAT;
-        rhwparams.rate = DEFAULT_SPEED;
-        rhwparams.channels = 1;
+        hwparams.format = DEFAULT_FORMAT;
+        hwparams.rate = DEFAULT_SPEED;
+        hwparams.channels = 1;
         err = snd_pcm_open(&m_handle, pcm_name, m_stream, OPENMODE);
         if (err < 0) {
             printf("ERROR Audio open error: %s \n ", snd_strerror(err));
             return 1;
         }
         m_chunkSize = 1024;
-        hwparams = rhwparams;
         m_audioBuf = (u_char *)malloc(1024);
         if (m_audioBuf == NULL) {
             printf("ERROR not enough memory \n");
             return 1;
         }
-        writeiFunc = snd_pcm_writei;
 
         /*Begin playback */
         fireSpeechEvent(SpeechStart);
@@ -465,7 +458,7 @@ int PlatformSpeechSynthesisProviderWPE::speechMain()
         ssize_t result = 0, res;
 
         while (count > 0  && (m_speechSynthesisProviderWPE->m_cancelled == 0) ) {
-            if((res = read(fd, buf, count)) == 0)
+            if ((res = read(fd, buf, count)) == 0)
                 break;
             if (res < 0)
                 return result > 0 ? result : res;
@@ -566,7 +559,8 @@ int PlatformSpeechSynthesisProviderWPE::speechMain()
         return -1;
     }
 
-    void AplayWPE::setHWParams(void)
+    void AplayWPE::setHWParams(void)  //TODO R-ework  needs to done to the function
+                                      //to integrate utterence attributes -Pending Cleanup
     {
         int err;
         size_t n;
@@ -700,7 +694,7 @@ int PlatformSpeechSynthesisProviderWPE::speechMain()
             count = m_speechSynthesisProviderWPE->m_chunkSize;
         }
         while (count > 0 && (m_speechSynthesisProviderWPE->m_cancelled == 0)  ) {
-            r = m_speechSynthesisProviderWPE->writeiFunc(m_speechSynthesisProviderWPE->m_handle, data, count);
+            r = snd_pcm_writei(m_speechSynthesisProviderWPE->m_handle, data, count);
             if (r == -EAGAIN || (r >= 0 && (size_t)r < count)) {
                 snd_pcm_wait(m_speechSynthesisProviderWPE->m_handle, 100);
             }
@@ -755,9 +749,9 @@ int PlatformSpeechSynthesisProviderWPE::speechMain()
             written += r;
             l = 0;
         }
-        snd_pcm_nonblock(m_speechSynthesisProviderWPE->m_handle, 0);
+        snd_pcm_nonblock(m_speechSynthesisProviderWPE->m_handle, BLOCK);
         snd_pcm_drain(m_speechSynthesisProviderWPE->m_handle);
-        snd_pcm_nonblock(m_speechSynthesisProviderWPE->m_handle, NONBLOCK); //TODO recheck
+        snd_pcm_nonblock(m_speechSynthesisProviderWPE->m_handle, BLOCK);
     }
 
 <<<<<<< HEAD

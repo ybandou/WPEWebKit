@@ -37,6 +37,5 @@
     attribute DOMString candidate;
     attribute DOMString? sdpMid;
     attribute unsigned short? sdpMLineIndex;
-
-    serializer = {candidate, sdpMid, sdpMLineIndex};
 };
+

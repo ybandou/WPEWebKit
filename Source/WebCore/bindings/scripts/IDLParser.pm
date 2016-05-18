@@ -56,7 +56,6 @@ struct( domInterface => {
     isCallback => '$', # Used for callback interfaces
     isPartial => '$', # Used for partial interfaces
     iterable => '$', # Used for iterable interfaces
-    serializable => '$', # Used for serializable interfaces
 });
 
 # Used to represent domInterface contents (name of method, signature)
@@ -95,10 +94,6 @@ struct( domIterable => {
     functions => '@', # Iterable functions (entries, keys, values, [Symbol.Iterator], forEach)
 });
 
-# Used to represent serializable interface
-struct( domSerializable => {
-    attributes => '@', # List of attributes to serialize
-});
 
 # Used to represent string constants
 struct( domConstant => {
@@ -1006,14 +1001,7 @@ sub parseSerializer
     my $next = $self->nextToken();
     if ($next->value() eq "serializer") {
         $self->assertTokenValue($self->getToken(), "serializer", __LINE__);
-        my $next = $self->nextToken();
-        my $newDataNode = domSerializable->new();
-        if ($next->value() ne ";") {
-            my $newDataNode = $self->parseSerializerRest($extendedAttributeList);
-            my $next = $self->nextToken();
-        }
-        $self->assertTokenValue($self->getToken(), ";", __LINE__);
-        return $newDataNode;
+        return $self->parseSerializerRest($extendedAttributeList);
     }
     $self->assertUnexpectedToken($next->value(), __LINE__);
 }
@@ -1026,10 +1014,7 @@ sub parseSerializerRest
     my $next = $self->nextToken();
     if ($next->value() eq "=") {
         $self->assertTokenValue($self->getToken(), "=", __LINE__);
-        my $attributes = $self->parseSerializationPattern();
-        my $newDataNode = domSerializable->new();
-        $newDataNode->attributes($attributes);
-        return $newDataNode;
+        return $self->parseSerializationPattern($extendedAttributeList);
     }
     if ($next->type() == IdentifierToken || $next->value() eq "(") {
         return $self->parseOperationRest($extendedAttributeList);
@@ -1039,41 +1024,59 @@ sub parseSerializerRest
 sub parseSerializationPattern
 {
     my $self = shift;
+    my $extendedAttributeList = shift;
 
     my $next = $self->nextToken();
     if ($next->value() eq "{") {
         $self->assertTokenValue($self->getToken(), "{", __LINE__);
-        my $attributes = $self->parseSerializationAttributes();
+        $self->parseSerializationPatternMap();
         $self->assertTokenValue($self->getToken(), "}", __LINE__);
-        return \@{$attributes};
+        return;
     }
     if ($next->value() eq "[") {
         $self->assertTokenValue($self->getToken(), "[", __LINE__);
-        my $attributes = $self->parseSerializationAttributes();
+        $self->parseSerializationPatternList();
         $self->assertTokenValue($self->getToken(), "]", __LINE__);
-        return \@{$attributes};
+        return;
     }
     if ($next->type() == IdentifierToken) {
-        my @attributes = ();
-        my $token = $self->getToken();
-        $self->assertTokenType($token, IdentifierToken);
-        push(@attributes, $token->value());
-        return \@attributes;
+        $self->assertTokenType($self->getToken(), IdentifierToken);
+        return;
     }
     $self->assertUnexpectedToken($next->value(), __LINE__);
 }
 
-sub parseSerializationAttributes
+sub parseSerializationPatternMap
 {
     my $self = shift;
+    my $next = $self->nextToken();
+    if ($next->value() eq "getter") {
+        $self->assertTokenValue($self->getToken(), "getter", __LINE__);
+        return;
+    }
+    if ($next->value() eq "inherit") {
+        $self->assertTokenValue($self->getToken(), "inherit", __LINE__);
+        $self->parseIdentifiers();
+        return;
+    }
+    if ($next->type() == IdentifierToken) {
+        $self->assertTokenType($self->getToken(), IdentifierToken);
+        $self->parseIdentifiers();
+    }
+}
 
-    # getter and inherit are nor currently supported.
-    my $token = $self->getToken();
-    my @attributes = ();
-    $self->assertTokenType($token, IdentifierToken);
-    push(@attributes, $token->value());
-    push(@attributes, @{$self->parseIdentifiers()});
-    return \@attributes;
+sub parseSerializationPatternList
+{
+    my $self = shift;
+    my $next = $self->nextToken();
+    if ($next->value() eq "getter") {
+        $self->assertTokenValue($self->getToken(), "getter", __LINE__);
+        return;
+    }
+    if ($next->type() == IdentifierToken) {
+        $self->assertTokenType($self->getToken(), IdentifierToken);
+        $self->parseIdentifiers();
+    }
 }
 
 sub parseIdentifierList
@@ -2254,20 +2257,6 @@ sub applyMemberList
                 push(@{$interface->functions}, $item);
             }
             next;
-        }
-        if (ref($item) eq "domSerializable") {
-            $interface->serializable($item);
-            next;
-        }
-
-    }
-
-    if ($interface->serializable) {
-        my $numSerializerAttributes = @{$interface->serializable->attributes};
-        if ($numSerializerAttributes == 0) {
-            foreach my $attribute (@{$interface->attributes}) {
-                push(@{$interface->serializable->attributes}, $attribute->signature->name);
-            }
         }
     }
 }

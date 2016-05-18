@@ -36,7 +36,5 @@
 ] interface RTCSessionDescription {
     [SetterRaisesException] readonly attribute DOMString type;
     readonly attribute DOMString sdp;
-
-    serializer = {type, sdp};
 };
 

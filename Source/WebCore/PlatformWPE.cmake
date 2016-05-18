@@ -172,6 +172,8 @@ list(APPEND WebCore_SOURCES
 
     platform/wpe/CursorWPE.cpp
     platform/wpe/ErrorsWPE.cpp
+    platform/wpe/GamepadProviderWPE.cpp
+    platform/wpe/GamepadWPE.cpp
     platform/wpe/LocalizedStringsWPE.cpp
     platform/wpe/MIMETypeRegistryWPE.cpp
     platform/wpe/PasteboardWPE.cpp

@@ -218,6 +218,10 @@
 #include <WebCore/Icon.h>
 #endif
 
+#if ENABLE(GAMEPAD)
+#include <WebCore/GamepadProviderWPE.h>
+#endif
+
 #ifndef NDEBUG
 #include <wtf/RefCountedLeakCounter.h>
 #endif
@@ -269,6 +273,18 @@ public:
 private:
     WebPage* m_page;
 };
+
+#if ENABLE(GAMEPAD)
+static void WebKitInitializeGamepadProviderIfNecessary()
+{
+    static bool initialized = false;
+    if (initialized) {
+        return;
+    }
+    GamepadProvider::setSharedProvider(GamepadProviderWPE::singleton());
+    initialized = true;
+}
+#endif
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, webPageCounter, ("WebPage"));
 
@@ -558,6 +574,11 @@ WebPage::WebPage(uint64_t pageID, const WebPageCreationParameters& parameters)
 #if PLATFORM(COCOA)
     m_page->settings().setContentDispositionAttachmentSandboxEnabled(true);
 #endif
+
+#if ENABLE(GAMEPAD)
+    WebKitInitializeGamepadProviderIfNecessary();
+#endif
+
 }
 
 void WebPage::reinitializeWebPage(const WebPageCreationParameters& parameters)

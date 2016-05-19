@@ -121,7 +121,7 @@ void GamepadProviderWPE::processThread(void* context)
     {
         printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
         deviceName.clear();
-        WPECtx->GetDeviceList(((char*)GAMEPAD_PATH), deviceName);
+        WPECtx->getDeviceList(((char*)GAMEPAD_PATH), deviceName);
         for (unsigned int Itr=0; Itr < deviceName.size(); Itr++)
         {
             String GDDeviceName;

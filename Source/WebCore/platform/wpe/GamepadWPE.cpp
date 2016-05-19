@@ -11,6 +11,8 @@
 #include <wtf/text/CString.h>
 #include <wtf/text/WTFString.h>
 
+#include "Logging.h"
+
 namespace WebCore {
 
 GamepadWPE::GamepadWPE(String hidDevice, unsigned index)
@@ -18,7 +20,7 @@ GamepadWPE::GamepadWPE(String hidDevice, unsigned index)
     , m_hidDevice(hidDevice)
     , m_valueMonitoringThread(0)
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     m_fileDescriptor=open(m_hidDevice.utf8().data(), O_RDONLY | O_NONBLOCK);
     if (m_fileDescriptor < 0)
 	return;
@@ -35,7 +37,7 @@ GamepadWPE::GamepadWPE(String hidDevice, unsigned index)
     uint8_t numberOfButtons;
     if ( (ioctl(m_fileDescriptor, JSIOCGAXES, &numberOfAxis) < 0 ) || 
          (ioctl(m_fileDescriptor, JSIOCGBUTTONS, &numberOfButtons) < 0 ) ) {
-        printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+        LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
         return;
     }
     m_axisValues.fill(0.0, numberOfAxis);
@@ -45,13 +47,13 @@ GamepadWPE::GamepadWPE(String hidDevice, unsigned index)
     m_EventStatus = deviceConnected;
     if(!(m_valueMonitoringThread = createThread(valueMonitoringThread, this, 
                                                "WebCore: Button and Axis values monitoring thread"))){
-        printf("Error in creating Value Monitoring Thread\n");
+        LOG_ERROR( "Error in creating Value Monitoring Thread\n");
     }
 }
 
 GamepadWPE::~GamepadWPE()
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     if (m_fileDescriptor != -1)
         close(m_fileDescriptor);
 
@@ -65,7 +67,7 @@ GamepadWPE::~GamepadWPE()
 
 void GamepadWPE::updateForEvent(struct js_event event)
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     if (!(event.type & JS_EVENT_AXIS || event.type & JS_EVENT_BUTTON))
         return;
 
@@ -86,7 +88,7 @@ void GamepadWPE::updateForEvent(struct js_event event)
 
 void GamepadWPE::valueMonitoringThread(void* context)
 { 
-   printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+   LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
    GamepadWPE* GamepadWPEcontext = (GamepadWPE*) context;
    struct js_event event;
    while(GamepadWPEcontext->m_EventStatus == deviceConnected){
@@ -98,14 +100,14 @@ void GamepadWPE::valueMonitoringThread(void* context)
 float GamepadWPE::normalizeAxisValue(short value)
 {
     // Normalize from range [-32767, 32767] into range [-1.0, 1.0]
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     return value / 32767.0f;
 }
 
 float GamepadWPE::normalizeButtonValue(short value)
 {
     // Normalize from range [0, 1] into range [0.0, 1.0]
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     return value / 1.0f;
 }
 } // namespace WebCore

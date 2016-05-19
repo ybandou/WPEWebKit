@@ -13,7 +13,6 @@
 #include "GamepadProviderWPE.h"
 #include "GamepadProviderClient.h"
 #include "PlatformGamepad.h"
-#include "Logging.h"
 
 
 #if ENABLE(GAMEPAD)
@@ -23,14 +22,19 @@ namespace WebCore {
 
 GamepadProviderWPE& GamepadProviderWPE::singleton()
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     static NeverDestroyed<GamepadProviderWPE> sharedListener;
     return sharedListener;
 }
 
+GamepadProviderWPE::GamepadProviderWPE()
+{
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+}
+
 unsigned GamepadProviderWPE::indexForNewlyConnectedDevice()
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     unsigned index = 0;
     while (index < m_gamepadVector.size() && m_gamepadVector[index])
         ++index;
@@ -41,11 +45,11 @@ unsigned GamepadProviderWPE::indexForNewlyConnectedDevice()
 void GamepadProviderWPE::startMonitoringGamepads(GamepadProviderClient* client)
 {
     //start a thread to monitor presence of device entry
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     m_MonitoringEnabled = 1;
     
     if(!(m_GDThread=createThread(&processThread, this, "WebCore : processThread"))){
-        printf("Error in creating Value Monitoring Thread\n");
+        LOG_ERROR("Error in creating Value Monitoring Thread\n");
     }
    
     ASSERT(!m_clients.contains(client));
@@ -54,7 +58,7 @@ void GamepadProviderWPE::startMonitoringGamepads(GamepadProviderClient* client)
 
 void GamepadProviderWPE::stopMonitoringGamepads(GamepadProviderClient* client)
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     m_MonitoringEnabled = 0;
     waitForThreadCompletion(m_GDThread);
 
@@ -63,7 +67,7 @@ void GamepadProviderWPE::stopMonitoringGamepads(GamepadProviderClient* client)
 
 void GamepadProviderWPE::deviceAdded(String GDDeviceName)
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     ASSERT(!m_gamepadMap.get(GDDeviceName));
 
     unsigned index = indexForNewlyConnectedDevice();
@@ -73,7 +77,7 @@ void GamepadProviderWPE::deviceAdded(String GDDeviceName)
     if (m_gamepadVector.size() <= index)
         m_gamepadVector.resize(index + 1);
     
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     m_gamepadVector[index] = gamepad.get();
     m_gamepadMap.set(GDDeviceName, WTFMove(gamepad));
 
@@ -84,34 +88,34 @@ void GamepadProviderWPE::deviceAdded(String GDDeviceName)
 
 void GamepadProviderWPE::deviceRemoved(String GDDeviceName)
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     std::unique_ptr<GamepadWPE> removedGamepad = removeGamepadForDevice(GDDeviceName);
     ASSERT(removedGamepad);
 
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     for (auto& client : m_clients){
         client->platformGamepadDisconnected(*removedGamepad);
     }
-    printf("\nDevice removed");
+    LOG(Gamepad, "\nDevice removed");
 }
 
 std::unique_ptr<GamepadWPE> GamepadProviderWPE::removeGamepadForDevice(String GDDeviceName)
 {
-   printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+   LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
    std::unique_ptr<GamepadWPE> result = m_gamepadMap.take(GDDeviceName);
    ASSERT(result);
     
     auto i = m_gamepadVector.find(result.get());
     if(i != notFound)
         m_gamepadVector[i] = nullptr;
-    printf("\nRemoved Gamepad For Device %s", GDDeviceName.utf8().data());
+    LOG(Gamepad, "\nRemoved Gamepad For Device %s", GDDeviceName.utf8().data());
 
     return result;
 }
 
 void GamepadProviderWPE::processThread(void* context)
 {
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     vector<string> deviceName;
     int GDDeviceStatus[MAX_DEVICE] = {0};
     memset(GDDeviceStatus,0,MAX_DEVICE);
@@ -119,7 +123,7 @@ void GamepadProviderWPE::processThread(void* context)
     GamepadProviderWPE* listener = static_cast<GamepadProviderWPE*>(context);
     while(WPECtx->m_MonitoringEnabled)
     {
-        printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+        LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
         deviceName.clear();
         WPECtx->getDeviceList(((char*)GAMEPAD_PATH), deviceName);
         for (unsigned int Itr=0; Itr < deviceName.size(); Itr++)
@@ -133,26 +137,26 @@ void GamepadProviderWPE::processThread(void* context)
             GDDeviceName = result.toString();
 	    if (access(GDDeviceName.utf8().data(), 0) != -1)
             {
-                printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+                LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
                 if (GDDeviceStatus[Itr] == GD_NOT_CONNECTED)
                 {
-                    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+                    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
                     GDDeviceStatus[Itr] = GD_CONNECTED;
                     callOnMainThread([listener, GDDeviceName]{
-                        printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+                        LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
                         listener->deviceAdded(GDDeviceName);
                     });
                 }
             }
             else			
             {
-                printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+                LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
                 if(GDDeviceStatus[Itr] == GD_CONNECTED)
                 {
-                    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+                    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
                     GDDeviceStatus[Itr] = GD_NOT_CONNECTED;
                     callOnMainThread([listener, GDDeviceName]{
-                        printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+                        LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
                         listener->deviceRemoved(GDDeviceName);
                     });
                 }
@@ -166,20 +170,20 @@ int GamepadProviderWPE::getDeviceList(char* gamepadPath, vector<string> &deviceN
     DIR *dp;
     struct dirent *dirp;
 
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     if((dp  = opendir(gamepadPath)) == NULL) {
-        cout << "Error(" << errno << ") opening " << gamepadPath << endl;
+        LOG_ERROR("Error in opening gamepadpath\n");
         return errno;
     }
     while ((dirp = readdir(dp)) != NULL) {
         if( (string(dirp->d_name).at(0)) != '.' && !(string(dirp->d_name).find("js")) )
         {
-            printf ("\ndirp->d_name : %s", dirp->d_name);
+            LOG(Gamepad, "\ndirp->d_name : %s", dirp->d_name);
             deviceName.push_back(string(dirp->d_name));
         }
     }
     closedir(dp);
-    printf("%s(%s:%d)\n",__func__,__FILE__, __LINE__);
+    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     return 0;
 }
 

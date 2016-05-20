@@ -1,3 +1,7 @@
+
+#include "config.h"
+
+#if ENABLE(GAMEPAD)
 #include <sys/types.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -9,13 +13,9 @@
 #include <wtf/text/StringBuilder.h>
 #include <wtf/MainThread.h>
 
-#include "config.h"
 #include "GamepadProviderWPE.h"
 #include "GamepadProviderClient.h"
 #include "PlatformGamepad.h"
-
-
-#if ENABLE(GAMEPAD)
 
 using namespace std;
 namespace WebCore {
@@ -25,11 +25,6 @@ GamepadProviderWPE& GamepadProviderWPE::singleton()
     LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     static NeverDestroyed<GamepadProviderWPE> sharedListener;
     return sharedListener;
-}
-
-GamepadProviderWPE::GamepadProviderWPE()
-{
-    LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
 }
 
 unsigned GamepadProviderWPE::indexForNewlyConnectedDevice()
@@ -47,11 +42,12 @@ void GamepadProviderWPE::startMonitoringGamepads(GamepadProviderClient* client)
     //start a thread to monitor presence of device entry
     LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
     m_MonitoringEnabled = 1;
-    
-    if(!(m_GDThread=createThread(&processThread, this, "WebCore : processThread"))){
-        LOG_ERROR("Error in creating Value Monitoring Thread\n");
+
+    if (!m_GDThread) {
+        if(!(m_GDThread=createThread(&processThread, this, "WebCore : processThread"))){
+            LOG_ERROR("Error in creating Value Monitoring Thread\n");
+        }
     }
-   
     ASSERT(!m_clients.contains(client));
     m_clients.add(client);
 }
@@ -59,10 +55,12 @@ void GamepadProviderWPE::startMonitoringGamepads(GamepadProviderClient* client)
 void GamepadProviderWPE::stopMonitoringGamepads(GamepadProviderClient* client)
 {
     LOG(Gamepad, "%s(%s:%d)\n",__func__,__FILE__, __LINE__);
-    m_MonitoringEnabled = 0;
-    waitForThreadCompletion(m_GDThread);
-
     ASSERT(m_clients.contains(client));
+    m_clients.remove(client);
+    if (m_clients.isEmpty()) {
+        m_MonitoringEnabled = 0;
+        waitForThreadCompletion(m_GDThread);
+    }
 }
 
 void GamepadProviderWPE::deviceAdded(String GDDeviceName)

@@ -1,7 +1,6 @@
 #include "config.h"
 
 #if ENABLE(GAMEPAD)
-#include "GamepadWPE.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -11,6 +10,7 @@
 #include <wtf/text/CString.h>
 #include <wtf/text/WTFString.h>
 
+#include "GamepadWPE.h"
 #include "Logging.h"
 
 namespace WebCore {

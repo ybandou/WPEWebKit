@@ -13,6 +13,7 @@
 #include <wtf/text/StringBuilder.h>
 #include <wtf/MainThread.h>
 
+#include "Logging.h"
 #include "GamepadProviderWPE.h"
 #include "GamepadProviderClient.h"
 #include "PlatformGamepad.h"

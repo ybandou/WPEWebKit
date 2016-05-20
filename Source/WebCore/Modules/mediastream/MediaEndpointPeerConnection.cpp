@@ -596,7 +596,7 @@ void MediaEndpointPeerConnection::setRemoteDescriptionTask(RefPtr<RTCSessionDesc
             for (auto& id : mediaStreamIds) {
                 if (m_remoteStreamMap.contains(id)) {
                     RefPtr<MediaStream> stream = m_remoteStreamMap.get(id);
-                    stream->addTrack(receiver.track());
+                    stream->addTrack(*receiver.track());
                     trackEventMediaStreams.add(id, WTFMove(stream));
                 } else {
                     Ref<MediaStream> newStream = MediaStream::create(*m_client->scriptExecutionContext(), MediaStreamTrackVector({ receiver.track() }));
@@ -763,7 +763,7 @@ RefPtr<RTCRtpReceiver> MediaEndpointPeerConnection::createReceiver(const String&
     RefPtr<RealtimeMediaSource> remoteSource = m_mediaEndpoint->createMutedRemoteSource(transceiverMid, sourceType);
     // FIXME: Revisit when discussion about receiver track id concludes.
     RefPtr<MediaStreamTrackPrivate> remoteTrackPrivate = MediaStreamTrackPrivate::create(WTFMove(remoteSource), trackId);
-    RefPtr<MediaStreamTrack> remoteTrack = MediaStreamTrack::create(*m_client->scriptExecutionContext(), *remoteTrackPrivate);
+    Ref<MediaStreamTrack> remoteTrack = MediaStreamTrack::create(*m_client->scriptExecutionContext(), *remoteTrackPrivate);
 
     return RTCRtpReceiver::create(WTFMove(remoteTrack));
 }

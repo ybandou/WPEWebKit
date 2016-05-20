@@ -64,7 +64,7 @@ public:
     void replaceTrack(Ref<MediaStreamTrack>&&, PeerConnection::VoidPromise&&, ExceptionCode&);
 
 private:
-    RTCRtpSender(Ref<MediaStreamTrack>&&, const String& trackKind, Vector<String>&& mediaStreamIds, RTCRtpSenderClient&);
+    RTCRtpSender(RefPtr<MediaStreamTrack>&&, const String& trackKind, Vector<String>&& mediaStreamIds, RTCRtpSenderClient&);
 
     String m_trackId;
     String m_trackKind;

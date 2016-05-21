@@ -44,7 +44,7 @@ namespace WebCore {
 
 const ClassInfo JSWorkerGlobalScopeBase::s_info = { "WorkerGlobalScope", &JSDOMGlobalObject::s_info, 0, CREATE_METHOD_TABLE(JSWorkerGlobalScopeBase) };
 
-const GlobalObjectMethodTable JSWorkerGlobalScopeBase::s_globalObjectMethodTable = { &allowsAccessFrom, &supportsLegacyProfiling, &supportsRichSourceInfo, &shouldInterruptScript, &javaScriptRuntimeFlags, &queueTaskToEventLoop, &shouldInterruptScriptBeforeTimeout, nullptr, nullptr, nullptr, nullptr, nullptr, &defaultLanguage };
+const GlobalObjectMethodTable JSWorkerGlobalScopeBase::s_globalObjectMethodTable = { &allowsAccessFrom, &supportsRichSourceInfo, &shouldInterruptScript, &javaScriptRuntimeFlags, &queueTaskToEventLoop, &shouldInterruptScriptBeforeTimeout, nullptr, nullptr, nullptr, nullptr, nullptr, &defaultLanguage };
 
 JSWorkerGlobalScopeBase::JSWorkerGlobalScopeBase(JSC::VM& vm, JSC::Structure* structure, PassRefPtr<WorkerGlobalScope> impl)
     : JSDOMGlobalObject(vm, structure, &normalWorld(vm), &s_globalObjectMethodTable)
@@ -73,11 +73,6 @@ bool JSWorkerGlobalScopeBase::allowsAccessFrom(const JSGlobalObject* object, Exe
     return JSGlobalObject::allowsAccessFrom(object, exec);
 }
 
-bool JSWorkerGlobalScopeBase::supportsLegacyProfiling(const JSGlobalObject* object)
-{
-    return JSGlobalObject::supportsLegacyProfiling(object);
-}
-
 bool JSWorkerGlobalScopeBase::supportsRichSourceInfo(const JSGlobalObject* object)
 {
     return JSGlobalObject::supportsRichSourceInfo(object);
@@ -104,16 +99,14 @@ void JSWorkerGlobalScopeBase::queueTaskToEventLoop(const JSGlobalObject* object,
     thisObject->scriptExecutionContext()->postTask(JSGlobalObjectTask((JSDOMGlobalObject*)thisObject, task));
 }
 
-JSValue toJS(ExecState* exec, JSDOMGlobalObject*, WorkerGlobalScope* workerGlobalScope)
+JSValue toJS(ExecState* exec, JSDOMGlobalObject*, WorkerGlobalScope& workerGlobalScope)
 {
     return toJS(exec, workerGlobalScope);
 }
 
-JSValue toJS(ExecState*, WorkerGlobalScope* workerGlobalScope)
+JSValue toJS(ExecState*, WorkerGlobalScope& workerGlobalScope)
 {
-    if (!workerGlobalScope)
-        return jsNull();
-    WorkerScriptController* script = workerGlobalScope->script();
+    WorkerScriptController* script = workerGlobalScope.script();
     if (!script)
         return jsNull();
     JSWorkerGlobalScope* contextWrapper = script->workerGlobalScopeWrapper();

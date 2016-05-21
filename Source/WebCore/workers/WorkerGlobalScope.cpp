@@ -76,7 +76,14 @@ WorkerGlobalScope::WorkerGlobalScope(const URL& url, const String& userAgent, Wo
     , m_connectionProxy(connectionProxy)
 #endif
 {
-    setSecurityOriginPolicy(SecurityOriginPolicy::create(SecurityOrigin::create(url)));
+#if !ENABLE(INDEXED_DATABASE)
+    UNUSED_PARAM(connectionProxy);
+#endif
+    auto origin = SecurityOrigin::create(url);
+    if (m_topOrigin->hasUniversalAccess())
+        origin->grantUniversalAccess();
+
+    setSecurityOriginPolicy(SecurityOriginPolicy::create(WTFMove(origin)));
     setContentSecurityPolicy(std::make_unique<ContentSecurityPolicy>(*this));
 }
 
@@ -127,11 +134,11 @@ IDBClient::IDBConnectionProxy* WorkerGlobalScope::idbConnectionProxy()
 }
 #endif // ENABLE(INDEXED_DATABASE)
 
-WorkerLocation* WorkerGlobalScope::location() const
+WorkerLocation& WorkerGlobalScope::location() const
 {
     if (!m_location)
         m_location = WorkerLocation::create(m_url);
-    return m_location.get();
+    return *m_location;
 }
 
 void WorkerGlobalScope::close()
@@ -151,11 +158,11 @@ void WorkerGlobalScope::close()
     } });
 }
 
-WorkerNavigator* WorkerGlobalScope::navigator() const
+WorkerNavigator& WorkerGlobalScope::navigator() const
 {
     if (!m_navigator)
         m_navigator = WorkerNavigator::create(m_userAgent);
-    return m_navigator.get();
+    return *m_navigator;
 }
 
 void WorkerGlobalScope::postTask(Task task)

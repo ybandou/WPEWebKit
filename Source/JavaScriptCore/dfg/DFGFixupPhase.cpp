@@ -105,8 +105,7 @@ private:
         case BitRShift:
         case BitLShift:
         case BitURShift: {
-            if (Node::shouldSpeculateUntypedForBitOps(node->child1().node(), node->child2().node())
-                && m_graph.hasExitSite(node->origin.semantic, BadType)) {
+            if (Node::shouldSpeculateUntypedForBitOps(node->child1().node(), node->child2().node())) {
                 fixEdge<UntypedUse>(node->child1());
                 fixEdge<UntypedUse>(node->child2());
                 break;
@@ -192,9 +191,7 @@ private:
         case ArithAdd:
         case ArithSub: {
             if (op == ArithSub
-                && Node::shouldSpeculateUntypedForArithmetic(node->child1().node(), node->child2().node())
-                && m_graph.hasExitSite(node->origin.semantic, BadType)) {
-
+                && Node::shouldSpeculateUntypedForArithmetic(node->child1().node(), node->child2().node())) {
                 fixEdge<UntypedUse>(node->child1());
                 fixEdge<UntypedUse>(node->child2());
                 node->setResult(NodeResultJS);
@@ -236,8 +233,7 @@ private:
         case ArithMul: {
             Edge& leftChild = node->child1();
             Edge& rightChild = node->child2();
-            if (Node::shouldSpeculateUntypedForArithmetic(leftChild.node(), rightChild.node())
-                && m_graph.hasExitSite(node->origin.semantic, BadType)) {
+            if (Node::shouldSpeculateUntypedForArithmetic(leftChild.node(), rightChild.node())) {
                 fixEdge<UntypedUse>(leftChild);
                 fixEdge<UntypedUse>(rightChild);
                 node->setResult(NodeResultJS);
@@ -349,7 +345,6 @@ private:
         }
 
         case ArithPow: {
-            node->setResult(NodeResultDouble);
             if (node->child2()->shouldSpeculateInt32OrBooleanForArithmetic()) {
                 fixDoubleOrBooleanEdge(node->child1());
                 fixIntOrBooleanEdge(node->child2());
@@ -910,10 +905,25 @@ private:
             break;
         }
 
-        case StringReplace: {
+        case StringReplace:
+        case StringReplaceRegExp: {
+            if (node->child2()->shouldSpeculateString()) {
+                m_insertionSet.insertNode(
+                    m_indexInBlock, SpecNone, Check, node->origin,
+                    Edge(node->child2().node(), StringUse));
+                fixEdge<StringUse>(node->child2());
+            } else if (op == StringReplace) {
+                if (node->child2()->shouldSpeculateRegExpObject())
+                    addStringReplacePrimordialChecks(node->child2().node());
+                else 
+                    m_insertionSet.insertNode(
+                        m_indexInBlock, SpecNone, ForceOSRExit, node->origin);
+            }
+
             if (node->child1()->shouldSpeculateString()
                 && node->child2()->shouldSpeculateRegExpObject()
                 && node->child3()->shouldSpeculateString()) {
+
                 fixEdge<StringUse>(node->child1());
                 fixEdge<RegExpObjectUse>(node->child2());
                 fixEdge<StringUse>(node->child3());
@@ -1046,18 +1056,7 @@ private:
             fixEdge<Int32Use>(node->child1());
             break;
         }
-
-        case CallObjectConstructor: {
-            if (node->child1()->shouldSpeculateObject()) {
-                fixEdge<ObjectUse>(node->child1());
-                node->convertToIdentity();
-                break;
-            }
-
-            fixEdge<UntypedUse>(node->child1());
-            break;
-        }
-
+            
         case ToThis: {
             fixupToThis(node);
             break;
@@ -1133,7 +1132,7 @@ private:
                 fixEdge<CellUse>(node->child1());
             break;
         }
-            
+
         case PutById:
         case PutByIdFlush:
         case PutByIdDirect: {
@@ -1491,6 +1490,16 @@ private:
             break;
         }
 
+        case LogShadowChickenPrologue: {
+            fixEdge<KnownCellUse>(node->child1());
+            break;
+        }
+        case LogShadowChickenTail: {
+            fixEdge<UntypedUse>(node->child1());
+            fixEdge<KnownCellUse>(node->child2());
+            break;
+        }
+
 #if !ASSERT_DISABLED
         // Have these no-op cases here to ensure that nobody forgets to add handlers for new opcodes.
         case SetArgument:
@@ -1524,12 +1533,9 @@ private:
         case NewObject:
         case NewArrayBuffer:
         case NewRegexp:
-        case ProfileWillCall:
-        case ProfileDidCall:
         case DeleteById:
-        case IsArrayObject:
-        case IsJSArray:
-        case IsArrayConstructor:
+        case DeleteByVal:
+        case IsEmpty:
         case IsUndefined:
         case IsBoolean:
         case IsNumber:
@@ -1549,8 +1555,6 @@ private:
         case CheckBadCell:
         case CheckNotEmpty:
         case CheckWatchdogTimer:
-        case LogShadowChickenPrologue:
-        case LogShadowChickenTail:
         case Unreachable:
         case ExtractOSREntryLocal:
         case LoopHint:
@@ -1559,6 +1563,12 @@ private:
         case ExitOK:
         case BottomValue:
         case TypeOf:
+        case GetByIdWithThis:
+        case PutByIdWithThis:
+        case PutByValWithThis:
+        case GetByValWithThis:
+            break;
+            
             break;
 #else
         default:
@@ -1727,6 +1737,9 @@ private:
             return;
         }
 
+        // FIXME: This should cover other use cases but we don't have use kinds for them. It's not critical,
+        // however, since we cover all the missing cases in constant folding.
+        // https://bugs.webkit.org/show_bug.cgi?id=157213
         if (node->child1()->shouldSpeculateStringObject()) {
             fixEdge<StringObjectUse>(node->child1());
             node->convertToIdentity();
@@ -1899,6 +1912,39 @@ private:
         m_insertionSet.execute(block);
     }
     
+    void addStringReplacePrimordialChecks(Node* searchRegExp)
+    {
+        Node* node = m_currentNode;
+
+        // Check that structure of searchRegExp is RegExp object
+        m_insertionSet.insertNode(
+            m_indexInBlock, SpecNone, Check, node->origin,
+            Edge(searchRegExp, RegExpObjectUse));
+
+        auto emitPrimordialCheckFor = [&] (JSValue primordialProperty, UniquedStringImpl* propertyUID) {
+            unsigned index = m_graph.identifiers().ensure(propertyUID);
+
+            Node* actualProperty = m_insertionSet.insertNode(
+                m_indexInBlock, SpecNone, TryGetById, node->origin,
+                OpInfo(index), OpInfo(SpecFunction), Edge(searchRegExp, CellUse));
+
+            m_insertionSet.insertNode(
+                m_indexInBlock, SpecNone, CheckCell, node->origin,
+                OpInfo(m_graph.freeze(primordialProperty)), Edge(actualProperty, CellUse));
+        };
+
+        JSGlobalObject* globalObject = m_graph.globalObjectFor(node->origin.semantic);
+
+        // Check that searchRegExp.exec is the primordial RegExp.prototype.exec
+        emitPrimordialCheckFor(globalObject->regExpProtoExecFunction(), vm().propertyNames->exec.impl());
+        // Check that searchRegExp.global is the primordial RegExp.prototype.global
+        emitPrimordialCheckFor(globalObject->regExpProtoGlobalGetter(), vm().propertyNames->global.impl());
+        // Check that searchRegExp.unicode is the primordial RegExp.prototype.unicode
+        emitPrimordialCheckFor(globalObject->regExpProtoUnicodeGetter(), vm().propertyNames->unicode.impl());
+        // Check that searchRegExp[Symbol.match] is the primordial RegExp.prototype[Symbol.replace]
+        emitPrimordialCheckFor(globalObject->regExpProtoSymbolReplaceFunction(), vm().propertyNames->replaceSymbol.impl());
+    }
+
     Node* checkArray(ArrayMode arrayMode, const NodeOrigin& origin, Node* array, Node* index, bool (*storageCheck)(const ArrayMode&) = canCSEStorage)
     {
         ASSERT(arrayMode.isSpecific());

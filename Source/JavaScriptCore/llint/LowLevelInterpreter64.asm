@@ -274,7 +274,7 @@ _handleUncaughtException:
     loadp Callee[cfr], t3
     andp MarkedBlockMask, t3
     loadp MarkedBlock::m_weakSet + WeakSet::m_vm[t3], t3
-    restoreCalleeSavesFromVMCalleeSavesBuffer(t3, t0)
+    restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(t3, t0)
     loadp VM::callFrameForCatch[t3], cfr
     storep 0, VM::callFrameForCatch[t3]
 
@@ -1098,6 +1098,18 @@ _llint_op_instanceof_custom:
     callSlowPath(_llint_slow_path_instanceof_custom)
     dispatch(5)
 
+
+_llint_op_is_empty:
+    traceExecution()
+    loadisFromInstruction(2, t1)
+    loadisFromInstruction(1, t2)
+    loadConstantOrVariable(t1, t0)
+    cqeq t0, ValueEmpty, t3
+    orq ValueFalse, t3
+    storeq t3, [cfr, t2, 8]
+    dispatch(3)
+
+
 _llint_op_is_undefined:
     traceExecution()
     loadisFromInstruction(2, t1)
@@ -1782,7 +1794,7 @@ _llint_op_catch:
     loadp Callee[cfr], t3
     andp MarkedBlockMask, t3
     loadp MarkedBlock::m_weakSet + WeakSet::m_vm[t3], t3
-    restoreCalleeSavesFromVMCalleeSavesBuffer(t3, t0)
+    restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(t3, t0)
     loadp VM::callFrameForCatch[t3], cfr
     storep 0, VM::callFrameForCatch[t3]
     restoreStackPointerAfterCall()
@@ -1828,7 +1840,7 @@ _llint_throw_from_slow_path_trampoline:
     loadp Callee[cfr], t1
     andp MarkedBlockMask, t1
     loadp MarkedBlock::m_weakSet + WeakSet::m_vm[t1], t1
-    copyCalleeSavesToVMCalleeSavesBuffer(t1, t2)
+    copyCalleeSavesToVMEntryFrameCalleeSavesBuffer(t1, t2)
 
     callSlowPath(_llint_slow_path_handle_exception)
 
@@ -2288,4 +2300,38 @@ _llint_op_get_rest_length:
     orq tagTypeNumber, t0
     loadisFromInstruction(1, t1)
     storeq t0, [cfr, t1, 8]
+    dispatch(3)
+
+
+_llint_op_log_shadow_chicken_prologue:
+    traceExecution()
+    acquireShadowChickenPacket(.opLogShadowChickenPrologueSlow)
+    storep cfr, ShadowChicken::Packet::frame[t0]
+    loadp CallerFrame[cfr], t1
+    storep t1, ShadowChicken::Packet::callerFrame[t0]
+    loadp Callee + PayloadOffset[cfr], t1
+    storep t1, ShadowChicken::Packet::callee[t0]
+    loadVariable(1, t1)
+    storep t1, ShadowChicken::Packet::scope[t0]
+    dispatch(2)
+.opLogShadowChickenPrologueSlow:
+    callSlowPath(_llint_slow_path_log_shadow_chicken_prologue)
+    dispatch(2)
+
+
+_llint_op_log_shadow_chicken_tail:
+    traceExecution()
+    acquireShadowChickenPacket(.opLogShadowChickenTailSlow)
+    storep cfr, ShadowChicken::Packet::frame[t0]
+    storep ShadowChickenTailMarker, ShadowChicken::Packet::callee[t0]
+    loadVariable(1, t1)
+    storep t1, ShadowChicken::Packet::thisValue[t0]
+    loadVariable(2, t1)
+    storep t1, ShadowChicken::Packet::scope[t0]
+    loadp CodeBlock[cfr], t1
+    storep t1, ShadowChicken::Packet::codeBlock[t0]
+    storei PC, ShadowChicken::Packet::callSiteIndex[t0]
+    dispatch(3)
+.opLogShadowChickenTailSlow:
+    callSlowPath(_llint_slow_path_log_shadow_chicken_tail)
     dispatch(3)

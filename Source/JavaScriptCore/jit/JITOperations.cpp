@@ -53,7 +53,6 @@
 #include "JSPropertyNameEnumerator.h"
 #include "JSStackInlines.h"
 #include "JSWithScope.h"
-#include "LegacyProfiler.h"
 #include "ObjectConstructor.h"
 #include "PolymorphicAccess.h"
 #include "PropertyName.h"
@@ -1235,24 +1234,22 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
     }
 
     if (!codeBlock->checkIfOptimizationThresholdReached()) {
+        CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("counter = ", codeBlock->jitExecuteCounter()));
         codeBlock->updateAllPredictions();
         if (Options::verboseOSR())
             dataLog("Choosing not to optimize ", *codeBlock, " yet, because the threshold hasn't been reached.\n");
         return encodeResult(0, 0);
     }
     
-    if (vm.enabledProfiler()) {
-        updateAllPredictionsAndOptimizeAfterWarmUp(codeBlock);
-        return encodeResult(0, 0);
-    }
-
     Debugger* debugger = codeBlock->globalObject()->debugger();
     if (debugger && (debugger->isStepping() || codeBlock->baselineAlternative()->hasDebuggerRequests())) {
+        CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("debugger is stepping or has requests"));
         updateAllPredictionsAndOptimizeAfterWarmUp(codeBlock);
         return encodeResult(0, 0);
     }
 
     if (codeBlock->m_shouldAlwaysBeInlined) {
+        CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("should always be inlined"));
         updateAllPredictionsAndOptimizeAfterWarmUp(codeBlock);
         if (Options::verboseOSR())
             dataLog("Choosing not to optimize ", *codeBlock, " yet, because m_shouldAlwaysBeInlined == true.\n");
@@ -1293,6 +1290,7 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
         worklistState = DFG::Worklist::NotKnown;
 
     if (worklistState == DFG::Worklist::Compiling) {
+        CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("compiling"));
         // We cannot be in the process of asynchronous compilation and also have an optimized
         // replacement.
         RELEASE_ASSERT(!codeBlock->hasOptimizedReplacement());
@@ -1307,6 +1305,7 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
         // CodeBlock::setOptimizationThresholdBasedOnCompilationResult() and we have
         // nothing left to do.
         if (!codeBlock->hasOptimizedReplacement()) {
+            CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("compiled and failed"));
             codeBlock->updateAllPredictions();
             if (Options::verboseOSR())
                 dataLog("Code block ", *codeBlock, " was compiled but it doesn't have an optimized replacement.\n");
@@ -1329,6 +1328,7 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
         // shouldReoptimizeFromLoopNow() to always return true. But we make it do some
         // additional checking anyway, to reduce the amount of recompilation thrashing.
         if (codeBlock->replacement()->shouldReoptimizeFromLoopNow()) {
+            CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("should reoptimize from loop now"));
             if (Options::verboseOSR()) {
                 dataLog(
                     "Triggering reoptimization of ", *codeBlock,
@@ -1339,6 +1339,7 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
         }
     } else {
         if (!codeBlock->shouldOptimizeNow()) {
+            CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("insufficient profiling"));
             if (Options::verboseOSR()) {
                 dataLog(
                     "Delaying optimization for ", *codeBlock,
@@ -1369,14 +1370,17 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
             vm, replacementCodeBlock, nullptr, DFG::DFGMode, bytecodeIndex,
             mustHandleValues, JITToDFGDeferredCompilationCallback::create());
         
-        if (result != CompilationSuccessful)
+        if (result != CompilationSuccessful) {
+            CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("compilation failed"));
             return encodeResult(0, 0);
+        }
     }
     
     CodeBlock* optimizedCodeBlock = codeBlock->replacement();
     ASSERT(JITCode::isOptimizingJIT(optimizedCodeBlock->jitType()));
     
     if (void* dataBuffer = DFG::prepareOSREntry(exec, optimizedCodeBlock, bytecodeIndex)) {
+        CODEBLOCK_LOG_EVENT(optimizedCodeBlock, "osrEntry", ("at bc#", bytecodeIndex));
         if (Options::verboseOSR()) {
             dataLog(
                 "Performing OSR ", *codeBlock, " -> ", *optimizedCodeBlock, ".\n");
@@ -1406,6 +1410,7 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
     // right now. So, we only trigger reoptimization only upon the more conservative (non-loop)
     // reoptimization trigger.
     if (optimizedCodeBlock->shouldReoptimizeNow()) {
+        CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("should reoptimize now"));
         if (Options::verboseOSR()) {
             dataLog(
                 "Triggering reoptimization of ", *codeBlock, " -> ",
@@ -1419,6 +1424,7 @@ SlowPathReturnType JIT_OPERATION operationOptimize(ExecState* exec, int32_t byte
     // longer and then try again.
     codeBlock->optimizeAfterWarmUp();
     
+    CODEBLOCK_LOG_EVENT(codeBlock, "delayOptimizeToDFG", ("OSR failed"));
     return encodeResult(0, 0);
 }
 #endif
@@ -1544,24 +1550,6 @@ void JIT_OPERATION operationPopScope(ExecState* exec, int32_t scopeReg)
 
     JSScope* scope = exec->uncheckedR(scopeReg).Register::scope();
     exec->uncheckedR(scopeReg) = scope->next();
-}
-
-void JIT_OPERATION operationProfileDidCall(ExecState* exec, EncodedJSValue encodedValue)
-{
-    VM& vm = exec->vm();
-    NativeCallFrameTracer tracer(&vm, exec);
-
-    if (LegacyProfiler* profiler = vm.enabledProfiler())
-        profiler->didExecute(exec, JSValue::decode(encodedValue));
-}
-
-void JIT_OPERATION operationProfileWillCall(ExecState* exec, EncodedJSValue encodedValue)
-{
-    VM& vm = exec->vm();
-    NativeCallFrameTracer tracer(&vm, exec);
-
-    if (LegacyProfiler* profiler = vm.enabledProfiler())
-        profiler->willExecute(exec, JSValue::decode(encodedValue));
 }
 
 int32_t JIT_OPERATION operationInstanceOfCustom(ExecState* exec, EncodedJSValue encodedValue, JSObject* constructor, EncodedJSValue encodedHasInstance)
@@ -1871,7 +1859,6 @@ EncodedJSValue JIT_OPERATION operationDeleteByIdJSResult(ExecState* exec, Encode
     return JSValue::encode(jsBoolean(operationDeleteById(exec, base, uid)));
 }
 
-
 size_t JIT_OPERATION operationDeleteById(ExecState* exec, EncodedJSValue encodedBase, UniquedStringImpl* uid)
 {
     VM& vm = exec->vm();
@@ -1879,8 +1866,40 @@ size_t JIT_OPERATION operationDeleteById(ExecState* exec, EncodedJSValue encoded
 
     JSObject* baseObj = JSValue::decode(encodedBase).toObject(exec);
     if (!baseObj)
-        JSValue::encode(JSValue());
+        return false;
     bool couldDelete = baseObj->methodTable(vm)->deleteProperty(baseObj, exec, Identifier::fromUid(&vm, uid));
+    if (!couldDelete && exec->codeBlock()->isStrictMode())
+        vm.throwException(exec, createTypeError(exec, ASCIILiteral("Unable to delete property.")));
+    return couldDelete;
+}
+
+EncodedJSValue JIT_OPERATION operationDeleteByValJSResult(ExecState* exec, EncodedJSValue base,  EncodedJSValue key)
+{
+    return JSValue::encode(jsBoolean(operationDeleteByVal(exec, base, key)));
+}
+
+size_t JIT_OPERATION operationDeleteByVal(ExecState* exec, EncodedJSValue encodedBase, EncodedJSValue encodedKey)
+{
+    VM& vm = exec->vm();
+    NativeCallFrameTracer tracer(&vm, exec);
+
+    JSObject* baseObj = JSValue::decode(encodedBase).toObject(exec);
+    JSValue key = JSValue::decode(encodedKey);
+    if (!baseObj)
+        return false;
+
+    bool couldDelete;
+    uint32_t index;
+    if (key.getUInt32(index))
+        couldDelete = baseObj->methodTable(vm)->deletePropertyByIndex(baseObj, exec, index);
+    else {
+        if (vm.exception())
+            return false;
+        Identifier property = key.toPropertyKey(exec);
+        if (vm.exception())
+            return false;
+        couldDelete = baseObj->methodTable(vm)->deleteProperty(baseObj, exec, property);
+    }
     if (!couldDelete && exec->codeBlock()->isStrictMode())
         vm.throwException(exec, createTypeError(exec, ASCIILiteral("Unable to delete property.")));
     return couldDelete;
@@ -2212,6 +2231,88 @@ JSCell* JIT_OPERATION operationToIndexString(ExecState* exec, int32_t index)
     return jsString(exec, Identifier::from(exec, index).string());
 }
 
+EncodedJSValue JIT_OPERATION operationValueAdd(ExecState* exec, EncodedJSValue encodedOp1, EncodedJSValue encodedOp2)
+{
+    VM* vm = &exec->vm();
+    NativeCallFrameTracer tracer(vm, exec);
+    
+    JSValue op1 = JSValue::decode(encodedOp1);
+    JSValue op2 = JSValue::decode(encodedOp2);
+    
+    return JSValue::encode(jsAdd(exec, op1, op2));
+}
+
+EncodedJSValue JIT_OPERATION operationValueAddProfiled(ExecState* exec, EncodedJSValue encodedOp1, EncodedJSValue encodedOp2, ResultProfile* resultProfile)
+{
+    VM* vm = &exec->vm();
+    NativeCallFrameTracer tracer(vm, exec);
+    
+    JSValue op1 = JSValue::decode(encodedOp1);
+    JSValue op2 = JSValue::decode(encodedOp2);
+    
+    JSValue result = jsAdd(exec, op1, op2);
+    resultProfile->detectNumericness(result);
+    return JSValue::encode(result);
+}
+
+EncodedJSValue JIT_OPERATION operationValueMul(ExecState* exec, EncodedJSValue encodedOp1, EncodedJSValue encodedOp2)
+{
+    VM* vm = &exec->vm();
+    NativeCallFrameTracer tracer(vm, exec);
+
+    JSValue op1 = JSValue::decode(encodedOp1);
+    JSValue op2 = JSValue::decode(encodedOp2);
+
+    double a = op1.toNumber(exec);
+    double b = op2.toNumber(exec);
+    return JSValue::encode(jsNumber(a * b));
+}
+
+EncodedJSValue JIT_OPERATION operationValueMulProfiled(ExecState* exec, EncodedJSValue encodedOp1, EncodedJSValue encodedOp2, ResultProfile* resultProfile)
+{
+    VM* vm = &exec->vm();
+    NativeCallFrameTracer tracer(vm, exec);
+
+    JSValue op1 = JSValue::decode(encodedOp1);
+    JSValue op2 = JSValue::decode(encodedOp2);
+
+    double a = op1.toNumber(exec);
+    double b = op2.toNumber(exec);
+    
+    JSValue result = jsNumber(a * b);
+    resultProfile->detectNumericness(result);
+    return JSValue::encode(result);
+}
+
+EncodedJSValue JIT_OPERATION operationValueSub(ExecState* exec, EncodedJSValue encodedOp1, EncodedJSValue encodedOp2)
+{
+    VM* vm = &exec->vm();
+    NativeCallFrameTracer tracer(vm, exec);
+    
+    JSValue op1 = JSValue::decode(encodedOp1);
+    JSValue op2 = JSValue::decode(encodedOp2);
+
+    double a = op1.toNumber(exec);
+    double b = op2.toNumber(exec);
+    return JSValue::encode(jsNumber(a - b));
+}
+
+EncodedJSValue JIT_OPERATION operationValueSubProfiled(ExecState* exec, EncodedJSValue encodedOp1, EncodedJSValue encodedOp2, ResultProfile* resultProfile)
+{
+    VM* vm = &exec->vm();
+    NativeCallFrameTracer tracer(vm, exec);
+    
+    JSValue op1 = JSValue::decode(encodedOp1);
+    JSValue op2 = JSValue::decode(encodedOp2);
+
+    double a = op1.toNumber(exec);
+    double b = op2.toNumber(exec);
+    
+    JSValue result = jsNumber(a - b);
+    resultProfile->detectNumericness(result);
+    return JSValue::encode(result);
+}
+
 void JIT_OPERATION operationProcessTypeProfilerLog(ExecState* exec)
 {
     VM& vm = exec->vm();
@@ -2231,9 +2332,6 @@ int32_t JIT_OPERATION operationCheckIfExceptionIsUncatchableAndNotifyProfiler(Ex
     VM& vm = exec->vm();
     NativeCallFrameTracer tracer(&vm, exec);
     RELEASE_ASSERT(!!vm.exception());
-
-    if (LegacyProfiler* profiler = vm.enabledProfiler())
-        profiler->exceptionUnwind(exec);
 
     if (isTerminatedExecutionException(vm.exception())) {
         genericUnwind(&vm, exec);

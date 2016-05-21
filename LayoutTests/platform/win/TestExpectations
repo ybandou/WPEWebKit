@@ -249,8 +249,20 @@ fast/autoresize/ [ Skip ]
 # TODO Need to add functionality to DumpRenderTree to handle scrollbar policy changes
 fast/overflow/scrollbar-restored-and-then-locked.html [ Skip ]
 
-# TODO IndexedDB is not yet enabled.
-storage/indexeddb/ [ Skip ]
+storage/indexeddb/clone-exception.html [ Timeout ]
+storage/indexeddb/database-odd-names.html [ Timeout Failure ]
+storage/indexeddb/primary-key-unique-to-objectstore.html [ Timeout ]
+storage/indexeddb/version-change-event-basic.html [ Timeout ]
+storage/indexeddb/properties-disabled-at-runtime.html [ Failure ]
+storage/indexeddb/modern/blob-simple.html [ Failure ]
+storage/indexeddb/modern/date-basic-private.html [ Failure ]
+storage/indexeddb/modern/date-basic.html [ Failure ]
+storage/indexeddb/modern/get-keyrange-private.html [ Failure ]
+storage/indexeddb/modern/get-keyrange.html [ Failure ]
+storage/indexeddb/modern/idbobjectstore-delete-1-private.html [ Failure ]
+storage/indexeddb/modern/idbobjectstore-delete-1.html [ Failure ]
+storage/indexeddb/modern/workers-enable.html [ Failure ]
+
 imported/w3c/IndexedDB-private-browsing [ Skip ]
 imported/w3c/web-platform-tests/IndexedDB [ Skip ]
 js/dom/global-constructors-attributes-idb.html [ Skip ]
@@ -1217,6 +1229,8 @@ editing/pasteboard/emacs-ctrl-k-y-001.html [ Failure ]
 editing/pasteboard/emacs-cntl-y-001.html [ Failure ]
 # Assertion failure in replaySavedEvents
 webkit.org/b/21796 editing/pasteboard/drop-text-events.html [ Skip ]
+
+http/tests/images/hidpi-srcset-copy.html [ Skip ]
 
 ###### Selection
 editing/selection/ [ Pass Failure ]
@@ -2472,6 +2486,7 @@ js/intl-datetimeformat.html [ Skip ]
 js/intl-numberformat.html [ Skip ]
 js/intl.html [ Skip ]
 js/number-toLocaleString.html [ Skip ]
+js/string-localeCompare.html [ Skip ]
 js/string-toLocaleLowerCase.html [ Skip ]
 js/string-toLocaleUpperCase.html [ Skip ]
 
@@ -3374,3 +3389,6 @@ webkit.org/b/137093 svg/custom/glyph-selection-lang-attribute.svg [ Failure ]
 
 # This test relies on iOS-specific font fallback.
 fast/text/arabic-blacklisted-expected.html [ Pass ImageOnlyFailure ]
+
+# dumpPolicyDelegateCallbacks is not supported in DumpRenderTree
+fast/loader/iframe-src-invalid-url.html [ Skip ]

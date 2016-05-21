@@ -17,8 +17,9 @@
  * Boston, MA 02110-1301, USA.
  */
 [
-    Constructor(optional DOMString data = null),
-    ConstructorCallWith=Document
+    Constructor(optional DOMString data),
+    ConstructorCallWith=Document,
+    CustomToJSObject,
 ] interface Text : CharacterData {
 
     // DOM Level 1

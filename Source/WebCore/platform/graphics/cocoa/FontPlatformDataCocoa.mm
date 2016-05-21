@@ -29,9 +29,7 @@
 #import "WebCoreSystemInterface.h"
 #import <wtf/text/WTFString.h>
 
-#if !PLATFORM(IOS)
-#import <AppKit/NSFont.h>
-#else
+#if PLATFORM(IOS)
 #import "CoreGraphicsSPI.h"
 #import <CoreText/CoreText.h>
 #endif
@@ -52,37 +50,6 @@ FontPlatformData::FontPlatformData(CTFontRef font, float size, bool syntheticBol
 #if PLATFORM(IOS)
     m_isEmoji = CTFontIsAppleColorEmoji(m_font.get());
 #endif
-}
-
-FontPlatformData::~FontPlatformData()
-{
-}
-
-void FontPlatformData::platformDataInit(const FontPlatformData& f)
-{
-    m_font = f.m_font;
-
-    m_cgFont = f.m_cgFont;
-    m_ctFont = f.m_ctFont;
-
-#if PLATFORM(IOS)
-    m_isEmoji = f.m_isEmoji;
-#endif
-}
-
-const FontPlatformData& FontPlatformData::platformDataAssign(const FontPlatformData& f)
-{
-    m_cgFont = f.m_cgFont;
-    if (m_font && f.m_font && CFEqual(m_font.get(), f.m_font.get()))
-        return *this;
-    m_font = f.m_font;
-    m_ctFont = f.m_ctFont;
-
-#if PLATFORM(IOS)
-    m_isEmoji = f.m_isEmoji;
-#endif
-
-    return *this;
 }
 
 bool FontPlatformData::platformIsEqual(const FontPlatformData& other) const

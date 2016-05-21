@@ -159,8 +159,8 @@ void CSSFontSelector::addFontFaceRule(StyleRuleFontFace& fontFaceRule, bool isIn
         return;
     if (variantEastAsian && !fontFace->setVariantEastAsian(*variantEastAsian))
         return;
-    if (featureSettings && !fontFace->setFeatureSettings(*featureSettings))
-        return;
+    if (featureSettings)
+        fontFace->setFeatureSettings(*featureSettings);
 
     CSSFontFace::appendSources(fontFace, srcList, m_document, isInitiatingElementInUserAgentShadowTree);
     if (fontFace->allSourcesFailed())
@@ -292,7 +292,7 @@ void CSSFontSelector::beginLoadTimerFired()
     fontsToBeginLoading.swap(m_fontsToBeginLoading);
 
     // CSSFontSelector could get deleted via beginLoadIfNeeded() or loadDone() unless protected.
-    Ref<CSSFontSelector> protect(*this);
+    Ref<CSSFontSelector> protectedThis(*this);
 
     CachedResourceLoader& cachedResourceLoader = m_document->cachedResourceLoader();
     for (auto& fontHandle : fontsToBeginLoading) {

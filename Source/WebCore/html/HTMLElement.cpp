@@ -621,7 +621,7 @@ void HTMLElement::setOuterText(const String& text, ExceptionCode& ec)
         ec = HIERARCHY_REQUEST_ERR;
     if (ec)
         return;
-    parent->replaceChild(newChild.releaseNonNull(), *this, ec);
+    parent->replaceChild(*newChild, *this, ec);
 
     RefPtr<Node> node = next ? next->previousSibling() : nullptr;
     if (!ec && is<Text>(node.get()))
@@ -641,18 +641,18 @@ Node* HTMLElement::insertAdjacent(const String& where, Ref<Node>&& newChild, Exc
 
     if (equalLettersIgnoringASCIICase(where, "beforebegin")) {
         ContainerNode* parent = this->parentNode();
-        return (parent && parent->insertBefore(newChild.copyRef(), this, ec)) ? newChild.ptr() : nullptr;
+        return (parent && parent->insertBefore(newChild, this, ec)) ? newChild.ptr() : nullptr;
     }
 
     if (equalLettersIgnoringASCIICase(where, "afterbegin"))
-        return insertBefore(newChild.copyRef(), firstChild(), ec) ? newChild.ptr() : nullptr;
+        return insertBefore(newChild, firstChild(), ec) ? newChild.ptr() : nullptr;
 
     if (equalLettersIgnoringASCIICase(where, "beforeend"))
-        return appendChild(newChild.copyRef(), ec) ? newChild.ptr() : nullptr;
+        return appendChild(newChild, ec) ? newChild.ptr() : nullptr;
 
     if (equalLettersIgnoringASCIICase(where, "afterend")) {
         ContainerNode* parent = this->parentNode();
-        return (parent && parent->insertBefore(newChild.copyRef(), nextSibling(), ec)) ? newChild.ptr() : nullptr;
+        return (parent && parent->insertBefore(newChild, nextSibling(), ec)) ? newChild.ptr() : nullptr;
     }
     
     // IE throws COM Exception E_INVALIDARG; this is the best DOM exception alternative.
@@ -1139,11 +1139,19 @@ void HTMLElement::addHTMLColorToStyle(MutableStyleProperties& style, CSSProperty
         return;
 
     // If the string is a named CSS color or a 3/6-digit hex color, use that.
-    Color parsedColor(colorString);
-    if (!parsedColor.isValid())
-        parsedColor.setRGB(parseColorStringWithCrazyLegacyRules(colorString));
+    // We can't use the default Color constructor because it accepts
+    // 4/8-digit hex, which conflict with some legacy HTML content using attributes.
 
-    style.setProperty(propertyID, CSSValuePool::singleton().createColorValue(parsedColor.rgb()));
+    Color color;
+
+    if ((colorString.length() == 4 || colorString.length() == 7) && colorString[0] == '#')
+        color = Color(colorString);
+    if (!color.isValid())
+        color.setNamedColor(colorString);
+    if (!color.isValid())
+        color.setRGB(parseColorStringWithCrazyLegacyRules(colorString));
+
+    style.setProperty(propertyID, CSSValuePool::singleton().createColorValue(color.rgb()));
 }
 
 bool HTMLElement::willRespondToMouseMoveEvents()

@@ -424,6 +424,27 @@ Object.defineProperty(DocumentFragment.prototype, "createChild",
     value: Element.prototype.createChild
 });
 
+Object.defineProperty(Array, "shallowEqual",
+{
+    value: function(a, b)
+    {
+        if (a === b)
+            return true;
+
+        let length = a.length;
+
+        if (length !== b.length)
+            return false;
+
+        for (var i = 0; i < length; ++i) {
+            if (a[i] !== b[i])
+                return false;
+        }
+
+        return true;
+    }
+});
+
 Object.defineProperty(Array.prototype, "lastValue",
 {
     get: function()
@@ -1278,10 +1299,19 @@ function isWebInspectorConsoleEvaluationScript(url)
     return url === "__WebInspectorConsoleEvaluation__";
 }
 
+function isWebKitInjectedScript(url)
+{
+    return url && url.startsWith("__InjectedScript_") && url.endsWith(".js");
+}
+
 function isWebKitInternalScript(url)
 {
     if (isWebInspectorConsoleEvaluationScript(url))
         return false;
+
+    if (isWebKitInjectedScript(url))
+        return true;
+
     return url && url.startsWith("__Web") && url.endsWith("__");
 }
 

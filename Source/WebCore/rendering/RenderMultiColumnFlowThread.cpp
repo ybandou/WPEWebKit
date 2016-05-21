@@ -239,7 +239,7 @@ static bool isValidColumnSpanner(RenderMultiColumnFlowThread* flowThread, Render
     ASSERT(descendant->isDescendantOf(flowThread));
 
     // First make sure that the renderer itself has the right properties for becoming a spanner.
-    RenderStyle& style = descendant->style();
+    auto& style = descendant->style();
     if (style.columnSpan() != ColumnSpanAll || !is<RenderBox>(*descendant) || descendant->isFloatingOrOutOfFlowPositioned())
         return false;
 
@@ -610,7 +610,7 @@ LayoutSize RenderMultiColumnFlowThread::offsetFromContainer(RenderElement& enclo
     
     LayoutSize offset(translatedPhysicalPoint.x(), translatedPhysicalPoint.y());
     if (is<RenderBox>(enclosingContainer))
-        offset -= downcast<RenderBox>(enclosingContainer).scrolledContentOffset();
+        offset -= toLayoutSize(downcast<RenderBox>(enclosingContainer).scrollPosition());
     return offset;
 }
     

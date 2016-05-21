@@ -48,6 +48,7 @@
 #include "Node.h"
 #include "SVGElement.h"
 #include "SVGNames.h"
+#include "SVGStyleElement.h"
 #include "StyleProperties.h"
 #include "StyleResolver.h"
 #include "StyleRule.h"
@@ -708,7 +709,7 @@ CSSStyleRule* InspectorStyleSheet::addRule(const String& selector, ExceptionCode
     StringBuilder styleSheetText;
     styleSheetText.append(text);
 
-    m_pageStyleSheet->addRule(selector, "", ec);
+    m_pageStyleSheet->addRule(selector, emptyString(), Nullopt, ec);
     if (ec)
         return nullptr;
     ASSERT(m_pageStyleSheet->length());

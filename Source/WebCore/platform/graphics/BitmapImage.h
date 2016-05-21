@@ -60,6 +60,11 @@ namespace WebCore {
 
 class Timer;
 
+namespace NativeImage {
+    IntSize size(const NativeImagePtr&);
+    bool hasAlpha(const NativeImagePtr&);
+}
+
 // ================================================
 // FrameData Class
 // ================================================
@@ -67,13 +72,9 @@ class Timer;
 struct FrameData {
 public:
     FrameData()
-        : m_orientation(DefaultImageOrientation)
-        , m_subsamplingLevel(0)
-        , m_duration(0)
-        , m_haveMetadata(false)
+        : m_haveMetadata(false)
         , m_isComplete(false)
         , m_hasAlpha(true)
-        , m_frameBytes(0)
     {
     }
 
@@ -85,15 +86,17 @@ public:
     // Clear the cached image data on the frame, and (optionally) the metadata.
     // Returns whether there was cached image data to clear.
     bool clear(bool clearMetadata);
+    
+    unsigned usedFrameBytes() const { return m_image ? m_frameBytes : 0; }
 
     NativeImagePtr m_image;
-    ImageOrientation m_orientation;
-    SubsamplingLevel m_subsamplingLevel;
-    float m_duration;
+    ImageOrientation m_orientation { DefaultImageOrientation };
+    SubsamplingLevel m_subsamplingLevel { 0 };
+    float m_duration { 0 };
     bool m_haveMetadata : 1;
     bool m_isComplete : 1;
     bool m_hasAlpha : 1;
-    unsigned m_frameBytes;
+    unsigned m_frameBytes { 0 };
 };
 
 // =================================================
@@ -293,14 +296,14 @@ private:
     mutable IntSize m_size; // The size to use for the overall image (will just be the size of the first image).
     mutable IntSize m_sizeRespectingOrientation;
 
-    size_t m_currentFrame; // The index of the current frame of animation.
+    size_t m_currentFrame { 0 }; // The index of the current frame of animation.
     Vector<FrameData, 1> m_frames; // An array of the cached frames of the animation. We have to ref frames to pin them in the cache.
 
     std::unique_ptr<Timer> m_frameTimer;
-    int m_repetitionCount; // How many total animation loops we should do. This will be cAnimationNone if this image type is incapable of animation.
-    RepetitionCountStatus m_repetitionCountStatus;
-    int m_repetitionsComplete;  // How many repetitions we've finished.
-    double m_desiredFrameStartTime;  // The system time at which we hope to see the next call to startAnimation().
+    int m_repetitionCount { cAnimationNone }; // How many total animation loops we should do. This will be cAnimationNone if this image type is incapable of animation.
+    RepetitionCountStatus m_repetitionCountStatus { Unknown };
+    int m_repetitionsComplete { 0 }; // How many repetitions we've finished.
+    double m_desiredFrameStartTime { 0 }; // The system time at which we hope to see the next call to startAnimation().
 
 #if USE(APPKIT)
     mutable RetainPtr<NSImage> m_nsImage; // A cached NSImage of frame 0. Only built lazily if someone actually queries for one.
@@ -311,14 +314,14 @@ private:
 
     Color m_solidColor;  // If we're a 1x1 solid color, this is the color to use to fill.
 
-    unsigned m_decodedSize; // The current size of all decoded frames.
-    mutable unsigned m_decodedPropertiesSize; // The size of data decoded by the source to determine image properties (e.g. size, frame count, etc).
+    unsigned m_decodedSize { 0 }; // The current size of all decoded frames.
+    mutable unsigned m_decodedPropertiesSize { 0 }; // The size of data decoded by the source to determine image properties (e.g. size, frame count, etc).
     size_t m_frameCount;
 
 #if PLATFORM(IOS)
     // FIXME: We should expose a setting to enable/disable progressive loading remove the PLATFORM(IOS)-guard.
-    double m_progressiveLoadChunkTime;
-    uint16_t m_progressiveLoadChunkCount;
+    double m_progressiveLoadChunkTime { 0 };
+    uint16_t m_progressiveLoadChunkCount { 0 };
 #endif
     bool m_isSolidColor : 1; // Whether or not we are a 1x1 solid image.
     bool m_checkedForSolidColor : 1; // Whether we've checked the frame for solid color.
@@ -328,7 +331,6 @@ private:
     bool m_allDataReceived : 1; // Whether or not we've received all our data.
     mutable bool m_haveSize : 1; // Whether or not our |m_size| member variable has the final overall image size yet.
     bool m_sizeAvailable : 1; // Whether or not we can obtain the size of the first image frame yet from ImageIO.
-    mutable bool m_hasUniformFrameSize : 1;
     mutable bool m_haveFrameCount : 1;
     bool m_animationFinishedWhenCatchingUp : 1;
 

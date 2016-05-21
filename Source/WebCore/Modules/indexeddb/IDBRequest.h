@@ -104,6 +104,8 @@ public:
 
     bool hasPendingActivity() const final;
 
+    ThreadIdentifier originThreadID() const { return m_originThreadID; }
+
 protected:
     IDBRequest(ScriptExecutionContext&, IDBClient::IDBConnectionProxy&);
 
@@ -137,6 +139,7 @@ private:
     const char* activeDOMObjectName() const final;
     bool canSuspendForDocumentSuspension() const final;
     void stop() final;
+    virtual void cancelForStop();
 
     void refEventTarget() final { RefCounted::ref(); }
     void derefEventTarget() final { RefCounted::deref(); }
@@ -170,6 +173,8 @@ private:
     std::unique_ptr<ScopeGuard> m_cursorRequestNotifier;
 
     Ref<IDBClient::IDBConnectionProxy> m_connectionProxy;
+
+    ThreadIdentifier m_originThreadID { currentThread() };
 };
 
 } // namespace WebCore

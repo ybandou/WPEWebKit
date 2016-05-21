@@ -59,7 +59,7 @@ static RefPtr<Geoposition> createGeoposition(GeolocationPosition* position)
     RefPtr<Coordinates> coordinates = Coordinates::create(position->latitude(), position->longitude(), position->canProvideAltitude(), position->altitude(), 
                                                           position->accuracy(), position->canProvideAltitudeAccuracy(), position->altitudeAccuracy(),
                                                           position->canProvideHeading(), position->heading(), position->canProvideSpeed(), position->speed());
-    return Geoposition::create(coordinates.release(), convertSecondsToDOMTimeStamp(position->timestamp()));
+    return Geoposition::create(WTFMove(coordinates), convertSecondsToDOMTimeStamp(position->timestamp()));
 }
 
 static Ref<PositionError> createPositionError(GeolocationError* error)
@@ -455,7 +455,7 @@ void Geolocation::clearWatch(int watchID)
 void Geolocation::setIsAllowed(bool allowed)
 {
     // Protect the Geolocation object from garbage collection during a callback.
-    Ref<Geolocation> protect(*this);
+    Ref<Geolocation> protectedThis(*this);
 
     // This may be due to either a new position from the service, or a cached
     // position.

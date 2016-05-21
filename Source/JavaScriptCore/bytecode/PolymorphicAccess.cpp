@@ -48,14 +48,6 @@ namespace JSC {
 
 static const bool verbose = false;
 
-// EncodedJSValue in JSVALUE32_64 is a 64-bit integer. When being compiled in ARM EABI, it must be aligned on an even-numbered register (r0, r2 or [sp]).
-// To prevent the assembler from using wrong registers, let's occupy r1 or r3 with a dummy argument when necessary.
-#if (COMPILER_SUPPORTS(EABI) && CPU(ARM)) || CPU(MIPS)
-#define EABI_32BIT_DUMMY_ARG      CCallHelpers::TrustedImm32(0),
-#else
-#define EABI_32BIT_DUMMY_ARG
-#endif
-
 void AccessGenerationResult::dump(PrintStream& out) const
 {
     out.print(m_kind);
@@ -172,7 +164,7 @@ CallSiteIndex AccessGenerationState::originalCallSiteIndex() const { return stub
 void AccessGenerationState::emitExplicitExceptionHandler()
 {
     restoreScratch();
-    jit->copyCalleeSavesToVMCalleeSavesBuffer();
+    jit->copyCalleeSavesToVMEntryFrameCalleeSavesBuffer();
     if (needsToRestoreRegistersIfException()) {
         // To the JIT that produces the original exception handling
         // call site, they will expect the OSR exit to be arrived
@@ -552,6 +544,27 @@ bool AccessCase::visitWeak(VM& vm) const
             return false;
     }
     return true;
+}
+
+bool AccessCase::propagateTransitions(SlotVisitor& visitor) const
+{
+    bool result = true;
+    
+    if (m_structure)
+        result &= m_structure->markIfCheap(visitor);
+    
+    switch (m_type) {
+    case Transition:
+        if (Heap::isMarked(m_structure->previousID()))
+            visitor.appendUnbarrieredReadOnlyPointer(m_structure.get());
+        else
+            result = false;
+        break;
+    default:
+        break;
+    }
+    
+    return result;
 }
 
 void AccessCase::generateWithGuard(
@@ -1125,8 +1138,7 @@ void AccessCase::generateImpl(AccessGenerationState& state)
             if (verbose)
                 dataLog("Have type: ", type->descriptor(), "\n");
             state.failAndRepatch.append(
-                jit.branchIfNotType(
-                    valueRegs, scratchGPR, type->descriptor(), CCallHelpers::HaveTagRegisters));
+                jit.branchIfNotType(valueRegs, scratchGPR, type->descriptor()));
         } else if (verbose)
             dataLog("Don't have type.\n");
         
@@ -1156,8 +1168,7 @@ void AccessCase::generateImpl(AccessGenerationState& state)
             if (verbose)
                 dataLog("Have type: ", type->descriptor(), "\n");
             state.failAndRepatch.append(
-                jit.branchIfNotType(
-                    valueRegs, scratchGPR, type->descriptor(), CCallHelpers::HaveTagRegisters));
+                jit.branchIfNotType(valueRegs, scratchGPR, type->descriptor()));
         } else if (verbose)
             dataLog("Don't have type.\n");
         
@@ -1485,6 +1496,14 @@ bool PolymorphicAccess::visitWeak(VM& vm) const
         }
     }
     return true;
+}
+
+bool PolymorphicAccess::propagateTransitions(SlotVisitor& visitor) const
+{
+    bool result = true;
+    for (unsigned i = 0; i < size(); ++i)
+        result &= at(i).propagateTransitions(visitor);
+    return result;
 }
 
 void PolymorphicAccess::dump(PrintStream& out) const

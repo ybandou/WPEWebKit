@@ -64,7 +64,7 @@ static bool shouldAllowAccessFrom(const JSGlobalObject* thisObject, ExecState* e
 
 const ClassInfo JSDOMWindowBase::s_info = { "Window", &JSDOMGlobalObject::s_info, 0, CREATE_METHOD_TABLE(JSDOMWindowBase) };
 
-const GlobalObjectMethodTable JSDOMWindowBase::s_globalObjectMethodTable = { &shouldAllowAccessFrom, &supportsLegacyProfiling, &supportsRichSourceInfo, &shouldInterruptScript, &javaScriptRuntimeFlags, &queueTaskToEventLoop, &shouldInterruptScriptBeforeTimeout, &moduleLoaderResolve, &moduleLoaderFetch, nullptr, nullptr, &moduleLoaderEvaluate, &defaultLanguage };
+const GlobalObjectMethodTable JSDOMWindowBase::s_globalObjectMethodTable = { &shouldAllowAccessFrom, &supportsRichSourceInfo, &shouldInterruptScript, &javaScriptRuntimeFlags, &queueTaskToEventLoop, &shouldInterruptScriptBeforeTimeout, &moduleLoaderResolve, &moduleLoaderFetch, nullptr, nullptr, &moduleLoaderEvaluate, &defaultLanguage };
 
 JSDOMWindowBase::JSDOMWindowBase(VM& vm, Structure* structure, PassRefPtr<DOMWindow> window, JSDOMWindowShell* shell)
     : JSDOMGlobalObject(vm, structure, &shell->world(), &s_globalObjectMethodTable)
@@ -85,6 +85,9 @@ void JSDOMWindowBase::finishCreation(VM& vm, JSDOMWindowShell* shell)
     };
 
     addStaticGlobals(staticGlobals, WTF_ARRAY_LENGTH(staticGlobals));
+
+    if (m_wrapped && m_wrapped->frame() && m_wrapped->frame()->settings().needsSiteSpecificQuirks())
+        setNeedsSiteSpecificQuirks(true);
 }
 
 void JSDOMWindowBase::visitChildren(JSCell* cell, SlotVisitor& visitor)
@@ -122,20 +125,6 @@ void JSDOMWindowBase::printErrorMessage(const String& message) const
     printErrorMessageForFrame(wrapped().frame(), message);
 }
 
-bool JSDOMWindowBase::supportsLegacyProfiling(const JSGlobalObject* object)
-{
-    const JSDOMWindowBase* thisObject = static_cast<const JSDOMWindowBase*>(object);
-    Frame* frame = thisObject->wrapped().frame();
-    if (!frame)
-        return false;
-
-    Page* page = frame->page();
-    if (!page)
-        return false;
-
-    return page->inspectorController().legacyProfilerEnabled();
-}
-
 bool JSDOMWindowBase::supportsRichSourceInfo(const JSGlobalObject* object)
 {
     const JSDOMWindowBase* thisObject = static_cast<const JSDOMWindowBase*>(object);
@@ -149,7 +138,6 @@ bool JSDOMWindowBase::supportsRichSourceInfo(const JSGlobalObject* object)
 
     bool enabled = page->inspectorController().enabled();
     ASSERT(enabled || !thisObject->debugger());
-    ASSERT(enabled || !supportsLegacyProfiling(thisObject));
     return enabled;
 }
 
@@ -208,7 +196,7 @@ public:
 
     void call()
     {
-        Ref<JSDOMWindowMicrotaskCallback> protect(*this);
+        Ref<JSDOMWindowMicrotaskCallback> protectedThis(*this);
         JSLockHolder lock(m_globalObject->vm());
 
         ExecState* exec = m_globalObject->globalExec();
@@ -269,6 +257,8 @@ VM& JSDOMWindowBase::commonVM()
         vm->heap.machineThreads().addCurrentThread();
 #endif
 
+        vm->setGlobalConstRedeclarationShouldThrow(Settings::globalConstRedeclarationShouldThrow());
+
         initNormalWorldClientData(vm);
     }
 
@@ -277,16 +267,14 @@ VM& JSDOMWindowBase::commonVM()
 
 // JSDOMGlobalObject* is ignored, accessing a window in any context will
 // use that DOMWindow's prototype chain.
-JSValue toJS(ExecState* exec, JSDOMGlobalObject*, DOMWindow* domWindow)
+JSValue toJS(ExecState* exec, JSDOMGlobalObject*, DOMWindow& domWindow)
 {
     return toJS(exec, domWindow);
 }
 
-JSValue toJS(ExecState* exec, DOMWindow* domWindow)
+JSValue toJS(ExecState* exec, DOMWindow& domWindow)
 {
-    if (!domWindow)
-        return jsNull();
-    Frame* frame = domWindow->frame();
+    Frame* frame = domWindow.frame();
     if (!frame)
         return jsNull();
     return frame->script().windowShell(currentWorld(exec));

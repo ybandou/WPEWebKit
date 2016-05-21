@@ -40,8 +40,11 @@ public:
 
     bool hasInitializedStyle() const { return m_hasInitializedStyle; }
 
-    RenderStyle& style() const { return const_cast<RenderStyle&>(m_style); }
-    RenderStyle& firstLineStyle() const;
+    const RenderStyle& style() const { return m_style; }
+    const RenderStyle& firstLineStyle() const;
+
+    // FIXME: Style shouldn't be mutated.
+    RenderStyle& mutableStyle() { return m_style; }
 
     void initializeStyle();
 
@@ -52,8 +55,9 @@ public:
 
     // The pseudo element style can be cached or uncached.  Use the cached method if the pseudo element doesn't respect
     // any pseudo classes (and therefore has no concept of changing state).
-    RenderStyle* getCachedPseudoStyle(PseudoId, RenderStyle* parentStyle = nullptr) const;
-    std::unique_ptr<RenderStyle> getUncachedPseudoStyle(const PseudoStyleRequest&, RenderStyle* parentStyle = nullptr, RenderStyle* ownStyle = nullptr) const;
+    const RenderStyle* getCachedPseudoStyle(PseudoId, const RenderStyle* parentStyle = nullptr) const;
+    RenderStyle* getMutableCachedPseudoStyle(PseudoId, const RenderStyle* parentStyle = nullptr);
+    std::unique_ptr<RenderStyle> getUncachedPseudoStyle(const PseudoStyleRequest&, const RenderStyle* parentStyle = nullptr, const RenderStyle* ownStyle = nullptr) const;
 
     // This is null for anonymous renderers.
     Element* element() const { return downcast<Element>(RenderObject::node()); }
@@ -211,6 +215,11 @@ public:
     bool childRequiresTable(const RenderObject& child) const;
     bool hasContinuation() const { return m_hasContinuation; }
 
+#if ENABLE(IOS_TEXT_AUTOSIZING)
+    void adjustComputedFontSizesOnBlocks(float size, float visibleWidth);
+    WEBCORE_EXPORT void resetTextAutosizing();
+#endif
+
 protected:
     enum BaseTypeFlag {
         RenderLayerModelObjectFlag  = 1 << 0,
@@ -269,7 +278,7 @@ protected:
 
     void paintFocusRing(PaintInfo&, const RenderStyle&, const Vector<LayoutRect>& focusRingRects);
     void paintOutline(PaintInfo&, const LayoutRect&);
-    void updateOutlineAutoAncestor(bool hasOutlineAuto) const;
+    void updateOutlineAutoAncestor(bool hasOutlineAuto);
 
 private:
     RenderElement(ContainerNode&, RenderStyle&&, BaseTypeFlags);
@@ -298,7 +307,7 @@ private:
 #endif
 
     StyleDifference adjustStyleDifference(StyleDifference, unsigned contextSensitiveProperties) const;
-    RenderStyle* cachedFirstLineStyle() const;
+    const RenderStyle* cachedFirstLineStyle() const;
 
     void newImageAnimationFrameAvailable(CachedImage&) final;
 
@@ -450,14 +459,14 @@ inline bool RenderObject::isRenderInline() const
     return is<RenderElement>(*this) && downcast<RenderElement>(*this).isRenderInline();
 }
 
-inline RenderStyle& RenderObject::style() const
+inline const RenderStyle& RenderObject::style() const
 {
     if (isText())
         return m_parent->style();
     return downcast<RenderElement>(*this).style();
 }
 
-inline RenderStyle& RenderObject::firstLineStyle() const
+inline const RenderStyle& RenderObject::firstLineStyle() const
 {
     if (isText())
         return m_parent->firstLineStyle();
@@ -479,9 +488,6 @@ inline LayoutUnit adjustLayoutUnitForAbsoluteZoom(LayoutUnit value, const Render
     return adjustLayoutUnitForAbsoluteZoom(value, renderer.style());
 }
 
-RenderBlock* containingBlockForFixedPosition(const RenderElement*);
-RenderBlock* containingBlockForAbsolutePosition(const RenderElement*);
-RenderBlock* containingBlockForObjectInFlow(const RenderElement*);
 } // namespace WebCore
 
 SPECIALIZE_TYPE_TRAITS_RENDER_OBJECT(RenderElement, isRenderElement())

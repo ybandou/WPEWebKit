@@ -119,10 +119,10 @@ static const String& verticalGrowingRightKeyword()
 
 // ----------------------------
 
-PassRefPtr<VTTCueBox> VTTCueBox::create(Document& document, VTTCue& cue)
+Ref<VTTCueBox> VTTCueBox::create(Document& document, VTTCue& cue)
 {
-    VTTCueBox* cueBox = new VTTCueBox(document, cue);
-    cueBox->setPseudo(VTTCueBox::vttCueBoxShadowPseudoId());
+    VTTCueBox& cueBox = *new VTTCueBox(document, cue);
+    cueBox.setPseudo(VTTCueBox::vttCueBoxShadowPseudoId());
     return adoptRef(cueBox);
 }
 
@@ -502,27 +502,26 @@ void VTTCue::copyWebVTTNodeToDOMTree(ContainerNode* webVTTNode, ContainerNode* p
     }
 }
 
-PassRefPtr<DocumentFragment> VTTCue::getCueAsHTML()
+RefPtr<DocumentFragment> VTTCue::getCueAsHTML()
 {
-    createWebVTTNodeTree();
-    if (!m_webVTTNodeTree)
-        return 0;
-
-    RefPtr<DocumentFragment> clonedFragment = DocumentFragment::create(ownerDocument());
-    copyWebVTTNodeToDOMTree(m_webVTTNodeTree.get(), clonedFragment.get());
-    return clonedFragment.release();
-}
-
-PassRefPtr<DocumentFragment> VTTCue::createCueRenderingTree()
-{
-    RefPtr<DocumentFragment> clonedFragment;
     createWebVTTNodeTree();
     if (!m_webVTTNodeTree)
         return nullptr;
 
-    clonedFragment = DocumentFragment::create(ownerDocument());
-    m_webVTTNodeTree->cloneChildNodes(*clonedFragment);
-    return clonedFragment.release();
+    auto clonedFragment = DocumentFragment::create(ownerDocument());
+    copyWebVTTNodeToDOMTree(m_webVTTNodeTree.get(), clonedFragment.ptr());
+    return WTFMove(clonedFragment);
+}
+
+RefPtr<DocumentFragment> VTTCue::createCueRenderingTree()
+{
+    createWebVTTNodeTree();
+    if (!m_webVTTNodeTree)
+        return nullptr;
+
+    auto clonedFragment = DocumentFragment::create(ownerDocument());
+    m_webVTTNodeTree->cloneChildNodes(clonedFragment);
+    return WTFMove(clonedFragment);
 }
 
 void VTTCue::setRegionId(const String& regionId)
@@ -785,7 +784,7 @@ void VTTCue::updateDisplayTree(const MediaTime& movieTime)
         return;
 
     markFutureAndPastNodes(referenceTree.get(), startMediaTime(), movieTime);
-    m_cueHighlightBox->appendChild(referenceTree.releaseNonNull());
+    m_cueHighlightBox->appendChild(*referenceTree);
 }
 
 VTTCueBox* VTTCue::getDisplayTree(const IntSize& videoSize, int fontSize)

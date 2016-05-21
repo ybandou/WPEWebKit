@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009, 2010, 2013, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2009, 2010, 2013, 2015-2016 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,6 +36,7 @@
 #include "Parser.h"
 #include "ProfilerDatabase.h"
 #include "TypeProfiler.h"
+#include "VMInlines.h"
 #include "WASMFunctionParser.h"
 #include <wtf/CommaPrinter.h>
 #include <wtf/Vector.h>
@@ -176,6 +177,8 @@ void ScriptExecutable::installCode(VM& vm, CodeBlock* genericCodeBlock, CodeType
 {
     ASSERT(vm.heap.isDeferred());
     
+    CODEBLOCK_LOG_EVENT(genericCodeBlock, "installCode", ());
+    
     CodeBlock* oldCodeBlock = nullptr;
     
     switch (codeType) {
@@ -309,10 +312,9 @@ CodeBlock* ScriptExecutable::newCodeBlockFor(
     JSGlobalObject* globalObject = scope->globalObject();
     ParserError error;
     DebuggerMode debuggerMode = globalObject->hasInteractiveDebugger() ? DebuggerOn : DebuggerOff;
-    ProfilerMode profilerMode = globalObject->hasLegacyProfiler() ? ProfilerOn : ProfilerOff;
     UnlinkedFunctionCodeBlock* unlinkedCodeBlock = 
         executable->m_unlinkedExecutable->unlinkedCodeBlockFor(
-            *vm, executable->m_source, kind, debuggerMode, profilerMode, error, 
+            *vm, executable->m_source, kind, debuggerMode, error, 
             executable->parseMode());
     recordParse(
         executable->m_unlinkedExecutable->features(), 
@@ -437,7 +439,7 @@ EvalExecutable* EvalExecutable::create(ExecState* exec, const SourceCode& source
     EvalExecutable* executable = new (NotNull, allocateCell<EvalExecutable>(*exec->heap())) EvalExecutable(exec, source, isInStrictContext, derivedContextType, isArrowFunctionContext, evalContextType);
     executable->finishCreation(exec->vm());
 
-    UnlinkedEvalCodeBlock* unlinkedEvalCode = globalObject->createEvalCodeBlock(exec, executable, thisTDZMode, isArrowFunctionContext, variablesUnderTDZ);
+    UnlinkedEvalCodeBlock* unlinkedEvalCode = globalObject->createEvalCodeBlock(exec, executable, thisTDZMode, variablesUnderTDZ);
     if (!unlinkedEvalCode)
         return 0;
 
@@ -606,8 +608,15 @@ JSObject* ProgramExecutable::initializeGlobalProperties(VM& vm, CallFrame* callF
             if (globalObject->hasProperty(exec, entry.key.get()))
                 return createSyntaxError(exec, makeString("Can't create duplicate variable that shadows a global property: '", String(entry.key.get()), "'"));
 
-            if (globalLexicalEnvironment->hasProperty(exec, entry.key.get()))
+            if (globalLexicalEnvironment->hasProperty(exec, entry.key.get())) {
+                if (UNLIKELY(entry.value.isConst() && !vm.globalConstRedeclarationShouldThrow() && !isStrictMode())) {
+                    // We only allow "const" duplicate declarations under this setting.
+                    // For example, we don't "let" variables to be overridden by "const" variables.
+                    if (globalLexicalEnvironment->isConstVariable(entry.key.get()))
+                        continue;
+                }
                 return createSyntaxError(exec, makeString("Can't create duplicate variable: '", String(entry.key.get()), "'"));
+            }
         }
 
         // Check if any new "var"s will shadow any previous "let"/"const"/"class" names.
@@ -646,6 +655,10 @@ JSObject* ProgramExecutable::initializeGlobalProperties(VM& vm, CallFrame* callF
         SymbolTable* symbolTable = globalLexicalEnvironment->symbolTable();
         ConcurrentJITLocker locker(symbolTable->m_lock);
         for (auto& entry : lexicalDeclarations) {
+            if (UNLIKELY(entry.value.isConst() && !vm.globalConstRedeclarationShouldThrow() && !isStrictMode())) {
+                if (symbolTable->contains(locker, entry.key.get()))
+                    continue;
+            }
             ScopeOffset offset = symbolTable->takeNextScopeOffset(locker);
             SymbolTableEntry newEntry(VarOffset(offset), entry.value.isConst() ? ReadOnly : 0);
             newEntry.prepareToWatch();
@@ -723,7 +736,7 @@ FunctionExecutable* FunctionExecutable::fromGlobalCode(
 const ClassInfo WebAssemblyExecutable::s_info = { "WebAssemblyExecutable", &ExecutableBase::s_info, 0, CREATE_METHOD_TABLE(WebAssemblyExecutable) };
 
 WebAssemblyExecutable::WebAssemblyExecutable(VM& vm, const SourceCode& source, JSWASMModule* module, unsigned functionIndex)
-    : ExecutableBase(vm, vm.webAssemblyExecutableStructure.get(), NUM_PARAMETERS_NOT_COMPILED)
+    : ExecutableBase(vm, vm.webAssemblyExecutableStructure.get(), NUM_PARAMETERS_NOT_COMPILED, NoIntrinsic)
     , m_source(source)
     , m_module(vm, this, module)
     , m_functionIndex(functionIndex)

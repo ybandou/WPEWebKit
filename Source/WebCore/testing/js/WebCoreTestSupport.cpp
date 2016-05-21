@@ -31,11 +31,11 @@
 #include "Internals.h"
 #include "JSDocument.h"
 #include "JSInternals.h"
+#include "Logging.h"
 #include "Page.h"
 #include "WheelEventTestTrigger.h"
 #include <JavaScriptCore/APICast.h>
 #include <JavaScriptCore/JSValueRef.h>
-#include <JavaScriptCore/Profile.h>
 #include <interpreter/CallFrame.h>
 #include <runtime/IdentifierInlines.h>
 
@@ -95,6 +95,22 @@ void clearWheelEventTestTrigger(WebCore::Frame& frame)
         return;
     
     page->clearTrigger();
+}
+
+void setLogChannelToAccumulate(const String& name)
+{
+#if !LOG_DISABLED
+    WebCore::setLogChannelToAccumulate(name);
+#else
+    UNUSED_PARAM(name);
+#endif
+}
+
+void initializeLoggingChannelsIfNecessary()
+{
+#if !LOG_DISABLED
+    WebCore::initializeLoggingChannelsIfNecessary();
+#endif
 }
 
 }

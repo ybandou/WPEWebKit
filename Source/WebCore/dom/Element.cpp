@@ -53,8 +53,12 @@
 #include "HTMLCanvasElement.h"
 #include "HTMLCollection.h"
 #include "HTMLDocument.h"
+#include "HTMLEmbedElement.h"
+#include "HTMLHtmlElement.h"
+#include "HTMLIFrameElement.h"
 #include "HTMLLabelElement.h"
 #include "HTMLNameCollection.h"
+#include "HTMLObjectElement.h"
 #include "HTMLParserIdioms.h"
 #include "HTMLSelectElement.h"
 #include "HTMLTemplateElement.h"
@@ -81,6 +85,7 @@
 #include "SVGDocumentExtensions.h"
 #include "SVGElement.h"
 #include "SVGNames.h"
+#include "SVGSVGElement.h"
 #include "ScrollLatchingState.h"
 #include "SelectorQuery.h"
 #include "Settings.h"
@@ -369,7 +374,7 @@ Ref<Element> Element::cloneElementWithoutAttributesAndChildren(Document& targetD
     return targetDocument.createElement(tagQName(), false);
 }
 
-RefPtr<Attr> Element::detachAttribute(unsigned index)
+Ref<Attr> Element::detachAttribute(unsigned index)
 {
     ASSERT(elementData());
 
@@ -382,7 +387,7 @@ RefPtr<Attr> Element::detachAttribute(unsigned index)
         attrNode = Attr::create(document(), attribute.name(), attribute.value());
 
     removeAttributeInternal(index, NotInSynchronizationOfLazyAttribute);
-    return attrNode.release();
+    return attrNode.releaseNonNull();
 }
 
 bool Element::removeAttribute(const QualifiedName& name)
@@ -976,7 +981,7 @@ static bool layoutOverflowRectContainsAllDescendants(const RenderElement& render
     }
 
     // This renderer may have positioned descendants whose containing block is some ancestor.
-    if (auto containingBlock = containingBlockForAbsolutePosition(&renderer)) {
+    if (auto containingBlock = renderer.containingBlockForAbsolutePosition()) {
         if (auto positionedObjects = containingBlock->positionedObjects()) {
             for (RenderBox* it : *positionedObjects) {
                 if (it != &renderer && renderer.element()->contains(it->element()))
@@ -1370,7 +1375,7 @@ StyleResolver& Element::styleResolver()
     return document().ensureStyleResolver();
 }
 
-ElementStyle Element::resolveStyle(RenderStyle* parentStyle)
+ElementStyle Element::resolveStyle(const RenderStyle* parentStyle)
 {
     return styleResolver().styleForElement(*this, parentStyle);
 }
@@ -1511,10 +1516,12 @@ Node::InsertionNotificationRequest Element::insertedInto(ContainerNode& insertio
         setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(true);
 #endif
 
+#if ENABLE(SHADOW_DOM) || ENABLE(DETAILS_ELEMENT)
     if (parentNode() == &insertionPoint) {
         if (auto* shadowRoot = parentNode()->shadowRoot())
             shadowRoot->hostChildElementDidChange(*this);
     }
+#endif
 
     if (!insertionPoint.isInTreeScope())
         return InsertionDone;
@@ -1595,10 +1602,12 @@ void Element::removedFrom(ContainerNode& insertionPoint)
         }
     }
 
+#if ENABLE(SHADOW_DOM) || ENABLE(DETAILS_ELEMENT)
     if (!parentNode()) {
         if (auto* shadowRoot = insertionPoint.shadowRoot())
             shadowRoot->hostChildElementDidChange(*this);
     }
+#endif
 
     ContainerNode::removedFrom(insertionPoint);
 
@@ -1614,7 +1623,7 @@ void Element::removedFrom(ContainerNode& insertionPoint)
 
 void Element::unregisterNamedFlowContentElement()
 {
-    if (document().cssRegionsEnabled() && isNamedFlowContentNode() && document().renderView())
+    if (isNamedFlowContentNode() && document().renderView())
         document().renderView()->flowThreadController().unregisterNamedFlowContentElement(*this);
 }
 
@@ -1674,21 +1683,14 @@ RefPtr<ShadowRoot> Element::createShadowRoot(ExceptionCode& ec)
     return nullptr;
 }
 
-RefPtr<ShadowRoot> Element::attachShadow(const Dictionary& dictionary, ExceptionCode& ec)
+bool Element::canHaveUserAgentShadowRoot() const
 {
-    String mode;
-    dictionary.get("mode", mode);
+    return false;
+}
 
-    auto type = ShadowRoot::Type::Closed;
-    if (mode == "open")
-        type = ShadowRoot::Type::Open;
-    else if (mode != "closed") {
-        ec = TypeError;
-        return nullptr;
-    }
-
-    // FIXME: The current spec allows attachShadow on non-HTML elements.
-    if (!is<HTMLElement>(this) || downcast<HTMLElement>(this)->canHaveUserAgentShadowRoot()) {
+RefPtr<ShadowRoot> Element::attachShadow(const ShadowRootInit& init, ExceptionCode& ec)
+{
+    if (canHaveUserAgentShadowRoot()) {
         ec = NOT_SUPPORTED_ERR;
         return nullptr;
     }
@@ -1698,9 +1700,9 @@ RefPtr<ShadowRoot> Element::attachShadow(const Dictionary& dictionary, Exception
         return nullptr;
     }
 
-    addShadowRoot(ShadowRoot::create(document(), type));
-
-    return shadowRoot();
+    auto shadow = ShadowRoot::create(document(), init.mode == ShadowRootMode::Open ? ShadowRoot::Type::Open : ShadowRoot::Type::Closed);
+    addShadowRoot(shadow.copyRef());
+    return WTFMove(shadow);
 }
 
 ShadowRoot* Element::shadowRootForBindings(JSC::ExecState& state) const
@@ -1758,7 +1760,7 @@ bool Element::childTypeAllowed(NodeType type) const
 static void checkForEmptyStyleChange(Element& element)
 {
     if (element.styleAffectedByEmpty()) {
-        RenderStyle* style = element.renderStyle();
+        auto* style = element.renderStyle();
         if (!style || (!style->emptyState() || element.hasChildNodes()))
             element.setNeedsStyleRecalc();
     }
@@ -1784,14 +1786,14 @@ static void checkForSiblingStyleChanges(Element& parent, SiblingCheckType checkT
 
         // This is the insert/append case.
         if (newFirstElement != elementAfterChange) {
-            RenderStyle* style = elementAfterChange->renderStyle();
+            auto* style = elementAfterChange->renderStyle();
             if (!style || style->firstChildState())
                 elementAfterChange->setNeedsStyleRecalc();
         }
 
         // We also have to handle node removal.
         if (checkType == SiblingElementRemoved && newFirstElement == elementAfterChange && newFirstElement) {
-            RenderStyle* style = newFirstElement->renderStyle();
+            auto* style = newFirstElement->renderStyle();
             if (!style || !style->firstChildState())
                 newFirstElement->setNeedsStyleRecalc();
         }
@@ -1804,7 +1806,7 @@ static void checkForSiblingStyleChanges(Element& parent, SiblingCheckType checkT
         Element* newLastElement = ElementTraversal::lastChild(parent);
 
         if (newLastElement != elementBeforeChange) {
-            RenderStyle* style = elementBeforeChange->renderStyle();
+            auto* style = elementBeforeChange->renderStyle();
             if (!style || style->lastChildState())
                 elementBeforeChange->setNeedsStyleRecalc();
         }
@@ -1812,7 +1814,7 @@ static void checkForSiblingStyleChanges(Element& parent, SiblingCheckType checkT
         // We also have to handle node removal.  The parser callback case is similar to node removal as well in that we need to change the last child
         // to match now.
         if ((checkType == SiblingElementRemoved || checkType == FinishedParsingChildren) && newLastElement == elementBeforeChange && newLastElement) {
-            RenderStyle* style = newLastElement->renderStyle();
+            auto* style = newLastElement->renderStyle();
             if (!style || !style->lastChildState())
                 newLastElement->setNeedsStyleRecalc();
         }
@@ -2005,7 +2007,7 @@ RefPtr<Attr> Element::setAttributeNodeNS(Attr& attrNode, ExceptionCode& ec)
     treeScope().adoptIfNeeded(&attrNode);
     ensureAttrNodeListForElement(*this).append(&attrNode);
 
-    return oldAttrNode.release();
+    return oldAttrNode;
 }
 
 RefPtr<Attr> Element::removeAttributeNode(Attr& attr, ExceptionCode& ec)
@@ -2372,7 +2374,7 @@ void Element::setOuterHTML(const String& html, ExceptionCode& ec)
     if (ec)
         return;
     
-    parent->replaceChild(fragment.releaseNonNull(), *this, ec);
+    parent->replaceChild(*fragment, *this, ec);
     RefPtr<Node> node = next ? next->previousSibling() : nullptr;
     if (!ec && is<Text>(node.get()))
         mergeWithNextTextNode(downcast<Text>(*node), ec);
@@ -2387,7 +2389,7 @@ void Element::setInnerHTML(const String& html, ExceptionCode& ec)
         ContainerNode* container = this;
 
         if (is<HTMLTemplateElement>(*this))
-            container = downcast<HTMLTemplateElement>(*this).content();
+            container = &downcast<HTMLTemplateElement>(*this).content();
 
         replaceChildrenWithFragment(*container, fragment.releaseNonNull(), ec);
     }
@@ -2459,7 +2461,7 @@ static PseudoElement* beforeOrAfterPseudoElement(Element& host, PseudoId pseudoE
     }
 }
 
-RenderStyle* Element::existingComputedStyle()
+const RenderStyle* Element::existingComputedStyle()
 {
     if (auto* renderTreeStyle = renderStyle())
         return renderTreeStyle;
@@ -2470,13 +2472,13 @@ RenderStyle* Element::existingComputedStyle()
     return nullptr;
 }
 
-RenderStyle& Element::resolveComputedStyle()
+const RenderStyle& Element::resolveComputedStyle()
 {
     ASSERT(inDocument());
     ASSERT(!existingComputedStyle());
 
     Deque<Element*, 32> elementsRequiringComputedStyle({ this });
-    RenderStyle* computedStyle = nullptr;
+    const RenderStyle* computedStyle = nullptr;
 
     // Collect ancestors until we find one that has style.
     auto composedAncestors = composedTreeAncestors(*this);
@@ -2499,7 +2501,7 @@ RenderStyle& Element::resolveComputedStyle()
     return *computedStyle;
 }
 
-RenderStyle* Element::computedStyle(PseudoId pseudoElementSpecifier)
+const RenderStyle* Element::computedStyle(PseudoId pseudoElementSpecifier)
 {
     if (PseudoElement* pseudoElement = beforeOrAfterPseudoElement(*this, pseudoElementSpecifier))
         return pseudoElement->computedStyle();
@@ -2937,7 +2939,7 @@ const AtomicString& Element::webkitRegionOverset() const
     document().updateLayoutIgnorePendingStylesheets();
 
     static NeverDestroyed<AtomicString> undefinedState("undefined", AtomicString::ConstructFromLiteral);
-    if (!document().cssRegionsEnabled() || !renderNamedFlowFragment())
+    if (!renderNamedFlowFragment())
         return undefinedState;
 
     switch (regionOversetState()) {
@@ -2964,9 +2966,6 @@ const AtomicString& Element::webkitRegionOverset() const
 Vector<RefPtr<Range>> Element::webkitGetRegionFlowRanges() const
 {
     Vector<RefPtr<Range>> rangeObjects;
-    if (!document().cssRegionsEnabled())
-        return rangeObjects;
-
     document().updateLayoutIgnorePendingStylesheets();
     if (renderer() && renderer()->isRenderNamedFlowFragmentContainer()) {
         RenderNamedFlowFragment& namedFlowFragment = *downcast<RenderBlockFlow>(*renderer()).renderNamedFlowFragment();
@@ -3177,7 +3176,7 @@ RefPtr<Attr> Element::attrIfExists(const QualifiedName& name)
     return nullptr;
 }
 
-RefPtr<Attr> Element::ensureAttr(const QualifiedName& name)
+Ref<Attr> Element::ensureAttr(const QualifiedName& name)
 {
     auto& attrNodeList = ensureAttrNodeListForElement(*this);
     RefPtr<Attr> attrNode = findAttrNodeInList(attrNodeList, name);
@@ -3186,7 +3185,7 @@ RefPtr<Attr> Element::ensureAttr(const QualifiedName& name)
         treeScope().adoptIfNeeded(attrNode.get());
         attrNodeList.append(attrNode);
     }
-    return attrNode.release();
+    return attrNode.releaseNonNull();
 }
 
 void Element::detachAttrNodeFromElementWithValue(Attr* attrNode, const AtomicString& value)
@@ -3293,7 +3292,7 @@ void Element::didDetachRenderers()
     ASSERT(hasCustomStyleResolveCallbacks());
 }
 
-Optional<ElementStyle> Element::resolveCustomStyle(RenderStyle&, RenderStyle*)
+Optional<ElementStyle> Element::resolveCustomStyle(const RenderStyle&, const RenderStyle*)
 {
     ASSERT(hasCustomStyleResolveCallbacks());
     return Nullopt;

@@ -249,6 +249,9 @@ const ClearWatchpoint = 0
 const IsWatched = 1
 const IsInvalidated = 2
 
+# ShadowChicken data
+const ShadowChickenTailMarker = 0x7a11
+
 # Some register conventions.
 if JSVALUE64
     # - Use a pair of registers to represent the PC: one register for the
@@ -568,9 +571,11 @@ macro restoreCalleeSavesUsedByLLInt()
     end
 end
 
-macro copyCalleeSavesToVMCalleeSavesBuffer(vm, temp)
+macro copyCalleeSavesToVMEntryFrameCalleeSavesBuffer(vm, temp)
     if ARM64 or X86_64 or X86_64_WIN
-        leap VM::calleeSaveRegistersBuffer[vm], temp
+        loadp VM::topVMEntryFrame[vm], temp
+        vmEntryRecord(temp, temp)
+        leap VMEntryRecord::calleeSaveRegistersBuffer[temp], temp
         if ARM64
             storep csr0, [temp]
             storep csr1, 8[temp]
@@ -608,9 +613,11 @@ macro copyCalleeSavesToVMCalleeSavesBuffer(vm, temp)
     end
 end
 
-macro restoreCalleeSavesFromVMCalleeSavesBuffer(vm, temp)
+macro restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(vm, temp)
     if ARM64 or X86_64 or X86_64_WIN
-        leap VM::calleeSaveRegistersBuffer[vm], temp
+        loadp VM::topVMEntryFrame[vm], temp
+        vmEntryRecord(temp, temp)
+        leap VMEntryRecord::calleeSaveRegistersBuffer[temp], temp
         if ARM64
             loadp [temp], csr0
             loadp 8[temp], csr1
@@ -1467,30 +1474,6 @@ macro acquireShadowChickenPacket(slow)
     storep t1, ShadowChicken::m_logCursor[t2]
 end
 
-_llint_op_log_shadow_chicken_prologue:
-    traceExecution()
-    acquireShadowChickenPacket(.opLogShadowChickenPrologueSlow)
-    storep cfr, ShadowChicken::Packet::frame[t0]
-    loadp CallerFrame[cfr], t1
-    storep t1, ShadowChicken::Packet::callerFrame[t0]
-    loadp Callee + PayloadOffset[cfr], t1
-    storep t1, ShadowChicken::Packet::callee[t0]
-    dispatch(1)
-.opLogShadowChickenPrologueSlow:
-    callSlowPath(_llint_slow_path_log_shadow_chicken_prologue)
-    dispatch(1)
-
-
-_llint_op_log_shadow_chicken_tail:
-    traceExecution()
-    acquireShadowChickenPacket(.opLogShadowChickenTailSlow)
-    storep cfr, ShadowChicken::Packet::frame[t0]
-    storep 0x7a11, ShadowChicken::Packet::callee[t0]
-    dispatch(1)
-.opLogShadowChickenTailSlow:
-    callSlowPath(_llint_slow_path_log_shadow_chicken_tail)
-    dispatch(1)
-
 
 _llint_op_switch_string:
     traceExecution()
@@ -1658,28 +1641,6 @@ _llint_op_throw_static_error:
     dispatch(3)
 
 
-_llint_op_profile_will_call:
-    traceExecution()
-    loadp CodeBlock[cfr], t0
-    loadp CodeBlock::m_vm[t0], t0
-    loadi VM::m_enabledProfiler[t0], t0
-    btpz t0, .opProfilerWillCallDone
-    callSlowPath(_llint_slow_path_profile_will_call)
-.opProfilerWillCallDone:
-    dispatch(2)
-
-
-_llint_op_profile_did_call:
-    traceExecution()
-    loadp CodeBlock[cfr], t0
-    loadp CodeBlock::m_vm[t0], t0
-    loadi VM::m_enabledProfiler[t0], t0
-    btpz t0, .opProfilerDidCallDone
-    callSlowPath(_llint_slow_path_profile_did_call)
-.opProfilerDidCallDone:
-    dispatch(2)
-
-
 _llint_op_debug:
     traceExecution()
     loadp CodeBlock[cfr], t0
@@ -1752,6 +1713,25 @@ _llint_op_instanceof:
     callSlowPath(_llint_slow_path_instanceof)
     dispatch(4)
 
+_llint_op_get_by_id_with_this:
+    traceExecution()
+    callSlowPath(_slow_path_get_by_id_with_this)
+    dispatch(5)
+
+_llint_op_get_by_val_with_this:
+    traceExecution()
+    callSlowPath(_slow_path_get_by_val_with_this)
+    dispatch(5)
+
+_llint_op_put_by_id_with_this:
+    traceExecution()
+    callSlowPath(_slow_path_put_by_id_with_this)
+    dispatch(5)
+
+_llint_op_put_by_val_with_this:
+    traceExecution()
+    callSlowPath(_slow_path_put_by_val_with_this)
+    dispatch(5)
 
 # Lastly, make sure that we can link even though we don't support all opcodes.
 # These opcodes should never arise when using LLInt or either JIT. We assert

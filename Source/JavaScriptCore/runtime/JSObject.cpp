@@ -252,7 +252,7 @@ void JSObject::heapSnapshot(JSCell* cell, HeapSnapshotBuilder& builder)
 
     Butterfly* butterfly = thisObject->m_butterfly.get();
     if (butterfly) {
-        WriteBarrier<Unknown>* data;
+        WriteBarrier<Unknown>* data = nullptr;
         uint32_t count = 0;
 
         switch (thisObject->indexingType()) {
@@ -1595,7 +1595,7 @@ static ALWAYS_INLINE JSValue callToPrimitiveFunction(ExecState* exec, const JSOb
 
     MarkedArgumentBuffer callArgs;
     if (mode == TypeHintMode::TakesHint) {
-        JSString* hintString;
+        JSString* hintString = nullptr;
         switch (hint) {
         case NoPreference:
             hintString = exec->vm().smallStrings.defaultString();
@@ -1951,9 +1951,10 @@ void JSObject::reifyAllStaticProperties(ExecState* exec)
 
         for (auto& value : *hashTable) {
             unsigned attributes;
-            PropertyOffset offset = getDirectOffset(vm, Identifier::fromString(&vm, value.m_key), attributes);
+            auto key = Identifier::fromString(&vm, value.m_key);
+            PropertyOffset offset = getDirectOffset(vm, key, attributes);
             if (!isValidOffset(offset))
-                reifyStaticProperty(vm, value, *this);
+                reifyStaticProperty(vm, key, value, *this);
         }
     }
 

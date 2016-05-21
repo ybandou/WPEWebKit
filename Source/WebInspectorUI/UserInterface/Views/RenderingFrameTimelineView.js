@@ -108,6 +108,8 @@ WebInspector.RenderingFrameTimelineView = class RenderingFrameTimelineView exten
 
     // Public
 
+    get showsLiveRecordingData() { return false; }
+
     shown()
     {
         super.shown();
@@ -291,7 +293,7 @@ WebInspector.RenderingFrameTimelineView = class RenderingFrameTimelineView exten
 
     _scopeBarSelectionDidChange()
     {
-        this.filterDidChange();
+        this._dataGrid.filterDidChange();
     }
 };
 

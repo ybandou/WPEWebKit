@@ -32,6 +32,9 @@
 #include "ComposedTreeIterator.h"
 #include "ElementIterator.h"
 #include "HTMLBodyElement.h"
+#include "HTMLMeterElement.h"
+#include "HTMLNames.h"
+#include "HTMLProgressElement.h"
 #include "HTMLSlotElement.h"
 #include "LoaderStrategy.h"
 #include "MainFrame.h"
@@ -93,7 +96,7 @@ TreeResolver::Parent::Parent(Document& document, Change change)
 {
 }
 
-TreeResolver::Parent::Parent(Element& element, RenderStyle& style, Change change)
+TreeResolver::Parent::Parent(Element& element, const RenderStyle& style, Change change)
     : element(&element)
     , style(style)
     , change(change)
@@ -119,7 +122,7 @@ void TreeResolver::popScope()
     return m_scopeStack.removeLast();
 }
 
-std::unique_ptr<RenderStyle> TreeResolver::styleForElement(Element& element, RenderStyle& inheritedStyle)
+std::unique_ptr<RenderStyle> TreeResolver::styleForElement(Element& element, const RenderStyle& inheritedStyle)
 {
     if (!m_document.haveStylesheetsLoaded() && !element.renderer()) {
         m_document.setHasNodesWithPlaceholderStyle();
@@ -176,8 +179,10 @@ static bool affectsRenderedSubtree(Element& element, const RenderStyle& newStyle
         return true;
     if (element.rendererIsNeeded(newStyle))
         return true;
+#if ENABLE(CSS_REGIONS)
     if (element.shouldMoveToFlowThread(newStyle))
         return true;
+#endif
     return false;
 }
 
@@ -185,24 +190,18 @@ ElementUpdate TreeResolver::resolveElement(Element& element)
 {
     auto newStyle = styleForElement(element, parent().style);
 
-    auto* renderer = element.renderer();
-
     if (!affectsRenderedSubtree(element, *newStyle))
         return { };
 
-    ElementUpdate update;
+    bool shouldReconstructRenderTree = element.styleChangeType() == ReconstructRenderTree || parent().change == Detach;
+    auto* rendererToUpdate = shouldReconstructRenderTree ? nullptr : element.renderer();
 
-    bool needsNewRenderer = !renderer || element.styleChangeType() == ReconstructRenderTree || parent().change == Detach;
-
-    std::unique_ptr<RenderStyle> animatedStyle;
-    if (!needsNewRenderer && m_document.frame()->animation().updateAnimations(*renderer, *newStyle, animatedStyle))
-        update.isSynthetic = true;
-
-    update.change = needsNewRenderer ? Detach : determineChange(renderer->style(), *newStyle);
-    update.style = animatedStyle ? WTFMove(animatedStyle) : WTFMove(newStyle);
+    auto update = createAnimatedElementUpdate(WTFMove(newStyle), rendererToUpdate, m_document);
 
     if (element.styleChangeType() == SyntheticStyleChange)
         update.isSynthetic = true;
+
+    auto* existingStyle = element.renderStyle();
 
     if (&element == m_document.documentElement()) {
         m_documentElementStyle = RenderStyle::clonePtr(*update.style);
@@ -210,7 +209,7 @@ ElementUpdate TreeResolver::resolveElement(Element& element)
 
         // If "rem" units are used anywhere in the document, and if the document element's font size changes, then force font updating
         // all the way down the tree. This is simpler than having to maintain a cache of objects (and such font size changes should be rare anyway).
-        if (m_document.authorStyleSheets().usesRemUnits() && update.change != NoChange && renderer && renderer->style().fontSize() != update.style->fontSize()) {
+        if (m_document.authorStyleSheets().usesRemUnits() && update.change != NoChange && existingStyle && existingStyle->fontSize() != update.style->fontSize()) {
             // Cached RenderStyles may depend on the rem units.
             scope().styleResolver.invalidateMatchedPropertiesCache();
             update.change = Force;
@@ -222,8 +221,35 @@ ElementUpdate TreeResolver::resolveElement(Element& element)
     if (&element == m_document.body())
         m_document.setTextColor(update.style->visitedDependentColor(CSSPropertyColor));
 
+    // FIXME: These elements should not change renderer based on appearance property.
+    if (element.hasTagName(HTMLNames::meterTag) || is<HTMLProgressElement>(element)) {
+        if (existingStyle && update.style->appearance() != existingStyle->appearance())
+            update.change = Detach;
+    }
+
     if (update.change != Detach && (parent().change == Force || element.styleChangeType() >= FullStyleChange))
         update.change = Force;
+
+    return update;
+}
+
+ElementUpdate TreeResolver::createAnimatedElementUpdate(std::unique_ptr<RenderStyle> newStyle, RenderElement* rendererToUpdate, Document& document)
+{
+    ElementUpdate update;
+
+    std::unique_ptr<RenderStyle> animatedStyle;
+    if (rendererToUpdate && document.frame()->animation().updateAnimations(*rendererToUpdate, *newStyle, animatedStyle))
+        update.isSynthetic = true;
+
+    if (animatedStyle) {
+        update.change = determineChange(rendererToUpdate->style(), *animatedStyle);
+        // If animation forces render tree reconstruction pass the original style. The animation will be applied on renderer construction.
+        // FIXME: We should always use the animated style here.
+        update.style = update.change == Detach ? WTFMove(newStyle) : WTFMove(animatedStyle);
+    } else {
+        update.change = rendererToUpdate ? determineChange(rendererToUpdate->style(), *newStyle) : Detach;
+        update.style = WTFMove(newStyle);
+    }
 
     return update;
 }
@@ -235,7 +261,7 @@ static EVisibility elementImplicitVisibility(const Element* element)
     if (!renderer)
         return VISIBLE;
 
-    RenderStyle& style = renderer->style();
+    auto& style = renderer->style();
 
     Length width(style.width());
     Length height(style.height());
@@ -254,7 +280,7 @@ static EVisibility elementImplicitVisibility(const Element* element)
 
 class CheckForVisibilityChangeOnRecalcStyle {
 public:
-    CheckForVisibilityChangeOnRecalcStyle(Element* element, RenderStyle* currentStyle)
+    CheckForVisibilityChangeOnRecalcStyle(Element* element, const RenderStyle* currentStyle)
         : m_element(element)
         , m_previousDisplay(currentStyle ? currentStyle->display() : NONE)
         , m_previousVisibility(currentStyle ? currentStyle->visibility() : HIDDEN)
@@ -267,7 +293,7 @@ public:
             return;
         if (m_element->isInUserAgentShadowTree())
             return;
-        RenderStyle* style = m_element->renderStyle();
+        auto* style = m_element->renderStyle();
         if (!style)
             return;
         if ((m_previousDisplay == NONE && style->display() != NONE) || (m_previousVisibility == HIDDEN && style->visibility() != HIDDEN)
@@ -282,7 +308,7 @@ private:
 };
 #endif // PLATFORM(IOS)
 
-void TreeResolver::pushParent(Element& element, RenderStyle& style, Change change)
+void TreeResolver::pushParent(Element& element, const RenderStyle& style, Change change)
 {
     scope().selectorFilter.pushParent(&element);
 
@@ -326,13 +352,41 @@ void TreeResolver::popParentsToDepth(unsigned depth)
         popParent();
 }
 
-static bool shouldResolvePseudoElement(PseudoElement* pseudoElement)
+static bool shouldResolvePseudoElement(const PseudoElement* pseudoElement)
 {
     if (!pseudoElement)
         return false;
-    bool needsStyleRecalc = pseudoElement->needsStyleRecalc();
-    pseudoElement->clearNeedsStyleRecalc();
-    return needsStyleRecalc;
+    return pseudoElement->needsStyleRecalc();
+}
+
+static bool shouldResolveElement(const Element& element, Style::Change parentChange)
+{
+    if (parentChange >= Inherit)
+        return true;
+    if (parentChange == NoInherit) {
+        auto* existingStyle = element.renderStyle();
+        if (existingStyle && existingStyle->hasExplicitlyInheritedProperties())
+            return true;
+    }
+    if (element.needsStyleRecalc())
+        return true;
+    if (element.hasDisplayContents())
+        return true;
+    if (shouldResolvePseudoElement(element.beforePseudoElement()))
+        return true;
+    if (shouldResolvePseudoElement(element.afterPseudoElement()))
+        return true;
+
+    return false;
+}
+
+static void clearNeedsStyleResolution(Element& element)
+{
+    element.clearNeedsStyleRecalc();
+    if (auto* before = element.beforePseudoElement())
+        before->clearNeedsStyleRecalc();
+    if (auto* after = element.afterPseudoElement())
+        after->clearNeedsStyleRecalc();
 }
 
 void TreeResolver::resolveComposedTree()
@@ -368,17 +422,22 @@ void TreeResolver::resolveComposedTree()
 
         auto& element = downcast<Element>(node);
 
+        if (it.depth() > Settings::defaultMaximumRenderTreeDepth) {
+            resetStyleForNonRenderedDescendants(element);
+            element.clearChildNeedsStyleRecalc();
+            it.traverseNextSkippingChildren();
+            continue;
+        }
+
         // FIXME: We should deal with this during style invalidation.
         bool affectedByPreviousSibling = element.styleIsAffectedByPreviousSibling() && parent.elementNeedingStyleRecalcAffectsNextSiblingElementStyle;
         if (element.needsStyleRecalc() || parent.elementNeedingStyleRecalcAffectsNextSiblingElementStyle)
             parent.elementNeedingStyleRecalcAffectsNextSiblingElementStyle = element.affectsNextSiblingElementStyle();
 
-        bool shouldResolveForPseudoElement = shouldResolvePseudoElement(element.beforePseudoElement()) || shouldResolvePseudoElement(element.afterPseudoElement());
+        auto* style = element.renderStyle();
+        auto change = NoChange;
 
-        RenderStyle* style;
-        Change change;
-
-        bool shouldResolve = parent.change >= Inherit || element.needsStyleRecalc() || shouldResolveForPseudoElement || affectedByPreviousSibling || element.hasDisplayContents();
+        bool shouldResolve = shouldResolveElement(element, parent.change) || affectedByPreviousSibling;
         if (shouldResolve) {
 #if PLATFORM(IOS)
             CheckForVisibilityChangeOnRecalcStyle checkForVisibilityChange(&element, element.renderStyle());
@@ -406,10 +465,7 @@ void TreeResolver::resolveComposedTree()
             if (elementUpdate.style)
                 m_update->addElement(element, parent.element, WTFMove(elementUpdate));
 
-            element.clearNeedsStyleRecalc();
-        } else {
-            style = element.renderStyle();
-            change = NoChange;
+            clearNeedsStyleResolution(element);
         }
 
         if (!style) {

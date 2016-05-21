@@ -25,6 +25,7 @@
 
 #include "ContentData.h"
 #include "CSSCustomPropertyValue.h"
+#include "CSSParser.h"
 #include "CSSPropertyNames.h"
 #include "CSSVariableDependentValue.h"
 #include "CursorList.h"
@@ -1072,6 +1073,12 @@ const String& RenderStyle::contentAltText() const
     return rareNonInheritedData->m_altText;
 }
 
+void RenderStyle::setHasAttrContent()
+{
+    setUnique();
+    SET_VAR(rareNonInheritedData, m_hasAttrContent, true);
+}
+
 // FIXME: use affectedByTransformOrigin().
 static inline bool requireTransformOrigin(const Vector<RefPtr<TransformOperation>>& transformOperations, RenderStyle::ApplyTransformOrigin applyOrigin)
 {
@@ -2077,13 +2084,7 @@ float RenderStyle::outlineOffset() const
 
 bool RenderStyle::shouldPlaceBlockDirectionScrollbarOnLeft() const
 {
-#if PLATFORM(MAC)
-    return ScrollableArea::systemLanguageIsRTL();
-#elif USE(RTL_SCROLLBAR)
     return !isLeftToRightDirection() && isHorizontalWritingMode();
-#else
-    return false;
-#endif
 }
 
 } // namespace WebCore

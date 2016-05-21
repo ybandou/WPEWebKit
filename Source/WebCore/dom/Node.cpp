@@ -42,6 +42,7 @@
 #include "EventDispatcher.h"
 #include "EventHandler.h"
 #include "FrameView.h"
+#include "HTMLBodyElement.h"
 #include "HTMLCollection.h"
 #include "HTMLElement.h"
 #include "HTMLImageElement.h"
@@ -398,56 +399,40 @@ Element* Node::nextElementSibling() const
     return ElementTraversal::nextSibling(*this);
 }
 
-bool Node::insertBefore(PassRefPtr<Node> newChild, Node* refChild, ExceptionCode& ec)
+bool Node::insertBefore(Node& newChild, Node* refChild, ExceptionCode& ec)
 {
-    if (!newChild) {
-        ec = TypeError;
-        return false;
-    }
     if (!is<ContainerNode>(*this)) {
         ec = HIERARCHY_REQUEST_ERR;
         return false;
     }
-    return downcast<ContainerNode>(*this).insertBefore(*newChild, refChild, ec);
+    return downcast<ContainerNode>(*this).insertBefore(newChild, refChild, ec);
 }
 
-bool Node::replaceChild(PassRefPtr<Node> newChild, Node* oldChild, ExceptionCode& ec)
+bool Node::replaceChild(Node& newChild, Node& oldChild, ExceptionCode& ec)
 {
-    if (!newChild || !oldChild) {
-        ec = TypeError;
-        return false;
-    }
     if (!is<ContainerNode>(*this)) {
         ec = HIERARCHY_REQUEST_ERR;
         return false;
     }
-    return downcast<ContainerNode>(*this).replaceChild(*newChild, *oldChild, ec);
+    return downcast<ContainerNode>(*this).replaceChild(newChild, oldChild, ec);
 }
 
-bool Node::removeChild(Node* oldChild, ExceptionCode& ec)
+bool Node::removeChild(Node& oldChild, ExceptionCode& ec)
 {
-    if (!oldChild) {
-        ec = TypeError;
-        return false;
-    }
     if (!is<ContainerNode>(*this)) {
         ec = NOT_FOUND_ERR;
         return false;
     }
-    return downcast<ContainerNode>(*this).removeChild(*oldChild, ec);
+    return downcast<ContainerNode>(*this).removeChild(oldChild, ec);
 }
 
-bool Node::appendChild(PassRefPtr<Node> newChild, ExceptionCode& ec)
+bool Node::appendChild(Node& newChild, ExceptionCode& ec)
 {
-    if (!newChild) {
-        ec = TypeError;
-        return false;
-    }
     if (!is<ContainerNode>(*this)) {
         ec = HIERARCHY_REQUEST_ERR;
         return false;
     }
-    return downcast<ContainerNode>(*this).appendChild(*newChild, ec);
+    return downcast<ContainerNode>(*this).appendChild(newChild, ec);
 }
 
 static HashSet<RefPtr<Node>> nodeSetPreTransformedFromNodeOrStringVector(const Vector<NodeOrString>& nodeOrStringVector)
@@ -502,7 +487,7 @@ void Node::before(Vector<NodeOrString>&& nodeOrStringVector, ExceptionCode& ec)
     else
         viablePreviousSibling = parent->firstChild();
 
-    parent->insertBefore(node.releaseNonNull(), viablePreviousSibling.get(), ec);
+    parent->insertBefore(*node, viablePreviousSibling.get(), ec);
 }
 
 void Node::after(Vector<NodeOrString>&& nodeOrStringVector, ExceptionCode& ec)
@@ -518,7 +503,7 @@ void Node::after(Vector<NodeOrString>&& nodeOrStringVector, ExceptionCode& ec)
     if (ec || !node)
         return;
 
-    parent->insertBefore(node.releaseNonNull(), viableNextSibling.get(), ec);
+    parent->insertBefore(*node, viableNextSibling.get(), ec);
 }
 
 void Node::replaceWith(Vector<NodeOrString>&& nodeOrStringVector, ExceptionCode& ec)
@@ -536,11 +521,11 @@ void Node::replaceWith(Vector<NodeOrString>&& nodeOrStringVector, ExceptionCode&
 
     if (parentNode() == parent) {
         if (node)
-            parent->replaceChild(node.releaseNonNull(), *this, ec);
+            parent->replaceChild(*node, *this, ec);
         else
             parent->removeChild(*this);
     } else if (node)
-        parent->insertBefore(node.releaseNonNull(), viableNextSibling.get(), ec);
+        parent->insertBefore(*node, viableNextSibling.get(), ec);
 }
 
 void Node::remove(ExceptionCode& ec)
@@ -659,7 +644,7 @@ static Node::Editability computeEditabilityFromComputedStyle(const Node& startNo
     // would fire in the middle of Document::setFocusedElement().
 
     for (const Node* node = &startNode; node; node = node->parentNode()) {
-        RenderStyle* style = node->isDocumentNode() ? node->renderStyle() : const_cast<Node*>(node)->computedStyle();
+        auto* style = node->isDocumentNode() ? node->renderStyle() : const_cast<Node*>(node)->computedStyle();
         if (!style)
             continue;
         if (style->display() == NONE)
@@ -952,6 +937,65 @@ bool Node::containsIncludingHostElements(const Node* node) const
     return false;
 }
 
+static inline Node* ancestor(Node* node, unsigned depth)
+{
+    for (unsigned i = 0; i < depth; ++i)
+        node = node->parentNode();
+    return node;
+}
+
+Node* commonAncestor(Node& thisNode, Node& otherNode)
+{
+    unsigned thisDepth = 0;
+    for (auto node = &thisNode; node; node = node->parentNode()) {
+        if (node == &otherNode)
+            return node;
+        thisDepth++;
+    }
+    unsigned otherDepth = 0;
+    for (auto node = &otherNode; node; node = node->parentNode()) {
+        if (node == &thisNode)
+            return &thisNode;
+        otherDepth++;
+    }
+
+    Node* thisAncestor = &thisNode;
+    Node* otherAncestor = &otherNode;
+    if (thisDepth > otherDepth)
+        thisAncestor = ancestor(thisAncestor, thisDepth - otherDepth);
+    else if (otherDepth > thisDepth)
+        otherAncestor = ancestor(otherAncestor, otherDepth - thisDepth);
+
+    for (; thisAncestor; thisAncestor = thisAncestor->parentNode()) {
+        if (thisAncestor == otherAncestor)
+            return thisAncestor;
+        otherAncestor = otherAncestor->parentNode();
+    }
+    ASSERT(!otherAncestor);
+    return nullptr;
+}
+
+Node* commonAncestorCrossingShadowBoundary(Node& node, Node& other)
+{
+    if (&node == &other)
+        return &node;
+
+    Element* shadowHost = node.shadowHost();
+    // FIXME: This test might be wrong for user-authored shadow trees.
+    if (shadowHost && shadowHost == other.shadowHost())
+        return shadowHost;
+
+    TreeScope* scope = commonTreeScope(&node, &other);
+    if (!scope)
+        return nullptr;
+
+    Node* parentNode = scope->ancestorInThisScope(&node);
+    ASSERT(parentNode);
+    Node* parentOther = scope->ancestorInThisScope(&other);
+    ASSERT(parentOther);
+    return commonAncestor(*parentNode, *parentOther);
+}
+
 Node* Node::pseudoAwarePreviousSibling() const
 {
     Element* parentOrHost = is<PseudoElement>(*this) ? downcast<PseudoElement>(*this).hostElement() : parentElement();
@@ -1006,7 +1050,7 @@ Node* Node::pseudoAwareLastChild() const
     return lastChild();
 }
 
-RenderStyle* Node::computedStyle(PseudoId pseudoElementSpecifier)
+const RenderStyle* Node::computedStyle(PseudoId pseudoElementSpecifier)
 {
     auto* composedParent = composedTreeAncestors(*this).first();
     if (!composedParent)
@@ -1058,20 +1102,63 @@ ShadowRoot* Node::containingShadowRoot() const
     return is<ShadowRoot>(root) ? downcast<ShadowRoot>(&root) : nullptr;
 }
 
-#if ENABLE(SHADOW_DOM)
+// http://w3c.github.io/webcomponents/spec/shadow/#dfn-unclosed-node
+bool Node::isUnclosedNode(const Node& otherNode) const
+{
+    // Use Vector instead of HashSet since we expect the number of ancestor tree scopes to be small.
+    Vector<TreeScope*, 8> ancestorScopesOfThisNode;
+
+    for (auto* scope = &treeScope(); scope; scope = scope->parentTreeScope())
+        ancestorScopesOfThisNode.append(scope);
+
+    for (auto* treeScopeThatCanAccessOtherNode = &otherNode.treeScope(); treeScopeThatCanAccessOtherNode; treeScopeThatCanAccessOtherNode = treeScopeThatCanAccessOtherNode->parentTreeScope()) {
+        for (auto* scope : ancestorScopesOfThisNode) {
+            if (scope == treeScopeThatCanAccessOtherNode)
+                return true; // treeScopeThatCanAccessOtherNode is a shadow-including inclusive ancestor of this node.
+        }
+        auto& root = treeScopeThatCanAccessOtherNode->rootNode();
+        if (is<ShadowRoot>(root) && downcast<ShadowRoot>(root).type() != ShadowRoot::Type::Open)
+            break;
+    }
+
+    return false;
+}
+
+#if ENABLE(SHADOW_DOM) || ENABLE(DETAILS_ELEMENT)
+static inline ShadowRoot* parentShadowRoot(const Node& node)
+{
+    if (auto* parent = node.parentElement())
+        return parent->shadowRoot();
+    return nullptr;
+}
+
 HTMLSlotElement* Node::assignedSlot() const
 {
-    auto* parent = parentElement();
-    if (!parent)
-        return nullptr;
+    if (auto* shadowRoot = parentShadowRoot(*this))
+        return shadowRoot->findAssignedSlot(*this);
+    return nullptr;
+}
 
-    auto* shadowRoot = parent->shadowRoot();
-    if (!shadowRoot || shadowRoot->type() != ShadowRoot::Type::Open)
-        return nullptr;
-
-    return shadowRoot->findAssignedSlot(*this);
+HTMLSlotElement* Node::assignedSlotForBindings() const
+{
+    auto* shadowRoot = parentShadowRoot(*this);
+    if (shadowRoot && shadowRoot->type() == ShadowRoot::Type::Open)
+        return shadowRoot->findAssignedSlot(*this);
+    return nullptr;
 }
 #endif
+
+ContainerNode* Node::parentInComposedTree() const
+{
+    ASSERT(isMainThreadOrGCThread());
+#if ENABLE(SHADOW_DOM) || ENABLE(DETAILS_ELEMENT)
+    if (auto* slot = assignedSlot())
+        return slot;
+#endif
+    if (is<ShadowRoot>(*this))
+        return downcast<ShadowRoot>(*this).host();
+    return parentNode();
+}
 
 bool Node::isInUserAgentShadowTree() const
 {
@@ -1255,8 +1342,8 @@ bool Node::isDefaultNamespace(const AtomicString& namespaceURIMaybeEmpty) const
                 }
             }
 
-            if (Element* ancestor = ancestorElement())
-                return ancestor->isDefaultNamespace(namespaceURI);
+            if (auto* parent = parentElement())
+                return parent->isDefaultNamespace(namespaceURI);
 
             return false;
         }
@@ -1274,8 +1361,8 @@ bool Node::isDefaultNamespace(const AtomicString& namespaceURIMaybeEmpty) const
             return false;
         }
         default:
-            if (Element* ancestor = ancestorElement())
-                return ancestor->isDefaultNamespace(namespaceURI);
+            if (auto* parent = parentElement())
+                return parent->isDefaultNamespace(namespaceURI);
             return false;
     }
 }
@@ -1305,8 +1392,8 @@ String Node::lookupPrefix(const AtomicString &namespaceURI) const
             return String();
         }
         default:
-            if (Element* ancestor = ancestorElement())
-                return ancestor->lookupPrefix(namespaceURI);
+            if (auto* parent = parentElement())
+                return parent->lookupPrefix(namespaceURI);
             return String();
     }
 }
@@ -1343,8 +1430,8 @@ String Node::lookupNamespaceURI(const String &prefix) const
                     }
                 }
             }
-            if (Element* ancestor = ancestorElement())
-                return ancestor->lookupNamespaceURI(prefix);
+            if (auto* parent = parentElement())
+                return parent->lookupNamespaceURI(prefix);
             return String();
         }
         case DOCUMENT_NODE:
@@ -1363,8 +1450,8 @@ String Node::lookupNamespaceURI(const String &prefix) const
                 return String();
         }
         default:
-            if (Element* ancestor = ancestorElement())
-                return ancestor->lookupNamespaceURI(prefix);
+            if (auto* parent = parentElement())
+                return parent->lookupNamespaceURI(prefix);
             return String();
     }
 }
@@ -1387,8 +1474,8 @@ String Node::lookupNamespacePrefix(const AtomicString &_namespaceURI, const Elem
         }
     }
     
-    if (Element* ancestor = ancestorElement())
-        return ancestor->lookupNamespacePrefix(_namespaceURI, originalElement);
+    if (auto* parent = parentElement())
+        return parent->lookupNamespacePrefix(_namespaceURI, originalElement);
     return String();
 }
 
@@ -1463,15 +1550,6 @@ void Node::setTextContent(const String& text, ExceptionCode& ec)
             return;
     }
     ASSERT_NOT_REACHED();
-}
-
-Element* Node::ancestorElement() const
-{
-    for (ContainerNode* ancestor = parentNode(); ancestor; ancestor = ancestor->parentNode()) {
-        if (is<Element>(*ancestor))
-            return downcast<Element>(ancestor);
-    }
-    return nullptr;
 }
 
 bool Node::offsetInCharacters() const
@@ -1610,8 +1688,7 @@ FloatPoint Node::convertToPage(const FloatPoint& p) const
         return renderer()->localToAbsolute(p, UseTransforms);
     
     // Otherwise go up the tree looking for a renderer
-    Element *parent = ancestorElement();
-    if (parent)
+    if (auto* parent = parentElement())
         return parent->convertToPage(p);
 
     // No parent - no conversion needed
@@ -1625,8 +1702,7 @@ FloatPoint Node::convertFromPage(const FloatPoint& p) const
         return renderer()->absoluteToLocal(p, UseTransforms);
 
     // Otherwise go up the tree looking for a renderer
-    Element *parent = ancestorElement();
-    if (parent)
+    if (auto* parent = parentElement())
         return parent->convertFromPage(p);
 
     // No parent - no conversion needed
@@ -2179,7 +2255,7 @@ bool Node::dispatchBeforeLoadEvent(const String& sourceURL)
     if (!document().hasListenerType(Document::BEFORELOAD_LISTENER))
         return true;
 
-    Ref<Node> protect(*this);
+    Ref<Node> protectedThis(*this);
     Ref<BeforeLoadEvent> beforeLoadEvent = BeforeLoadEvent::create(sourceURL);
     dispatchEvent(beforeLoadEvent);
     return !beforeLoadEvent->defaultPrevented();

@@ -320,6 +320,10 @@ public:
 
     void clearTestRunnerCallbacks();
 
+    void accummulateLogsForChannel(JSStringRef channel);
+
+    unsigned imageCountInGeneralPasteboard() const;
+
 private:
     TestRunner();
 

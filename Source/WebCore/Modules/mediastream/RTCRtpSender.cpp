@@ -33,9 +33,7 @@
 
 #if ENABLE(WEB_RTC)
 
-#include "DOMError.h"
 #include "ExceptionCode.h"
-#include "JSDOMError.h"
 
 namespace WebCore {
 
@@ -73,7 +71,7 @@ void RTCRtpSender::setTrack(RefPtr<MediaStreamTrack>&& track)
 void RTCRtpSender::replaceTrack(Ref<MediaStreamTrack>&& withTrack, PeerConnection::VoidPromise&& promise, ExceptionCode& ec)
 {
     if (isStopped()) {
-        promise.reject(DOMError::create("InvalidStateError: Sender is stopped"));
+        promise.reject(INVALID_STATE_ERR);
         return;
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011, 2012 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2016 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,7 +43,8 @@
 #import "FrameLoader.h"
 #import "HTMLAttachmentElement.h"
 #import "HTMLElement.h"
-#import "HTMLFrameElementBase.h"
+#import "HTMLFrameElement.h"
+#import "HTMLIFrameElement.h"
 #import "HTMLImageElement.h"
 #import "HTMLInputElement.h"
 #import "HTMLMetaElement.h"
@@ -1034,23 +1035,13 @@ PlatformColor *HTMLConverter::_colorForElement(Element& element, CSSPropertyID p
     return platformResult;
 }
 
-#if !PLATFORM(IOS)
 static PlatformFont *_font(Element& element)
 {
-    auto renderer = element.renderer();
-    if (!renderer)
-        return nil;
-    return renderer->style().fontCascade().primaryFont().getNSFont();
-}
-#else
-static PlatformFont *_font(Element& element)
-{
-    auto renderer = element.renderer();
+    auto* renderer = element.renderer();
     if (!renderer)
         return nil;
     return (PlatformFont *)renderer->style().fontCascade().primaryFont().getCTFont();
 }
-#endif
 
 #define UIFloatIsZero(number) (fabs(number - 0) < FLT_EPSILON)
 
@@ -1911,7 +1902,7 @@ BOOL HTMLConverter::_processElement(Element& element, NSInteger depth)
         retval = NO;
 #endif
     } else if (element.hasTagName(imgTag)) {
-        NSString *urlString = element.getAttribute(srcAttr);
+        NSString *urlString = element.imageSourceURL();
         if (urlString && [urlString length] > 0) {
             NSURL *url = element.document().completeURL(stripLeadingAndTrailingHTMLSpaces(urlString));
             if (!url)
@@ -2535,8 +2526,8 @@ NSAttributedString *editingAttributedStringFromRange(Range& range, IncludeImages
             [attrs.get() setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName];
         if (style.textDecorationsInEffect() & TextDecorationLineThrough)
             [attrs.get() setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSStrikethroughStyleAttributeName];
-        if (NSFont *font = style.fontCascade().primaryFont().getNSFont())
-            [attrs.get() setObject:font forKey:NSFontAttributeName];
+        if (auto font = style.fontCascade().primaryFont().getCTFont())
+            [attrs.get() setObject:toNSFont(font) forKey:NSFontAttributeName];
         else
             [attrs.get() setObject:[fontManager convertFont:WebDefaultFont() toSize:style.fontCascade().primaryFont().platformData().size()] forKey:NSFontAttributeName];
         if (style.visitedDependentColor(CSSPropertyColor).alpha())

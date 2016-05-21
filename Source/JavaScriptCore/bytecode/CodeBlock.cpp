@@ -63,6 +63,7 @@
 #include "TypeLocationCache.h"
 #include "TypeProfiler.h"
 #include "UnlinkedInstructionStream.h"
+#include "VMInlines.h"
 #include <wtf/BagToHashMap.h>
 #include <wtf/CommaPrinter.h>
 #include <wtf/StringExtras.h>
@@ -1066,6 +1067,10 @@ void CodeBlock::dumpBytecode(
             printUnaryOp(out, exec, location, it, "typeof");
             break;
         }
+        case op_is_empty: {
+            printUnaryOp(out, exec, location, it, "is_empty");
+            break;
+        }
         case op_is_undefined: {
             printUnaryOp(out, exec, location, it, "is_undefined");
             break;
@@ -1113,9 +1118,45 @@ void CodeBlock::dumpBytecode(
             dumpValueProfiling(out, it, hasPrintedProfiling);
             break;
         }
+        case op_get_by_id_with_this: {
+            printLocationAndOp(out, exec, location, it, "get_by_id_with_this");
+            int r0 = (++it)->u.operand;
+            int r1 = (++it)->u.operand;
+            int r2 = (++it)->u.operand;
+            int id0 = (++it)->u.operand;
+            out.printf("%s, %s, %s, %s", registerName(r0).data(), registerName(r1).data(), registerName(r2).data(), idName(id0, identifier(id0)).data());
+            break;
+        }
+        case op_get_by_val_with_this: {
+            int r0 = (++it)->u.operand;
+            int r1 = (++it)->u.operand;
+            int r2 = (++it)->u.operand;
+            int r3 = (++it)->u.operand;
+            printLocationAndOp(out, exec, location, it, "get_by_val_with_this");
+            out.printf("%s, %s, %s, %s", registerName(r0).data(), registerName(r1).data(), registerName(r2).data(), registerName(r3).data());
+            break;
+        }
         case op_put_by_id: {
             printPutByIdOp(out, exec, location, it, "put_by_id");
             printPutByIdCacheStatus(out, location, stubInfos);
+            break;
+        }
+        case op_put_by_id_with_this: {
+            int r0 = (++it)->u.operand;
+            int r1 = (++it)->u.operand;
+            int id0 = (++it)->u.operand;
+            int r2 = (++it)->u.operand;
+            printLocationAndOp(out, exec, location, it, "put_by_id_with_this");
+            out.printf("%s, %s, %s, %s", registerName(r0).data(), registerName(r1).data(), idName(id0, identifier(id0)).data(), registerName(r2).data());
+            break;
+        }
+        case op_put_by_val_with_this: {
+            int r0 = (++it)->u.operand;
+            int r1 = (++it)->u.operand;
+            int r2 = (++it)->u.operand;
+            int r3 = (++it)->u.operand;
+            printLocationAndOp(out, exec, location, it, "put_by_val_with_this");
+            out.printf("%s, %s, %s, %s", registerName(r0).data(), registerName(r1).data(), registerName(r2).data(), registerName(r3).data());
             break;
         }
         case op_put_getter_by_id: {
@@ -1319,11 +1360,16 @@ void CodeBlock::dumpBytecode(
             break;
         }
         case op_log_shadow_chicken_prologue: {
+            int r0 = (++it)->u.operand;
             printLocationAndOp(out, exec, location, it, "log_shadow_chicken_prologue");
+            out.printf("%s", registerName(r0).data());
             break;
         }
         case op_log_shadow_chicken_tail: {
+            int r0 = (++it)->u.operand;
+            int r1 = (++it)->u.operand;
             printLocationAndOp(out, exec, location, it, "log_shadow_chicken_tail");
+            out.printf("%s, %s", registerName(r0).data(), registerName(r1).data());
             break;
         }
         case op_switch_imm: {
@@ -1611,16 +1657,6 @@ void CodeBlock::dumpBytecode(
             int line = (++it)->u.operand;
             printLocationAndOp(out, exec, location, it, "assert");
             out.printf("%s, %d", registerName(condition).data(), line);
-            break;
-        }
-        case op_profile_will_call: {
-            int function = (++it)->u.operand;
-            printLocationOpAndRegisterOperand(out, exec, location, it, "profile_will_call", function);
-            break;
-        }
-        case op_profile_did_call: {
-            int function = (++it)->u.operand;
-            printLocationOpAndRegisterOperand(out, exec, location, it, "profile_did_call", function);
             break;
         }
         case op_end: {
@@ -2612,32 +2648,16 @@ void CodeBlock::propagateTransitions(SlotVisitor& visitor)
 
 #if ENABLE(JIT)
     if (JITCode::isJIT(jitType())) {
-        for (Bag<StructureStubInfo>::iterator iter = m_stubInfos.begin(); !!iter; ++iter) {
-            StructureStubInfo& stubInfo = **iter;
-            if (stubInfo.cacheType != CacheType::Stub)
-                continue;
-            PolymorphicAccess* list = stubInfo.u.stub;
-            JSCell* origin = stubInfo.codeOrigin.codeOriginOwner();
-            if (origin && !Heap::isMarked(origin)) {
-                allAreMarkedSoFar = false;
-                continue;
-            }
-            for (unsigned j = list->size(); j--;) {
-                const AccessCase& access = list->at(j);
-                if (access.type() != AccessCase::Transition)
-                    continue;
-                if (Heap::isMarked(access.structure()))
-                    visitor.appendUnbarrieredReadOnlyPointer(access.newStructure());
-                else
-                    allAreMarkedSoFar = false;
-            }
-        }
+        for (Bag<StructureStubInfo>::iterator iter = m_stubInfos.begin(); !!iter; ++iter)
+            allAreMarkedSoFar &= (*iter)->propagateTransitions(visitor);
     }
 #endif // ENABLE(JIT)
     
 #if ENABLE(DFG_JIT)
     if (JITCode::isOptimizingJIT(jitType())) {
         DFG::CommonData* dfgCommon = m_jitCode->dfgCommon();
+        for (auto& weakReference : dfgCommon->weakStructureReferences)
+            allAreMarkedSoFar &= weakReference->markIfCheap(visitor);
         
         for (unsigned i = 0; i < dfgCommon->transitions.size(); ++i) {
             if (shouldMarkTransition(dfgCommon->transitions[i])) {
@@ -3286,6 +3306,8 @@ void CodeBlock::jettison(Profiler::JettisonReason reason, ReoptimizationMode mod
     UNUSED_PARAM(mode);
     UNUSED_PARAM(detail);
 #endif
+    
+    CODEBLOCK_LOG_EVENT(this, "jettison", ("due to ", reason, ", counting = ", mode == CountReoptimization, ", detail = ", pointerDump(detail)));
 
     RELEASE_ASSERT(reason != Profiler::NotJettisoned);
     
@@ -4359,5 +4381,29 @@ Optional<CodeOrigin> CodeBlock::findPC(void* pc)
     return Nullopt;
 }
 #endif // ENABLE(JIT)
+
+Optional<unsigned> CodeBlock::bytecodeOffsetFromCallSiteIndex(CallSiteIndex callSiteIndex)
+{
+    Optional<unsigned> bytecodeOffset;
+    JITCode::JITType jitType = this->jitType();
+    if (jitType == JITCode::InterpreterThunk || jitType == JITCode::BaselineJIT) {
+#if USE(JSVALUE64)
+        bytecodeOffset = callSiteIndex.bits();
+#else
+        Instruction* instruction = bitwise_cast<Instruction*>(callSiteIndex.bits());
+        bytecodeOffset = instruction - instructions().begin();
+#endif
+    } else if (jitType == JITCode::DFGJIT || jitType == JITCode::FTLJIT) {
+#if ENABLE(DFG_JIT)
+        RELEASE_ASSERT(canGetCodeOrigin(callSiteIndex));
+        CodeOrigin origin = codeOrigin(callSiteIndex);
+        bytecodeOffset = origin.bytecodeIndex;
+#else
+        RELEASE_ASSERT_NOT_REACHED();
+#endif
+    }
+
+    return bytecodeOffset;
+}
 
 } // namespace JSC

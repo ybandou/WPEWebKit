@@ -33,7 +33,6 @@
 #import "AudioSourceProviderAVFObjC.h"
 #import "AudioTrackPrivateAVFObjC.h"
 #import "AuthenticationChallenge.h"
-#import "BlockExceptions.h"
 #import "CDMSessionAVFoundationObjC.h"
 #import "Cookie.h"
 #import "ExceptionCodePlaceholder.h"
@@ -78,6 +77,7 @@
 #import <runtime/Uint16Array.h>
 #import <runtime/Uint32Array.h>
 #import <runtime/Uint8Array.h>
+#import <wtf/BlockObjCExceptions.h>
 #import <wtf/CurrentTime.h>
 #import <wtf/ListHashSet.h>
 #import <wtf/NeverDestroyed.h>
@@ -1036,8 +1036,11 @@ void MediaPlayerPrivateAVFoundationObjC::createAVPlayer()
 #endif
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET) && !PLATFORM(IOS)
-    if (m_shouldPlayToPlaybackTarget)
+    if (m_shouldPlayToPlaybackTarget) {
+        // Clear m_shouldPlayToPlaybackTarget so doesn't return without doing anything.
+        m_shouldPlayToPlaybackTarget = false;
         setShouldPlayToPlaybackTarget(true);
+    }
 #endif
 
     if (player()->client().mediaPlayerIsVideo())

@@ -34,6 +34,7 @@
 #include "ErrorHandlingScope.h"
 #include "Exception.h"
 #include "ExceptionFuzz.h"
+#include "FunctionWhitelist.h"
 #include "GetterSetter.h"
 #include "HostCallReturnValue.h"
 #include "Interpreter.h"
@@ -49,13 +50,13 @@
 #include "JSWithScope.h"
 #include "LLIntCommon.h"
 #include "LLIntExceptions.h"
-#include "LegacyProfiler.h"
 #include "LowLevelInterpreter.h"
 #include "ObjectConstructor.h"
 #include "ProtoCallFrame.h"
 #include "ShadowChicken.h"
 #include "StructureRareDataInlines.h"
 #include "VMInlines.h"
+#include <wtf/NeverDestroyed.h>
 #include <wtf/StringPrintStream.h>
 
 namespace JSC { namespace LLInt {
@@ -287,8 +288,23 @@ LLINT_SLOW_PATH_DECL(special_trace)
 enum EntryKind { Prologue, ArityCheck };
 
 #if ENABLE(JIT)
-inline bool shouldJIT(ExecState* exec, CodeBlock*)
+static FunctionWhitelist& ensureGlobalJITWhitelist()
 {
+    static LazyNeverDestroyed<FunctionWhitelist> baselineWhitelist;
+    static std::once_flag initializeWhitelistFlag;
+    std::call_once(initializeWhitelistFlag, [] {
+        const char* functionWhitelistFile = Options::jitWhitelist();
+        baselineWhitelist.construct(functionWhitelistFile);
+    });
+    return baselineWhitelist;
+}
+
+inline bool shouldJIT(ExecState* exec, CodeBlock* codeBlock)
+{
+    if (!Options::bytecodeRangeToJITCompile().isInRange(codeBlock->instructionCount())
+        || !ensureGlobalJITWhitelist().contains(codeBlock))
+        return false;
+
     // You can modify this to turn off JITting without rebuilding the world.
     return exec->vm().canUseJIT();
 }
@@ -302,6 +318,7 @@ inline bool jitCompileAndSetHeuristics(CodeBlock* codeBlock, ExecState* exec)
     codeBlock->updateAllValueProfilePredictions();
 
     if (!codeBlock->checkIfJITThresholdReached()) {
+        CODEBLOCK_LOG_EVENT(codeBlock, "delayJITCompile", ("threshold not reached, counter = ", codeBlock->llintExecuteCounter()));
         if (Options::verboseOSR())
             dataLogF("    JIT threshold should be lifted.\n");
         return false;
@@ -318,6 +335,7 @@ inline bool jitCompileAndSetHeuristics(CodeBlock* codeBlock, ExecState* exec)
         CompilationResult result = JIT::compile(&vm, codeBlock, JITCompilationCanFail);
         switch (result) {
         case CompilationFailed:
+            CODEBLOCK_LOG_EVENT(codeBlock, "delayJITCompile", ("compilation failed"));
             if (Options::verboseOSR())
                 dataLogF("    JIT compilation failed.\n");
             codeBlock->dontJITAnytimeSoon();
@@ -354,6 +372,8 @@ static SlowPathReturnType entryOSR(ExecState* exec, Instruction*, CodeBlock* cod
     }
     if (!jitCompileAndSetHeuristics(codeBlock, exec))
         LLINT_RETURN_TWO(0, 0);
+    
+    CODEBLOCK_LOG_EVENT(codeBlock, "OSR entry", ("in prologue"));
     
     if (kind == Prologue)
         LLINT_RETURN_TWO(codeBlock->jitCode()->executableAddress(), 0);
@@ -412,6 +432,8 @@ LLINT_SLOW_PATH_DECL(loop_osr)
     if (!jitCompileAndSetHeuristics(codeBlock, exec))
         LLINT_RETURN_TWO(0, 0);
     
+    CODEBLOCK_LOG_EVENT(codeBlock, "osrEntry", ("at bc#", pc - codeBlock->instructions().begin()));
+
     ASSERT(codeBlock->jitType() == JITCode::BaselineJIT);
     
     Vector<BytecodeAndMachineOffset> map;
@@ -1403,22 +1425,6 @@ LLINT_SLOW_PATH_DECL(slow_path_debug)
     LLINT_END();
 }
 
-LLINT_SLOW_PATH_DECL(slow_path_profile_will_call)
-{
-    LLINT_BEGIN();
-    if (LegacyProfiler* profiler = vm.enabledProfiler())
-        profiler->willExecute(exec, LLINT_OP(1).jsValue());
-    LLINT_END();
-}
-
-LLINT_SLOW_PATH_DECL(slow_path_profile_did_call)
-{
-    LLINT_BEGIN();
-    if (LegacyProfiler* profiler = vm.enabledProfiler())
-        profiler->didExecute(exec, LLINT_OP(1).jsValue());
-    LLINT_END();
-}
-
 LLINT_SLOW_PATH_DECL(slow_path_handle_exception)
 {
     LLINT_BEGIN_NO_SET_PC();
@@ -1507,9 +1513,6 @@ LLINT_SLOW_PATH_DECL(slow_path_check_if_exception_is_uncatchable_and_notify_prof
     LLINT_BEGIN();
     RELEASE_ASSERT(!!vm.exception());
 
-    if (LegacyProfiler* profiler = vm.enabledProfiler())
-        profiler->exceptionUnwind(exec);
-
     if (isTerminatedExecutionException(vm.exception()))
         LLINT_RETURN_TWO(pc, bitwise_cast<void*>(static_cast<uintptr_t>(1)));
     LLINT_RETURN_TWO(pc, 0);
@@ -1519,8 +1522,8 @@ LLINT_SLOW_PATH_DECL(slow_path_log_shadow_chicken_prologue)
 {
     LLINT_BEGIN();
     
-    vm.shadowChicken().log(
-        vm, exec, ShadowChicken::Packet::prologue(exec->callee(), exec, exec->callerFrame()));
+    JSScope* scope = exec->uncheckedR(pc[1].u.operand).Register::scope();
+    vm.shadowChicken().log(vm, exec, ShadowChicken::Packet::prologue(exec->callee(), exec, exec->callerFrame(), scope));
     
     LLINT_END();
 }
@@ -1528,8 +1531,16 @@ LLINT_SLOW_PATH_DECL(slow_path_log_shadow_chicken_prologue)
 LLINT_SLOW_PATH_DECL(slow_path_log_shadow_chicken_tail)
 {
     LLINT_BEGIN();
+
+    JSValue thisValue = LLINT_OP(1).jsValue();
+    JSScope* scope = exec->uncheckedR(pc[2].u.operand).Register::scope();
     
-    vm.shadowChicken().log(vm, exec, ShadowChicken::Packet::tail(exec));
+#if USE(JSVALUE64)
+    CallSiteIndex callSiteIndex(exec->codeBlock()->bytecodeOffset(pc));
+#else
+    CallSiteIndex callSiteIndex(pc);
+#endif
+    vm.shadowChicken().log(vm, exec, ShadowChicken::Packet::tail(exec, thisValue, scope, exec->codeBlock(), callSiteIndex));
     
     LLINT_END();
 }

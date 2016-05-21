@@ -88,14 +88,7 @@ inline JSObject* constructEmptyObject(ExecState* exec, JSObject* prototype)
 
 inline JSObject* constructEmptyObject(ExecState* exec)
 {
-    return constructEmptyObject(exec, exec->lexicalGlobalObject()->objectPrototype());
-}
-
-inline JSObject* constructObject(ExecState* exec, JSGlobalObject* globalObject, JSValue arg)
-{
-    if (arg.isUndefinedOrNull())
-        return constructEmptyObject(exec, globalObject->objectPrototype());
-    return arg.toObject(exec, globalObject);
+    return constructEmptyObject(exec, exec->lexicalGlobalObject()->objectStructureForObjectConstructor());
 }
 
 // Section 6.2.4.4 of the ES6 specification.

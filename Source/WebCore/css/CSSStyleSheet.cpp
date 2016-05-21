@@ -33,6 +33,7 @@
 #include "Document.h"
 #include "ExceptionCode.h"
 #include "ExtensionStyleSheets.h"
+#include "HTMLLinkElement.h"
 #include "HTMLNames.h"
 #include "HTMLStyleElement.h"
 #include "MediaList.h"
@@ -340,7 +341,7 @@ void CSSStyleSheet::deleteRule(unsigned index, ExceptionCode& ec)
     }
 }
 
-int CSSStyleSheet::addRule(const String& selector, const String& style, int index, ExceptionCode& ec)
+int CSSStyleSheet::addRule(const String& selector, const String& style, Optional<unsigned> index, ExceptionCode& ec)
 {
     StringBuilder text;
     text.append(selector);
@@ -349,17 +350,11 @@ int CSSStyleSheet::addRule(const String& selector, const String& style, int inde
     if (!style.isEmpty())
         text.append(' ');
     text.append('}');
-    insertRule(text.toString(), index, ec);
+    insertRule(text.toString(), index.valueOr(length()), ec);
     
     // As per Microsoft documentation, always return -1.
     return -1;
 }
-
-int CSSStyleSheet::addRule(const String& selector, const String& style, ExceptionCode& ec)
-{
-    return addRule(selector, style, length(), ec);
-}
-
 
 RefPtr<CSSRuleList> CSSStyleSheet::cssRules()
 {

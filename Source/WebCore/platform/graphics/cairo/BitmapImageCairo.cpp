@@ -38,29 +38,18 @@
 
 namespace WebCore {
 
-BitmapImage::BitmapImage(RefPtr<cairo_surface_t>&& nativeImage, ImageObserver* observer)
-    : Image(observer)
-    , m_size(cairoSurfaceSize(nativeImage.get()))
-    , m_currentFrame(0)
-    , m_repetitionCount(cAnimationNone)
-    , m_repetitionCountStatus(Unknown)
-    , m_repetitionsComplete(0)
-    , m_decodedSize(m_size.width() * m_size.height() * 4)
-    , m_frameCount(1)
-    , m_isSolidColor(false)
-    , m_checkedForSolidColor(false)
-    , m_animationFinished(true)
-    , m_allDataReceived(true)
-    , m_haveSize(true)
-    , m_sizeAvailable(true)
-    , m_haveFrameCount(true)
-{
-    m_frames.grow(1);
-    m_frames[0].m_hasAlpha = cairo_surface_get_content(nativeImage.get()) != CAIRO_CONTENT_COLOR;
-    m_frames[0].m_image = WTFMove(nativeImage);
-    m_frames[0].m_haveMetadata = true;
+namespace NativeImage {
 
-    checkForSolidColor();
+IntSize size(const RefPtr<cairo_surface_t>& image)
+{
+    return cairoSurfaceSize(image.get());
+}
+
+bool hasAlpha(const RefPtr<cairo_surface_t>& image)
+{
+    return cairo_surface_get_content(image.get()) != CAIRO_CONTENT_COLOR;
+}
+
 }
 
 void BitmapImage::draw(GraphicsContext& context, const FloatRect& dst, const FloatRect& src, CompositeOperator op,

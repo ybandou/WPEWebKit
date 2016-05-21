@@ -150,7 +150,7 @@ namespace WebCore {
         bool hiddenFromInspector() const { return m_hiddenFromInspector; }
         void setHiddenFromInspector(bool hiddenFromInspector) { m_hiddenFromInspector = hiddenFromInspector; }
 
-        enum class Requester { Unspecified, Main, XHR };
+        enum class Requester { Unspecified, Main, XHR, Media };
         Requester requester() const { return m_requester; }
         void setRequester(Requester requester) { m_requester = requester; }
 
@@ -257,7 +257,7 @@ void ResourceRequestBase::encodeWithoutPlatformData(Encoder& encoder) const
 {
     ASSERT(!m_httpBody);
     ASSERT(!m_platformRequestUpdated);
-    encoder << m_url.string();
+    encoder << m_url;
     encoder << m_timeoutInterval;
     encoder << m_firstPartyForCookies.string();
     encoder << m_httpMethod;
@@ -272,10 +272,8 @@ void ResourceRequestBase::encodeWithoutPlatformData(Encoder& encoder) const
 template<class Decoder>
 bool ResourceRequestBase::decodeWithoutPlatformData(Decoder& decoder)
 {
-    String url;
-    if (!decoder.decode(url))
+    if (!decoder.decode(m_url))
         return false;
-    m_url = URL(ParsedURLString, url);
 
     if (!decoder.decode(m_timeoutInterval))
         return false;

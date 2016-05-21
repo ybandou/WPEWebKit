@@ -166,7 +166,7 @@ public:
     bool removeAttribute(const AtomicString& name);
     bool removeAttributeNS(const AtomicString& namespaceURI, const AtomicString& localName);
 
-    RefPtr<Attr> detachAttribute(unsigned index);
+    Ref<Attr> detachAttribute(unsigned index);
 
     RefPtr<Attr> getAttributeNode(const AtomicString& name);
     RefPtr<Attr> getAttributeNodeNS(const AtomicString& namespaceURI, const AtomicString& localName);
@@ -176,7 +176,7 @@ public:
 
     RefPtr<Attr> attrIfExists(const QualifiedName&);
     RefPtr<Attr> attrIfExists(const AtomicString& localName, bool shouldIgnoreAttributeCase);
-    RefPtr<Attr> ensureAttr(const QualifiedName&);
+    Ref<Attr> ensureAttr(const QualifiedName&);
 
     const Vector<RefPtr<Attr>>& attrNodeList();
 
@@ -249,8 +249,13 @@ public:
     WEBCORE_EXPORT ShadowRoot* shadowRoot() const;
     WEBCORE_EXPORT RefPtr<ShadowRoot> createShadowRoot(ExceptionCode&);
 
+    enum class ShadowRootMode { Open, Closed };
+    struct ShadowRootInit {
+        ShadowRootMode mode;
+    };
+
     ShadowRoot* shadowRootForBindings(JSC::ExecState&) const;
-    RefPtr<ShadowRoot> attachShadow(const Dictionary&, ExceptionCode&);
+    RefPtr<ShadowRoot> attachShadow(const ShadowRootInit&, ExceptionCode&);
 
     ShadowRoot* userAgentShadowRoot() const;
     WEBCORE_EXPORT ShadowRoot& ensureUserAgentShadowRoot();
@@ -279,7 +284,7 @@ public:
     void setTabIndex(int);
     virtual Element* focusDelegate();
 
-    RenderStyle* computedStyle(PseudoId = NOPSEUDO) override;
+    const RenderStyle* computedStyle(PseudoId = NOPSEUDO) override;
 
     bool needsStyleInvalidation() const;
 
@@ -480,7 +485,7 @@ public:
     virtual void didAttachRenderers();
     virtual void willDetachRenderers();
     virtual void didDetachRenderers();
-    virtual Optional<ElementStyle> resolveCustomStyle(RenderStyle& parentStyle, RenderStyle* shadowHostStyle);
+    virtual Optional<ElementStyle> resolveCustomStyle(const RenderStyle& parentStyle, const RenderStyle* shadowHostStyle);
 
     LayoutRect absoluteEventHandlerBounds(bool& includesFixedPositionElements) override;
 
@@ -499,7 +504,7 @@ public:
 #endif
 
     StyleResolver& styleResolver();
-    ElementStyle resolveStyle(RenderStyle* parentStyle);
+    ElementStyle resolveStyle(const RenderStyle* parentStyle);
 
     bool hasDisplayContents() const;
     void setHasDisplayContents(bool);
@@ -585,15 +590,15 @@ private:
 
     void cancelFocusAppearanceUpdate();
 
-    // cloneNode is private so that non-virtual cloneElementWithChildren and cloneElementWithoutChildren
-    // are used instead.
+    // The cloneNode function is private so that non-virtual cloneElementWith/WithoutChildren are used instead.
     Ref<Node> cloneNodeInternal(Document&, CloningOperation) override;
     virtual Ref<Element> cloneElementWithoutAttributesAndChildren(Document&);
 
+    virtual bool canHaveUserAgentShadowRoot() const;
     void removeShadowRoot();
 
-    RenderStyle* existingComputedStyle();
-    RenderStyle& resolveComputedStyle();
+    const RenderStyle* existingComputedStyle();
+    const RenderStyle& resolveComputedStyle();
 
     bool rareDataStyleAffectedByEmpty() const;
     bool rareDataChildrenAffectedByHover() const;

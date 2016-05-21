@@ -184,7 +184,6 @@ list(APPEND WebCore_SOURCES
 
     platform/text/hyphen/HyphenationLibHyphen.cpp
 
-    platform/unix/LanguageUnix.cpp
     platform/unix/LoggingUnix.cpp
 )
 

@@ -49,6 +49,7 @@
             { "name" : "op_instanceof", "length" : 4 },
             { "name" : "op_instanceof_custom", "length" : 5 },
             { "name" : "op_typeof", "length" : 3 },
+            { "name" : "op_is_empty", "length" : 3 },
             { "name" : "op_is_undefined", "length" : 3 },
             { "name" : "op_is_boolean", "length" : 3 },
             { "name" : "op_is_number", "length" : 3 },
@@ -59,11 +60,15 @@
             { "name" : "op_in", "length" : 4 },
             { "name" : "op_try_get_by_id", "length" : 4 },
             { "name" : "op_get_by_id", "length" : 9  },
+            { "name" : "op_get_by_id_with_this", "length" : 5 },
+            { "name" : "op_get_by_val_with_this", "length" : 5 },
             { "name" : "op_get_array_length", "length" : 9 },
             { "name" : "op_put_by_id", "length" : 9 },
+            { "name" : "op_put_by_id_with_this", "length" : 5 },
             { "name" : "op_del_by_id", "length" : 4 },
             { "name" : "op_get_by_val", "length" : 6 },
             { "name" : "op_put_by_val", "length" : 5 },
+            { "name" : "op_put_by_val_with_this", "length" : 5 },
             { "name" : "op_put_by_val_direct", "length" : 5 },
             { "name" : "op_del_by_val", "length" : 4 },
             { "name" : "op_put_by_index", "length" : 4 },
@@ -118,8 +123,6 @@
             { "name" : "op_throw", "length" : 2 },
             { "name" : "op_throw_static_error", "length" : 3 },
             { "name" : "op_debug", "length" : 3 },
-            { "name" : "op_profile_will_call", "length" : 2 },
-            { "name" : "op_profile_did_call", "length" : 2 },
             { "name" : "op_end", "length" : 2 },
             { "name" : "op_profile_type", "length" : 6 },
             { "name" : "op_profile_control_flow", "length" : 2 },
@@ -138,8 +141,8 @@
             { "name" : "op_save", "length" : 4 },
             { "name" : "op_resume", "length" : 3 },
             { "name" : "op_watchdog", "length" : 1 },
-            { "name" : "op_log_shadow_chicken_prologue", "length" : 1},
-            { "name" : "op_log_shadow_chicken_tail", "length" : 1}
+            { "name" : "op_log_shadow_chicken_prologue", "length" : 2},
+            { "name" : "op_log_shadow_chicken_tail", "length" : 3}
         ]
     },
     {

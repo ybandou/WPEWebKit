@@ -32,6 +32,7 @@
 #include "CSSAspectRatioValue.h"
 #include "CSSBasicShapes.h"
 #include "CSSBorderImage.h"
+#include "CSSBorderImageSliceValue.h"
 #include "CSSCustomPropertyValue.h"
 #include "CSSFontFeatureValue.h"
 #include "CSSFontValue.h"
@@ -64,6 +65,7 @@
 #include "StyleInheritedData.h"
 #include "StyleProperties.h"
 #include "StylePropertyShorthand.h"
+#include "StylePropertyShorthandFunctions.h"
 #include "StyleResolver.h"
 #include "WebKitCSSFilterValue.h"
 #include "WebKitCSSTransformValue.h"
@@ -327,18 +329,18 @@ static const CSSPropertyID computedProperties[] = {
     CSSPropertyFontVariantAlternates,
     CSSPropertyFontVariantEastAsian,
 #if ENABLE(CSS_GRID_LAYOUT)
-    CSSPropertyWebkitGridAutoColumns,
-    CSSPropertyWebkitGridAutoFlow,
-    CSSPropertyWebkitGridAutoRows,
-    CSSPropertyWebkitGridColumnEnd,
-    CSSPropertyWebkitGridColumnStart,
-    CSSPropertyWebkitGridTemplateAreas,
-    CSSPropertyWebkitGridTemplateColumns,
-    CSSPropertyWebkitGridTemplateRows,
-    CSSPropertyWebkitGridRowEnd,
-    CSSPropertyWebkitGridRowStart,
-    CSSPropertyWebkitGridColumnGap,
-    CSSPropertyWebkitGridRowGap,
+    CSSPropertyGridAutoColumns,
+    CSSPropertyGridAutoFlow,
+    CSSPropertyGridAutoRows,
+    CSSPropertyGridColumnEnd,
+    CSSPropertyGridColumnStart,
+    CSSPropertyGridTemplateAreas,
+    CSSPropertyGridTemplateColumns,
+    CSSPropertyGridTemplateRows,
+    CSSPropertyGridRowEnd,
+    CSSPropertyGridRowStart,
+    CSSPropertyGridColumnGap,
+    CSSPropertyGridRowGap,
 #endif
     CSSPropertyWebkitHyphenateCharacter,
     CSSPropertyWebkitHyphenateLimitAfter,
@@ -538,10 +540,10 @@ static Ref<CSSBorderImageSliceValue> valueForNinePieceImageSlice(const NinePiece
     }
 
     auto quad = Quad::create();
-    quad->setTop(top.release());
-    quad->setRight(right.release());
-    quad->setBottom(bottom.release());
-    quad->setLeft(left.release());
+    quad->setTop(WTFMove(top));
+    quad->setRight(WTFMove(right));
+    quad->setBottom(WTFMove(bottom));
+    quad->setLeft(WTFMove(left));
 
     return CSSBorderImageSliceValue::create(CSSValuePool::singleton().createValue(WTFMove(quad)), image.fill());
 }
@@ -591,10 +593,10 @@ static Ref<CSSPrimitiveValue> valueForNinePieceImageQuad(const LengthBox& box)
     }
 
     auto quad = Quad::create();
-    quad->setTop(top);
-    quad->setRight(right);
-    quad->setBottom(bottom);
-    quad->setLeft(left);
+    quad->setTop(WTFMove(top));
+    quad->setRight(WTFMove(right));
+    quad->setBottom(WTFMove(bottom));
+    quad->setLeft(WTFMove(left));
 
     return cssValuePool.createValue(WTFMove(quad));
 }
@@ -609,7 +611,7 @@ static Ref<CSSValue> valueForNinePieceImageRepeat(const NinePieceImage& image)
         verticalRepeat = horizontalRepeat;
     else
         verticalRepeat = cssValuePool.createIdentifierValue(valueForRepeatRule(image.verticalRule()));
-    return cssValuePool.createValue(Pair::create(horizontalRepeat.release(), verticalRepeat.release()));
+    return cssValuePool.createValue(Pair::create(WTFMove(horizontalRepeat), WTFMove(verticalRepeat)));
 }
 
 static Ref<CSSValue> valueForNinePieceImage(const NinePieceImage& image)
@@ -634,7 +636,7 @@ static Ref<CSSValue> valueForNinePieceImage(const NinePieceImage& image)
     // Create the repeat rules.
     RefPtr<CSSValue> repeat = valueForNinePieceImageRepeat(image);
 
-    return createBorderImageValue(imageValue.release(), imageSlices.release(), borderSlices.release(), outset.release(), repeat.release());
+    return createBorderImageValue(WTFMove(imageValue), WTFMove(imageSlices), WTFMove(borderSlices), WTFMove(outset), WTFMove(repeat));
 }
 
 inline static Ref<CSSPrimitiveValue> zoomAdjustedPixelValue(double value, const RenderStyle& style)
@@ -700,7 +702,7 @@ static Ref<CSSValueList> createPositionListForLayer(CSSPropertyID propertyID, co
     return positionList;
 }
 
-static RefPtr<CSSValue> positionOffsetValue(RenderStyle& style, CSSPropertyID propertyID)
+static RefPtr<CSSValue> positionOffsetValue(const RenderStyle& style, CSSPropertyID propertyID)
 {
     Length length;
     switch (propertyID) {
@@ -737,7 +739,7 @@ static RefPtr<CSSValue> positionOffsetValue(RenderStyle& style, CSSPropertyID pr
     return CSSValuePool::singleton().createIdentifierValue(CSSValueAuto);
 }
 
-RefPtr<CSSPrimitiveValue> ComputedStyleExtractor::currentColorOrValidColor(RenderStyle* style, const Color& color) const
+RefPtr<CSSPrimitiveValue> ComputedStyleExtractor::currentColorOrValidColor(const RenderStyle* style, const Color& color) const
 {
     // This function does NOT look at visited information, so that computed style doesn't expose that.
     if (!color.isValid())
@@ -1034,27 +1036,93 @@ static Ref<CSSValue> specifiedValueForGridTrackSize(const GridTrackSize& trackSi
     }
 }
 
-static void addValuesForNamedGridLinesAtIndex(const OrderedNamedGridLinesMap& orderedNamedGridLines, size_t i, CSSValueList& list)
+class OrderedNamedLinesCollector {
+    WTF_MAKE_NONCOPYABLE(OrderedNamedLinesCollector);
+public:
+    OrderedNamedLinesCollector(const RenderStyle& style, bool isRowAxis, unsigned repetitions)
+        : m_orderedNamedGridLines(isRowAxis ? style.orderedNamedGridColumnLines() : style.orderedNamedGridRowLines())
+        , m_orderedNamedAutoRepeatGridLines(isRowAxis ? style.autoRepeatOrderedNamedGridColumnLines() : style.autoRepeatOrderedNamedGridRowLines())
+        , m_insertionPoint(isRowAxis ? style.gridAutoRepeatColumnsInsertionPoint() : style.gridAutoRepeatRowsInsertionPoint())
+        , m_repetitions(repetitions)
+    {
+    }
+
+    bool isEmpty() const { return m_orderedNamedGridLines.isEmpty() && m_orderedNamedAutoRepeatGridLines.isEmpty(); }
+    void collectLineNamesForIndex(CSSGridLineNamesValue&, unsigned index) const;
+
+private:
+
+    enum NamedLinesType { NamedLines, AutoRepeatNamedLines };
+    void appendLines(CSSGridLineNamesValue&, unsigned index, NamedLinesType) const;
+
+    const OrderedNamedGridLinesMap& m_orderedNamedGridLines;
+    const OrderedNamedGridLinesMap& m_orderedNamedAutoRepeatGridLines;
+    unsigned m_insertionPoint;
+    unsigned m_repetitions;
+};
+
+void OrderedNamedLinesCollector::appendLines(CSSGridLineNamesValue& lineNamesValue, unsigned index, NamedLinesType type) const
 {
-    const Vector<String>& namedGridLines = orderedNamedGridLines.get(i);
-    if (namedGridLines.isEmpty())
+    auto iter = type == NamedLines ? m_orderedNamedGridLines.find(index) : m_orderedNamedAutoRepeatGridLines.find(index);
+    auto endIter = type == NamedLines ? m_orderedNamedGridLines.end() : m_orderedNamedAutoRepeatGridLines.end();
+    if (iter == endIter)
         return;
 
     auto& cssValuePool = CSSValuePool::singleton();
-    RefPtr<CSSGridLineNamesValue> lineNames = CSSGridLineNamesValue::create();
-    for (auto& name : namedGridLines)
-        lineNames->append(cssValuePool.createValue(name, CSSPrimitiveValue::CSS_STRING));
-    list.append(lineNames.releaseNonNull());
+    for (auto lineName : iter->value)
+        lineNamesValue.append(cssValuePool.createValue(lineName, CSSPrimitiveValue::CSS_STRING));
+}
+
+void OrderedNamedLinesCollector::collectLineNamesForIndex(CSSGridLineNamesValue& lineNamesValue, unsigned i) const
+{
+    ASSERT(!isEmpty());
+    if (m_orderedNamedAutoRepeatGridLines.isEmpty() || i < m_insertionPoint) {
+        appendLines(lineNamesValue, i, NamedLines);
+        return;
+    }
+
+    ASSERT(m_repetitions);
+    if (i > m_insertionPoint + m_repetitions) {
+        appendLines(lineNamesValue, i - (m_repetitions - 1), NamedLines);
+        return;
+    }
+
+    if (i == m_insertionPoint) {
+        appendLines(lineNamesValue, i, NamedLines);
+        appendLines(lineNamesValue, 0, AutoRepeatNamedLines);
+        return;
+    }
+
+    if (i == m_insertionPoint + m_repetitions) {
+        appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
+        appendLines(lineNamesValue, m_insertionPoint + 1, NamedLines);
+        return;
+    }
+
+    appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
+    appendLines(lineNamesValue, 0, AutoRepeatNamedLines);
+}
+
+static void addValuesForNamedGridLinesAtIndex(OrderedNamedLinesCollector& collector, unsigned i, CSSValueList& list)
+{
+    if (collector.isEmpty())
+        return;
+
+    auto lineNames = CSSGridLineNamesValue::create();
+    collector.collectLineNamesForIndex(lineNames.get(), i);
+    if (lineNames->length())
+        list.append(WTFMove(lineNames));
 }
 
 static Ref<CSSValue> valueForGridTrackList(GridTrackSizingDirection direction, RenderObject* renderer, const RenderStyle& style)
 {
-    const Vector<GridTrackSize>& trackSizes = direction == ForColumns ? style.gridColumns() : style.gridRows();
-    const OrderedNamedGridLinesMap& orderedNamedGridLines = direction == ForColumns ? style.orderedNamedGridColumnLines() : style.orderedNamedGridRowLines();
+    bool isRowAxis = direction == ForColumns;
     bool isRenderGrid = is<RenderGrid>(renderer);
+    auto& trackSizes = isRowAxis ? style.gridColumns() : style.gridRows();
+    auto& autoRepeatTrackSizes = isRowAxis ? style.gridAutoRepeatColumns() : style.gridAutoRepeatRows();
 
     // Handle the 'none' case.
-    bool trackListIsEmpty = trackSizes.isEmpty();
+    bool trackListIsEmpty = trackSizes.isEmpty() && autoRepeatTrackSizes.isEmpty();
     if (isRenderGrid && trackListIsEmpty) {
         // For grids we should consider every listed track, whether implicitly or explicitly created. If we don't have
         // any explicit track and there are no children then there are no implicit tracks. We cannot simply check the
@@ -1062,11 +1130,11 @@ static Ref<CSSValue> valueForGridTrackList(GridTrackSizingDirection direction, R
         trackListIsEmpty = !downcast<RenderBlock>(*renderer).firstChild();
     }
 
-    if (trackListIsEmpty) {
-        ASSERT(orderedNamedGridLines.isEmpty());
+    if (trackListIsEmpty)
         return CSSValuePool::singleton().createIdentifierValue(CSSValueNone);
-    }
 
+    unsigned repetitions = isRenderGrid ? downcast<RenderGrid>(renderer)->autoRepeatCountForDirection(direction) : 0;
+    OrderedNamedLinesCollector collector(style, isRowAxis, repetitions);
     auto list = CSSValueList::createSpaceSeparated();
     unsigned insertionIndex;
     if (isRenderGrid) {
@@ -1080,23 +1148,23 @@ static Ref<CSSValue> valueForGridTrackList(GridTrackSizingDirection direction, R
         LayoutUnit gutterSize = grid.guttersSize(direction, 2);
         LayoutUnit offsetBetweenTracks = grid.offsetBetweenTracks(direction);
         for (; i < trackPositions.size() - 2; ++i) {
-            addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, i, list.get());
+            addValuesForNamedGridLinesAtIndex(collector, i, list.get());
             list.get().append(zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i] - gutterSize - offsetBetweenTracks, style));
         }
         // Last track line does not have any gutter or distribution offset.
-        addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, i, list.get());
+        addValuesForNamedGridLinesAtIndex(collector, i, list.get());
         list.get().append(zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i], style));
         insertionIndex = trackPositions.size() - 1;
     } else {
         for (unsigned i = 0; i < trackSizes.size(); ++i) {
-            addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, i, list.get());
+            addValuesForNamedGridLinesAtIndex(collector, i, list.get());
             list.get().append(specifiedValueForGridTrackSize(trackSizes[i], style));
         }
         insertionIndex = trackSizes.size();
     }
 
     // Those are the trailing <ident>* allowed in the syntax.
-    addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, insertionIndex, list.get());
+    addValuesForNamedGridLinesAtIndex(collector, insertionIndex, list.get());
     return WTFMove(list);
 }
 
@@ -1143,7 +1211,7 @@ static Ref<CSSValueList> getTransitionPropertyValue(const AnimationList* animLis
 }
 
 #if ENABLE(CSS_SCROLL_SNAP)
-static Ref<CSSValueList> scrollSnapDestination(RenderStyle& style, const LengthSize& destination)
+static Ref<CSSValueList> scrollSnapDestination(const RenderStyle& style, const LengthSize& destination)
 {
     auto list = CSSValueList::createSpaceSeparated();
     list.get().append(zoomAdjustedPixelValueForLength(destination.width(), style));
@@ -1151,7 +1219,7 @@ static Ref<CSSValueList> scrollSnapDestination(RenderStyle& style, const LengthS
     return list;
 }
 
-static Ref<CSSValue> scrollSnapPoints(RenderStyle& style, const ScrollSnapPoints* points)
+static Ref<CSSValue> scrollSnapPoints(const RenderStyle& style, const ScrollSnapPoints* points)
 {
     if (!points)
         return CSSValuePool::singleton().createIdentifierValue(CSSValueNone);
@@ -1166,7 +1234,7 @@ static Ref<CSSValue> scrollSnapPoints(RenderStyle& style, const ScrollSnapPoints
     return WTFMove(list);
 }
 
-static Ref<CSSValue> scrollSnapCoordinates(RenderStyle& style, const Vector<LengthSize>& coordinates)
+static Ref<CSSValue> scrollSnapCoordinates(const RenderStyle& style, const Vector<LengthSize>& coordinates)
 {
     if (coordinates.isEmpty())
         return CSSValuePool::singleton().createIdentifierValue(CSSValueNone);
@@ -1789,13 +1857,13 @@ static RefPtr<CSSValue> counterToCSSValue(const RenderStyle* style, CSSPropertyI
         return nullptr;
 
     auto& cssValuePool = CSSValuePool::singleton();
-    RefPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    auto list = CSSValueList::createSpaceSeparated();
     for (CounterDirectiveMap::const_iterator it = map->begin(); it != map->end(); ++it) {
         list->append(cssValuePool.createValue(it->key, CSSPrimitiveValue::CSS_STRING));
         short number = propertyID == CSSPropertyCounterIncrement ? it->value.incrementValue() : it->value.resetValue();
         list->append(cssValuePool.createValue((double)number, CSSPrimitiveValue::CSS_NUMBER));
     }
-    return list.release();
+    return WTFMove(list);
 }
 
 static void logUnimplementedPropertyID(CSSPropertyID propertyID)
@@ -1807,7 +1875,7 @@ static void logUnimplementedPropertyID(CSSPropertyID propertyID)
     LOG_ERROR("WebKit does not yet implement getComputedStyle for '%s'.", getPropertyName(propertyID));
 }
 
-static Ref<CSSValueList> fontFamilyFromStyle(RenderStyle* style)
+static Ref<CSSValueList> fontFamilyFromStyle(const RenderStyle* style)
 {
     auto list = CSSValueList::createCommaSeparated();
     for (unsigned i = 0; i < style->fontCascade().familyCount(); ++i)
@@ -1815,7 +1883,7 @@ static Ref<CSSValueList> fontFamilyFromStyle(RenderStyle* style)
     return list;
 }
 
-static Ref<CSSPrimitiveValue> lineHeightFromStyle(RenderStyle& style)
+static Ref<CSSPrimitiveValue> lineHeightFromStyle(const RenderStyle& style)
 {
     Length length = style.lineHeight();
     if (length.isNegative()) // If true, line-height not set; use the font's line spacing.
@@ -1830,19 +1898,19 @@ static Ref<CSSPrimitiveValue> lineHeightFromStyle(RenderStyle& style)
     return zoomAdjustedPixelValue(floatValueForLength(length, 0), style);
 }
 
-static Ref<CSSPrimitiveValue> fontSizeFromStyle(RenderStyle& style)
+static Ref<CSSPrimitiveValue> fontSizeFromStyle(const RenderStyle& style)
 {
     return zoomAdjustedPixelValue(style.fontDescription().computedSize(), style);
 }
 
-static Ref<CSSPrimitiveValue> fontStyleFromStyle(RenderStyle* style)
+static Ref<CSSPrimitiveValue> fontStyleFromStyle(const RenderStyle* style)
 {
     if (style->fontDescription().italic())
         return CSSValuePool::singleton().createIdentifierValue(CSSValueItalic);
     return CSSValuePool::singleton().createIdentifierValue(CSSValueNormal);
 }
 
-static Ref<CSSValue> fontVariantFromStyle(RenderStyle* style)
+static Ref<CSSValue> fontVariantFromStyle(const RenderStyle* style)
 {
     if (style->fontDescription().variantSettings().isAllNormal())
         return CSSValuePool::singleton().createIdentifierValue(CSSValueNormal);
@@ -2029,7 +2097,7 @@ static Ref<CSSValue> fontVariantFromStyle(RenderStyle* style)
     return WTFMove(list);
 }
 
-static Ref<CSSPrimitiveValue> fontWeightFromStyle(RenderStyle* style)
+static Ref<CSSPrimitiveValue> fontWeightFromStyle(const RenderStyle* style)
 {
     switch (style->fontDescription().weight()) {
     case FontWeight100:
@@ -2055,7 +2123,7 @@ static Ref<CSSPrimitiveValue> fontWeightFromStyle(RenderStyle* style)
     return CSSValuePool::singleton().createIdentifierValue(CSSValueNormal);
 }
 
-static Ref<CSSValue> fontSynthesisFromStyle(RenderStyle& style)
+static Ref<CSSValue> fontSynthesisFromStyle(const RenderStyle& style)
 {
     if (style.fontDescription().fontSynthesis() == FontSynthesisNone)
         return CSSValuePool::singleton().createIdentifierValue(CSSValueNone);
@@ -2072,7 +2140,7 @@ typedef const Length& (RenderStyle::*RenderStyleLengthGetter)() const;
 typedef LayoutUnit (RenderBoxModelObject::*RenderBoxComputedCSSValueGetter)() const;
 
 template<RenderStyleLengthGetter lengthGetter, RenderBoxComputedCSSValueGetter computedCSSValueGetter>
-inline RefPtr<CSSValue> zoomAdjustedPaddingOrMarginPixelValue(RenderStyle& style, RenderObject* renderer)
+inline RefPtr<CSSValue> zoomAdjustedPaddingOrMarginPixelValue(const RenderStyle& style, RenderObject* renderer)
 {
     Length unzoomzedLength = (style.*lengthGetter)();
     if (!is<RenderBox>(renderer) || unzoomzedLength.isFixed())
@@ -2081,7 +2149,7 @@ inline RefPtr<CSSValue> zoomAdjustedPaddingOrMarginPixelValue(RenderStyle& style
 }
 
 template<RenderStyleLengthGetter lengthGetter>
-inline bool paddingOrMarginIsRendererDependent(RenderStyle* style, RenderObject* renderer)
+inline bool paddingOrMarginIsRendererDependent(const RenderStyle* style, RenderObject* renderer)
 {
     if (!renderer || !renderer->isBox())
         return false;
@@ -2139,7 +2207,7 @@ static CSSValueID convertToRegionBreak(BreakInside value)
 }
 #endif
     
-static bool isLayoutDependent(CSSPropertyID propertyID, RenderStyle* style, RenderObject* renderer)
+static bool isLayoutDependent(CSSPropertyID propertyID, const RenderStyle* style, RenderObject* renderer)
 {
     switch (propertyID) {
     case CSSPropertyWidth:
@@ -2181,10 +2249,10 @@ static bool isLayoutDependent(CSSPropertyID propertyID, RenderStyle* style, Rend
     case CSSPropertyPaddingLeft:
         return paddingOrMarginIsRendererDependent<&RenderStyle::paddingLeft>(style, renderer); 
 #if ENABLE(CSS_GRID_LAYOUT)
-    case CSSPropertyWebkitGridTemplateColumns:
-    case CSSPropertyWebkitGridTemplateRows:
-    case CSSPropertyWebkitGridTemplate:
-    case CSSPropertyWebkitGrid:
+    case CSSPropertyGridTemplateColumns:
+    case CSSPropertyGridTemplateRows:
+    case CSSPropertyGridTemplate:
+    case CSSPropertyGrid:
         return renderer && renderer->isRenderGrid();
 #endif
     default:
@@ -2267,7 +2335,7 @@ static inline bool updateStyleIfNeededForNode(const Node& node)
     return true;
 }
 
-static inline RenderStyle* computeRenderStyleForProperty(Node* styledNode, PseudoId pseudoElementSpecifier, CSSPropertyID propertyID, std::unique_ptr<RenderStyle>& ownedStyle)
+static inline const RenderStyle* computeRenderStyleForProperty(Node* styledNode, PseudoId pseudoElementSpecifier, CSSPropertyID propertyID, std::unique_ptr<RenderStyle>& ownedStyle)
 {
     RenderObject* renderer = styledNode->renderer();
 
@@ -2373,7 +2441,7 @@ RefPtr<CSSValue> ComputedStyleExtractor::propertyValue(CSSPropertyID propertyID,
         return nullptr;
 
     std::unique_ptr<RenderStyle> ownedStyle;
-    RenderStyle* style = nullptr;
+    const RenderStyle* style = nullptr;
     RenderObject* renderer = nullptr;
     bool forceFullLayout = false;
     if (updateLayout) {
@@ -2787,7 +2855,7 @@ RefPtr<CSSValue> ComputedStyleExtractor::propertyValue(CSSPropertyID propertyID,
             return list;
         }
 #if ENABLE(CSS_GRID_LAYOUT)
-        case CSSPropertyWebkitGridAutoFlow: {
+        case CSSPropertyGridAutoFlow: {
             RefPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
             ASSERT(style->isGridAutoFlowDirectionRow() || style->isGridAutoFlowDirectionColumn());
             if (style->isGridAutoFlowDirectionRow())
@@ -2806,48 +2874,48 @@ RefPtr<CSSValue> ComputedStyleExtractor::propertyValue(CSSPropertyID propertyID,
         // grid-auto-columns: 2fr; cannot be resolved to a value in pixels as the '2fr' means very different things
         // depending on the size of the explicit grid or the number of implicit tracks added to the grid. See
         // http://lists.w3.org/Archives/Public/www-style/2013Nov/0014.html
-        case CSSPropertyWebkitGridAutoColumns:
+        case CSSPropertyGridAutoColumns:
             return specifiedValueForGridTrackSize(style->gridAutoColumns(), *style);
-        case CSSPropertyWebkitGridAutoRows:
+        case CSSPropertyGridAutoRows:
             return specifiedValueForGridTrackSize(style->gridAutoRows(), *style);
 
-        case CSSPropertyWebkitGridTemplateColumns:
+        case CSSPropertyGridTemplateColumns:
             return valueForGridTrackList(ForColumns, renderer, *style);
-        case CSSPropertyWebkitGridTemplateRows:
+        case CSSPropertyGridTemplateRows:
             return valueForGridTrackList(ForRows, renderer, *style);
 
-        case CSSPropertyWebkitGridColumnStart:
+        case CSSPropertyGridColumnStart:
             return valueForGridPosition(style->gridItemColumnStart());
-        case CSSPropertyWebkitGridColumnEnd:
+        case CSSPropertyGridColumnEnd:
             return valueForGridPosition(style->gridItemColumnEnd());
-        case CSSPropertyWebkitGridRowStart:
+        case CSSPropertyGridRowStart:
             return valueForGridPosition(style->gridItemRowStart());
-        case CSSPropertyWebkitGridRowEnd:
+        case CSSPropertyGridRowEnd:
             return valueForGridPosition(style->gridItemRowEnd());
-        case CSSPropertyWebkitGridArea:
-            return getCSSPropertyValuesForGridShorthand(webkitGridAreaShorthand());
-        case CSSPropertyWebkitGridTemplate:
-            return getCSSPropertyValuesForGridShorthand(webkitGridTemplateShorthand());
-        case CSSPropertyWebkitGrid:
-            return getCSSPropertyValuesForGridShorthand(webkitGridShorthand());
-        case CSSPropertyWebkitGridColumn:
-            return getCSSPropertyValuesForGridShorthand(webkitGridColumnShorthand());
-        case CSSPropertyWebkitGridRow:
-            return getCSSPropertyValuesForGridShorthand(webkitGridRowShorthand());
+        case CSSPropertyGridArea:
+            return getCSSPropertyValuesForGridShorthand(gridAreaShorthand());
+        case CSSPropertyGridTemplate:
+            return getCSSPropertyValuesForGridShorthand(gridTemplateShorthand());
+        case CSSPropertyGrid:
+            return getCSSPropertyValuesForGridShorthand(gridShorthand());
+        case CSSPropertyGridColumn:
+            return getCSSPropertyValuesForGridShorthand(gridColumnShorthand());
+        case CSSPropertyGridRow:
+            return getCSSPropertyValuesForGridShorthand(gridRowShorthand());
 
-        case CSSPropertyWebkitGridTemplateAreas:
+        case CSSPropertyGridTemplateAreas:
             if (!style->namedGridAreaRowCount()) {
                 ASSERT(!style->namedGridAreaColumnCount());
                 return cssValuePool.createIdentifierValue(CSSValueNone);
             }
 
             return CSSGridTemplateAreasValue::create(style->namedGridArea(), style->namedGridAreaRowCount(), style->namedGridAreaColumnCount());
-        case CSSPropertyWebkitGridColumnGap:
+        case CSSPropertyGridColumnGap:
             return zoomAdjustedPixelValueForLength(style->gridColumnGap(), *style);
-        case CSSPropertyWebkitGridRowGap:
+        case CSSPropertyGridRowGap:
             return zoomAdjustedPixelValueForLength(style->gridRowGap(), *style);
-        case CSSPropertyWebkitGridGap:
-            return getCSSPropertyValuesForGridShorthand(webkitGridGapShorthand());
+        case CSSPropertyGridGap:
+            return getCSSPropertyValuesForGridShorthand(gridGapShorthand());
 #endif /* ENABLE(CSS_GRID_LAYOUT) */
         case CSSPropertyHeight:
             if (renderer && !renderer->isRenderSVGModelObject()) {
@@ -3394,9 +3462,9 @@ RefPtr<CSSValue> ComputedStyleExtractor::propertyValue(CSSPropertyID propertyID,
             // Not a real style property -- used by the editing engine -- so has no computed value.
             break;
         case CSSPropertyWebkitInitialLetter: {
-            RefPtr<CSSPrimitiveValue> drop = !style->initialLetterDrop() ? cssValuePool.createIdentifierValue(CSSValueNormal) : cssValuePool.createValue(style->initialLetterDrop(), CSSPrimitiveValue::CSS_NUMBER);
-            RefPtr<CSSPrimitiveValue> size = !style->initialLetterHeight() ? cssValuePool.createIdentifierValue(CSSValueNormal) : cssValuePool.createValue(style->initialLetterHeight(), CSSPrimitiveValue::CSS_NUMBER);
-            return cssValuePool.createValue(Pair::create(drop.release(), size.release()));
+            Ref<CSSPrimitiveValue> drop = !style->initialLetterDrop() ? cssValuePool.createIdentifierValue(CSSValueNormal) : cssValuePool.createValue(style->initialLetterDrop(), CSSPrimitiveValue::CSS_NUMBER);
+            Ref<CSSPrimitiveValue> size = !style->initialLetterHeight() ? cssValuePool.createIdentifierValue(CSSValueNormal) : cssValuePool.createValue(style->initialLetterHeight(), CSSPrimitiveValue::CSS_NUMBER);
+            return cssValuePool.createValue(Pair::create(WTFMove(drop), WTFMove(size)));
         }
         case CSSPropertyWebkitMarginBottomCollapse:
         case CSSPropertyWebkitMarginAfterCollapse:
@@ -3616,7 +3684,7 @@ RefPtr<CSSValue> ComputedStyleExtractor::propertyValue(CSSPropertyID propertyID,
             for (const FillLayer* currLayer = layers; currLayer; currLayer = currLayer->next())
                 list->append(cssValuePool.createValue(currLayer->blendMode()));
 
-            return list.release();
+            return list;
         }
         case CSSPropertyBackground:
             return getBackgroundShorthandValue();
@@ -3861,7 +3929,7 @@ unsigned CSSComputedStyleDeclaration::length() const
     if (!node)
         return 0;
 
-    RenderStyle* style = node->computedStyle(m_pseudoElementSpecifier);
+    auto* style = node->computedStyle(m_pseudoElementSpecifier);
     if (!style)
         return 0;
 
@@ -3871,24 +3939,24 @@ unsigned CSSComputedStyleDeclaration::length() const
 String CSSComputedStyleDeclaration::item(unsigned i) const
 {
     if (i >= length())
-        return emptyString();
+        return String();
     
     if (i < numComputedProperties)
         return getPropertyNameString(computedProperties[i]);
     
     Node* node = m_node.get();
     if (!node)
-        return emptyString();
+        return String();
 
-    RenderStyle* style = node->computedStyle(m_pseudoElementSpecifier);
+    auto* style = node->computedStyle(m_pseudoElementSpecifier);
     if (!style)
-        return emptyString();
+        return String();
     
     unsigned index = i - numComputedProperties;
     
     const auto& customProperties = style->customProperties();
     if (index >= customProperties.size())
-        return emptyString();
+        return String();
     
     Vector<String, 4> results;
     copyKeysToVector(customProperties, results);
@@ -3899,7 +3967,7 @@ bool ComputedStyleExtractor::propertyMatches(CSSPropertyID propertyID, const CSS
 {
     if (propertyID == CSSPropertyFontSize && is<CSSPrimitiveValue>(*value) && m_node) {
         m_node->document().updateLayoutIgnorePendingStylesheets();
-        if (RenderStyle* style = m_node->computedStyle(m_pseudoElementSpecifier)) {
+        if (auto* style = m_node->computedStyle(m_pseudoElementSpecifier)) {
             if (CSSValueID sizeIdentifier = style->fontDescription().keywordSizeAsIdentifier()) {
                 auto& primitiveValue = downcast<CSSPrimitiveValue>(*value);
                 if (primitiveValue.isValueID() && primitiveValue.getValueID() == sizeIdentifier)

@@ -424,7 +424,7 @@ bool RenderEmbeddedObject::isReplacementObscured() const
 
     IntRect rootViewRect = view().frameView().convertToRootView(snappedIntRect(rect));
     
-    HitTestRequest request(HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::IgnoreClipping | HitTestRequest::DisallowShadowContent | HitTestRequest::AllowChildFrameContent);
+    HitTestRequest request(HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::IgnoreClipping | HitTestRequest::DisallowUserAgentShadowContent | HitTestRequest::AllowChildFrameContent);
     HitTestResult result;
     HitTestLocation location;
     
@@ -522,8 +522,8 @@ void RenderEmbeddedObject::layout()
     LayoutStateMaintainer statePusher(view(), *this, locationOffset(), hasTransform() || hasReflection() || style().isFlippedBlocksWritingMode());
     
     childBox.setLocation(LayoutPoint(borderLeft(), borderTop()) + LayoutSize(paddingLeft(), paddingTop()));
-    childBox.style().setHeight(Length(newSize.height(), Fixed));
-    childBox.style().setWidth(Length(newSize.width(), Fixed));
+    childBox.mutableStyle().setHeight(Length(newSize.height(), Fixed));
+    childBox.mutableStyle().setWidth(Length(newSize.width(), Fixed));
     childBox.setNeedsLayout(MarkOnlyThis);
     childBox.layout();
     clearChildNeedsLayout();

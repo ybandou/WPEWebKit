@@ -56,7 +56,10 @@ class ExecState;
 
 namespace DFG {
 
+class BackwardsCFG;
+class BackwardsDominators;
 class CFG;
+class ControlEquivalenceAnalysis;
 class Dominators;
 class NaturalLoops;
 class PrePostNumbering;
@@ -314,6 +317,8 @@ public:
 
     bool canOptimizeStringObjectAccess(const CodeOrigin&);
 
+    bool getRegExpPrototypeProperty(JSObject* regExpPrototype, Structure* regExpPrototypeStructure, UniquedStringImpl* uid, JSValue& returnJSValue);
+
     bool roundShouldSpeculateInt32(Node* arithRound, PredictionPass pass)
     {
         ASSERT(arithRound->op() == ArithRound || arithRound->op() == ArithFloor || arithRound->op() == ArithCeil || arithRound->op() == ArithTrunc);
@@ -398,7 +403,6 @@ public:
         return hasExitSite(node->origin.semantic, exitKind);
     }
     
-    ValueProfile* valueProfileFor(Node*);
     MethodOfGettingAValueProfile methodOfGettingAValueProfileFor(Node*);
     
     BlockIndex numBlocks() const { return m_blocks.size(); }
@@ -799,9 +803,12 @@ public:
 
     bool hasDebuggerEnabled() const { return m_hasDebuggerEnabled; }
 
-    void ensureDominators();
-    void ensurePrePostNumbering();
-    void ensureNaturalLoops();
+    Dominators& ensureDominators();
+    PrePostNumbering& ensurePrePostNumbering();
+    NaturalLoops& ensureNaturalLoops();
+    BackwardsCFG& ensureBackwardsCFG();
+    BackwardsDominators& ensureBackwardsDominators();
+    ControlEquivalenceAnalysis& ensureControlEquivalenceAnalysis();
 
     // This function only makes sense to call after bytecode parsing
     // because it queries the m_hasExceptionHandlers boolean whose value
@@ -878,6 +885,9 @@ public:
     std::unique_ptr<PrePostNumbering> m_prePostNumbering;
     std::unique_ptr<NaturalLoops> m_naturalLoops;
     std::unique_ptr<CFG> m_cfg;
+    std::unique_ptr<BackwardsCFG> m_backwardsCFG;
+    std::unique_ptr<BackwardsDominators> m_backwardsDominators;
+    std::unique_ptr<ControlEquivalenceAnalysis> m_controlEquivalenceAnalysis;
     unsigned m_localVars;
     unsigned m_nextMachineLocal;
     unsigned m_parameterSlots;

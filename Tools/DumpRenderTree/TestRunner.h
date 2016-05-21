@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007, 2008, 2009, 2012 Apple Inc. All rights reserved.
+ * Copyright (C) 2007-2016 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -134,6 +134,8 @@ public:
 #if ENABLE(IOS_TEXT_AUTOSIZING)
     void setTextAutosizingEnabled(bool);
 #endif
+
+    void setAccummulateLogsForChannel(JSStringRef);
 
     // Legacy here refers to the old TestRunner API for handling web notifications, not the legacy web notification API.
     void ignoreLegacyWebNotificationPermissionRequests();
@@ -357,6 +359,8 @@ public:
     void setCustomTimeout(int duration) { m_timeout = duration; }
     double timeout() { return m_timeout; }
 
+    unsigned imageCountInGeneralPasteboard() const;
+    
 private:
     TestRunner(const std::string& testURL, const std::string& expectedPixelHash);
 

@@ -112,7 +112,9 @@ static RefPtr<MediaEndpointConfiguration> createMediaEndpointConfiguration(RTCCo
     for (auto& server : rtcConfig.iceServers())
         iceServers.append(IceServerInfo::create(server->urls(), server->credential(), server->username()));
 
-    return MediaEndpointConfiguration::create(iceServers, rtcConfig.iceTransportPolicy(), rtcConfig.bundlePolicy());
+    // FIXME: eadaber
+    // return MediaEndpointConfiguration::create(iceServers, rtcConfig.iceTransportPolicy(), rtcConfig.bundlePolicy());
+    return MediaEndpointConfiguration::create(iceServers, ASCIILiteral("all"), ASCIILiteral("balanced"));
 }
 
 MediaEndpointPeerConnection::MediaEndpointPeerConnection(PeerConnectionBackendClient* client)

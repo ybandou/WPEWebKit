@@ -54,7 +54,7 @@ public:
     };
 
     static Ref<MediaEndpointSessionDescription> create(Type, RefPtr<MediaEndpointSessionConfiguration>&&);
-    static RefPtr<MediaEndpointSessionDescription> create(RefPtr<RTCSessionDescription>&&, const SDPProcessor&, RefPtr<DOMError>&);
+    static RefPtr<MediaEndpointSessionDescription> create(RefPtr<RTCSessionDescription>&&, const SDPProcessor&, ExceptionCode&);
     virtual ~MediaEndpointSessionDescription() { }
 
     RefPtr<RTCSessionDescription> toRTCSessionDescription(const SDPProcessor&) const;

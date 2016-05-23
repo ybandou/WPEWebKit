@@ -33,7 +33,6 @@
 
 #if ENABLE(WEB_RTC)
 
-#include "DOMError.h"
 #include "SDPProcessor.h"
 #include <wtf/NeverDestroyed.h>
 
@@ -69,7 +68,7 @@ Ref<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(Typ
     return adoptRef(*new MediaEndpointSessionDescription(type, WTFMove(configuration), nullptr));
 }
 
-RefPtr<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(RefPtr<RTCSessionDescription>&& rtcDescription, const SDPProcessor& sdpProcessor, RefPtr<DOMError>& error)
+RefPtr<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(RefPtr<RTCSessionDescription>&& rtcDescription, const SDPProcessor& sdpProcessor, ExceptionCode& ec)
 {
     MediaEndpointSessionDescription::Type type = parseDescriptionType(rtcDescription->type());
 
@@ -77,11 +76,12 @@ RefPtr<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(
     SDPProcessor::Result result = sdpProcessor.parse(rtcDescription->sdp(), configuration);
     if (result != SDPProcessor::Result::Success) {
         if (result == SDPProcessor::Result::ParseError) {
-            error = DOMError::create("InvalidAccessError: Invalid session description content");
+            // FIXME: Consider using ExceptionCodeWithMessage here
+            ec = INVALID_ACCESS_ERR;
             return nullptr;
         }
         LOG_ERROR("SDPProcessor internal error");
-        error = DOMError::create(emptyString());
+        ec = ABORT_ERR;
         return nullptr;
     }
 

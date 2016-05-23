@@ -44,7 +44,6 @@
 namespace WebCore {
 
 class Dictionary;
-class MediaStreamTrack;
 
 class RTCRtpTransceiver : public RefCounted<RTCRtpTransceiver>, public ScriptWrappable {
 public:

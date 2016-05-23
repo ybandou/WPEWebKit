@@ -33,11 +33,8 @@
 
 #if ENABLE(WEB_RTC)
 
-#include "DOMError.h"
 #include "Dictionary.h"
-#include "ExceptionCode.h"
-#include "JSDOMError.h"
-#include "MediaStreamTrack.h"
+#include <wtf/NeverDestroyed.h>
 
 namespace WebCore {
 

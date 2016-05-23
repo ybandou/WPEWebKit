@@ -48,6 +48,13 @@ class MediaStreamTrack;
 
 class RTCRtpTransceiver : public RefCounted<RTCRtpTransceiver>, public ScriptWrappable {
 public:
+    enum class Direction {
+        Sendrecv,
+        Sendonly,
+        Recvonly,
+        Inactive
+    };
+
     static Ref<RTCRtpTransceiver> create(RefPtr<RTCRtpSender>&&, RefPtr<RTCRtpReceiver>&&);
     virtual ~RTCRtpTransceiver() { }
 
@@ -57,8 +64,9 @@ public:
     void enableSendingDirection();
     void disableSendingDirection();
 
-    const String& direction() const { return m_direction; }
-    void setDirection(const String direction) { m_direction = direction; }
+    const String& directionString() const;
+    Direction direction() const { return m_direction; }
+    void setDirection(Direction direction) { m_direction = direction; }
 
     const String& provisionalMid() const { return m_provisionalMid; }
     void setProvisionalMid(const String& provisionalMid) { m_provisionalMid = provisionalMid; }
@@ -85,7 +93,7 @@ private:
     String m_provisionalMid;
     String m_mid;
 
-    String m_direction;
+    Direction m_direction;
 
     RefPtr<RTCRtpSender> m_sender;
     RefPtr<RTCRtpReceiver> m_receiver;

@@ -34,7 +34,7 @@ function createOffer()
 {
     "use strict";
 
-    var peerConnection = this;
+    const peerConnection = this;
 
     return @callbacksAndDictionaryOverload(arguments, "createOffer", function (options) {
         // Promise mode
@@ -55,7 +55,7 @@ function createAnswer()
 {
     "use strict";
 
-    var peerConnection = this;
+    const peerConnection = this;
 
     return @callbacksAndDictionaryOverload(arguments, "createAnswer", function (options) {
         // Promise mode
@@ -93,7 +93,7 @@ function addStream()
     if (arguments.length < 1)
         throw new @TypeError("Not enough arguments");
 
-    var stream = arguments[0];
+    const stream = arguments[0];
     if (!(stream instanceof @MediaStream))
         throw new @TypeError("Argument 1 ('stream') to RTCPeerConnection.addStream must be an instance of MediaStream");
 
@@ -117,7 +117,7 @@ function removeStream()
     if (arguments.length < 1)
         throw new @TypeError("Not enough arguments");
 
-    var stream = arguments[0];
+    const stream = arguments[0];
     if (!(stream instanceof @MediaStream))
         throw new @TypeError("Argument 1 ('stream') to RTCPeerConnection.removeStream must be an instance of MediaStream");
 
@@ -190,7 +190,7 @@ function setLocalDescription()
 {
     "use strict";
 
-    var peerConnection = this;
+    const peerConnection = this;
 
     return @objectAndCallbacksOverload(arguments, "setLocalDescription", @RTCSessionDescription, {}, function (description) {
         // Promise mode
@@ -211,7 +211,7 @@ function setRemoteDescription()
 {
     "use strict";
 
-    var peerConnection = this;
+    const peerConnection = this;
 
     return @objectAndCallbacksOverload(arguments, "setRemoteDescription", @RTCSessionDescription, {}, function (description) {
         // Promise mode
@@ -232,7 +232,7 @@ function addIceCandidate()
 {
     "use strict";
 
-    var peerConnection = this;
+    const peerConnection = this;
 
     return @objectAndCallbacksOverload(arguments, "addIceCandidate", @RTCIceCandidate, {}, function (candidate) {
         // Promise mode
@@ -253,9 +253,9 @@ function getStats()
 {
     "use strict";
 
-    var peerConnection = this;
+    const peerConnection = this;
 
-    var objectOptions = { "optionalAndNullable": true };
+    const objectOptions = { "optionalAndNullable": true };
     return @objectAndCallbacksOverload(arguments, "getStats", @MediaStreamTrack, objectOptions, function (selector) {
         // Promise mode
         return peerConnection.@privateGetStats(selector);

@@ -39,7 +39,7 @@ function enqueueOperation(peerConnection, operation)
     if (!peerConnection.@operations)
         peerConnection.@operations = [];
 
-    var operations = peerConnection.@operations;
+    const operations = peerConnection.@operations;
 
     function runNext() {
         operations.@shift();
@@ -61,24 +61,24 @@ function objectAndCallbacksOverload(args, functionName, objectConstructor, objec
 {
     "use strict";
 
-    var argsCount = Math.min(3, args.length);
-    var objectArg = args[0];
-    var objectArgOk = false;
+    let argsCount = Math.min(3, args.length);
+    let objectArg = args[0];
+    let objectArgOk = false;
 
     if (argsCount == 0 && objectOptions.optionalAndNullable) {
         objectArg = null;
         objectArgOk = true;
         argsCount = 1;
     } else {
-        var hasMatchingType = objectArg instanceof objectConstructor;
+        const hasMatchingType = objectArg instanceof objectConstructor;
         objectArgOk = objectOptions.optionalAndNullable ? (objectArg === null || typeof objectArg === "undefined" || hasMatchingType) : hasMatchingType;
     }
 
     if (argsCount == 1 && objectArgOk)
         return promiseMode(objectArg);
 
-    var successCallback = args[1];
-    var errorCallback = args[2];
+    const successCallback = args[1];
+    const errorCallback = args[2];
     if (argsCount == 3 && objectArgOk
         && (successCallback == null || typeof successCallback === "function")
         && (errorCallback == null || typeof errorCallback === "function")) {
@@ -101,13 +101,13 @@ function callbacksAndDictionaryOverload(args, functionName, promiseMode, legacyM
 {
     "use strict";
 
-    var argsCount = Math.min(3, args.length);
+    const argsCount = Math.min(3, args.length);
 
     if (argsCount == 0 || argsCount == 1)
         return promiseMode(args[0]);
 
-    var successCallback = args[0];
-    var errorCallback = args[1];
+    const successCallback = args[0];
+    const errorCallback = args[1];
     if ((argsCount == 2 || argsCount == 3)
         && (successCallback == null || typeof successCallback === "function")
         && (errorCallback == null || typeof errorCallback === "function")) {

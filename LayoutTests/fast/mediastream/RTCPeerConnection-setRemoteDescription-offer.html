@@ -106,10 +106,10 @@
                 debug("");
 
                 debug("*** Try setting local descriptions with bad types for the current state");
-                return promiseShouldReject("pc.setLocalDescription(new RTCSessionDescription({type:'answer'}));");
+                return promiseShouldReject("pc.setRemoteDescription(new RTCSessionDescription({type:'answer', sdp:remoteOffer1.sdp}));");
             })
             .then(function () {
-                return promiseShouldReject("pc.setLocalDescription(new RTCSessionDescription({type:'pranswer'}));");
+                return promiseShouldReject("pc.setRemoteDescription(new RTCSessionDescription({type:'pranswer', sdp:remoteOffer1.sdp}));");
             })
             .then(function () {
                 debug("");

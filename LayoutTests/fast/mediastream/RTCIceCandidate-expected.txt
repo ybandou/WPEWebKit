@@ -8,6 +8,14 @@ PASS candidate.candidate is "foo"
 PASS candidate.sdpMid is "bar"
 PASS candidate.sdpMLineIndex is 6
 
+Attributes are readonly
+candidate.candidate = "foo-updated"
+PASS candidate.candidate is "foo"
+candidate.sdpMid = "bar-updated"
+PASS candidate.sdpMid is "bar"
+candidate.sdpMLineIndex = 7
+PASS candidate.sdpMLineIndex is 6
+
 Dictionary argument is mandatory.
 PASS new RTCIceCandidate(); threw exception TypeError: Not enough arguments.
 Dictionary member 'candidate' is required.

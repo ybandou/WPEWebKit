@@ -83,10 +83,10 @@ function objectAndCallbacksOverload(args, functionName, objectConstructor, objec
         && (successCallback == null || typeof successCallback === "function")
         && (errorCallback == null || typeof errorCallback === "function")) {
         if (typeof successCallback !== "function")
-            return @Promise.@reject(new @TypeError(`Argument 2 ('successCallback') to RTCPeerConnection.${functionName} must be a Function`));
+            return @Promise.@reject(new @TypeError(`Argument 2 ('successCallback') to RTCPeerConnection.${functionName} must be a function`));
 
         if (typeof errorCallback !== "function")
-            return @Promise.@reject(new @TypeError(`Argument 3 ('errorCallback') to RTCPeerConnection.${functionName} must be a Function`));
+            return @Promise.@reject(new @TypeError(`Argument 3 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`));
 
         return legacyMode(objectArg, successCallback, errorCallback);
     }
@@ -112,10 +112,10 @@ function callbacksAndDictionaryOverload(args, functionName, promiseMode, legacyM
         && (successCallback == null || typeof successCallback === "function")
         && (errorCallback == null || typeof errorCallback === "function")) {
         if (typeof successCallback !== "function")
-            return @Promise.@reject(new @TypeError(`Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a Function`));
+            return @Promise.@reject(new @TypeError(`Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a function`));
 
         if (typeof errorCallback !== "function")
-            return @Promise.@reject(new @TypeError(`Argument 2 ('errorCallback') to RTCPeerConnection.${functionName} must be a Function`));
+            return @Promise.@reject(new @TypeError(`Argument 2 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`));
 
         return legacyMode(successCallback, errorCallback, args[2]);
     }

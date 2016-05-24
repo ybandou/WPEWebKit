@@ -49,15 +49,15 @@
                     })
                     .then(function () {
                         debug("*** Callbacks are not nullable");
-                        reason = `TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.${functionName} must be a Function`;
+                        reason = `TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`;
                         return promiseShouldReject(`pc.${functionName}(emptyFunc, null)`, "reason");
                     })
                     .then(function () {
-                        reason = `TypeError: Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a Function`;
+                        reason = `TypeError: Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a function`;
                         return promiseShouldReject(`pc.${functionName}(null, emptyFunc)`, "reason");
                     })
                     .then(function () {
-                        reason = `TypeError: Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a Function`;
+                        reason = `TypeError: Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a function`;
                         return promiseShouldReject(`pc.${functionName}(null, null)`, "reason");
                     })
                     .then(function () {
@@ -83,8 +83,8 @@
                     })
                     .then(function () {
                         return badInputFull(functionName, "desc", {
-                            "arg2": `TypeError: Argument 2 ('successCallback') to RTCPeerConnection.${functionName} must be a Function`,
-                            "arg3": `TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.${functionName} must be a Function`
+                            "arg2": `TypeError: Argument 2 ('successCallback') to RTCPeerConnection.${functionName} must be a function`,
+                            "arg3": `TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`
                         });
                     })
                     .then(function () {
@@ -179,8 +179,8 @@
                     })
                     .then(function () {
                         return badInputFull("addIceCandidate", "candidate", {
-                            "arg2": "TypeError: Argument 2 ('successCallback') to RTCPeerConnection.addIceCandidate must be a Function",
-                            "arg3": "TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.addIceCandidate must be a Function"
+                            "arg2": "TypeError: Argument 2 ('successCallback') to RTCPeerConnection.addIceCandidate must be a function",
+                            "arg3": "TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.addIceCandidate must be a function"
                         });
                     })
                     .then(function () {
@@ -221,8 +221,8 @@
                     })
                     .then(function () {
                         return badInput("getStats", "selector", {
-                            "arg2": "TypeError: Argument 2 ('successCallback') to RTCPeerConnection.getStats must be a Function",
-                            "arg3": "TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.getStats must be a Function"
+                            "arg2": "TypeError: Argument 2 ('successCallback') to RTCPeerConnection.getStats must be a function",
+                            "arg3": "TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.getStats must be a function"
                         });
                     })
                     .then(function () {

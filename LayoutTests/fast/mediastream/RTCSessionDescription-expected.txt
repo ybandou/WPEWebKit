@@ -23,10 +23,14 @@ PASS new RTCSessionDescription(5); threw exception TypeError: Type error.
 PASS new RTCSessionDescription('foobar'); threw exception TypeError: Type error.
 PASS new RTCSessionDescription({type:'foobar', sdp:'x'}); threw exception TypeError: Type error.
 *** Valid types
-PASS new RTCSessionDescription({type:'offer', sdp:'x'}); did not throw exception.
-PASS new RTCSessionDescription({type:'answer', sdp:'x'}); did not throw exception.
-PASS new RTCSessionDescription({type:'pranswer', sdp:'x'}); did not throw exception.
-PASS new RTCSessionDescription({type:'rollback', sdp:'x'}); did not throw exception.
+PASS sessionDescription = new RTCSessionDescription({type:'offer', sdp:'x'}); did not throw exception.
+PASS sessionDescription.type is 'offer'
+PASS sessionDescription = new RTCSessionDescription({type:'answer', sdp:'x'}); did not throw exception.
+PASS sessionDescription.type is 'answer'
+PASS sessionDescription = new RTCSessionDescription({type:'pranswer', sdp:'x'}); did not throw exception.
+PASS sessionDescription.type is 'pranswer'
+PASS sessionDescription = new RTCSessionDescription({type:'rollback', sdp:'x'}); did not throw exception.
+PASS sessionDescription.type is 'rollback'
 PASS successfullyParsed is true
 
 TEST COMPLETE

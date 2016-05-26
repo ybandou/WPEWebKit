@@ -34,7 +34,13 @@
     Constructor(Dictionary dictionary),
     ConstructorRaisesException
 ] interface RTCSessionDescription {
-    [SetterRaisesException] readonly attribute DOMString type;
+    [SetterRaisesException] readonly attribute RTCSdpType type;
     readonly attribute DOMString sdp;
 };
 
+enum RTCSdpType {
+    "offer",
+    "pranswer",
+    "answer",
+    "rollback"
+};

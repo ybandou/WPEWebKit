@@ -33,7 +33,6 @@
 
 #if ENABLE(WEB_RTC)
 
-#include "MediaEndpointSessionConfiguration.h"
 #include "RTCSessionDescription.h"
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
@@ -46,33 +45,26 @@ class DOMError;
 
 class MediaEndpointSessionDescription : public RefCounted<MediaEndpointSessionDescription> {
 public:
-    enum class Type {
-        Offer = 1,
-        Pranswer = 2,
-        Answer = 3,
-        Rollback = 4
-    };
-
-    static Ref<MediaEndpointSessionDescription> create(Type, RefPtr<MediaEndpointSessionConfiguration>&&);
+    static Ref<MediaEndpointSessionDescription> create(RTCSessionDescription::SdpType, RefPtr<MediaEndpointSessionConfiguration>&&);
     static RefPtr<MediaEndpointSessionDescription> create(RefPtr<RTCSessionDescription>&&, const SDPProcessor&, ExceptionCode&);
     virtual ~MediaEndpointSessionDescription() { }
 
     RefPtr<RTCSessionDescription> toRTCSessionDescription(const SDPProcessor&) const;
 
-    Type type() const { return m_type; }
+    RTCSessionDescription::SdpType type() const { return m_type; }
     const String& typeString() const;
     MediaEndpointSessionConfiguration* configuration() const { return m_configuration.get(); }
 
     bool isLaterThan(MediaEndpointSessionDescription* other) const;
 
 private:
-    MediaEndpointSessionDescription(Type type, RefPtr<MediaEndpointSessionConfiguration>&& configuration, RefPtr<RTCSessionDescription>&& rtcDescription)
+    MediaEndpointSessionDescription(RTCSessionDescription::SdpType type, RefPtr<MediaEndpointSessionConfiguration>&& configuration, RefPtr<RTCSessionDescription>&& rtcDescription)
         : m_type(type)
         , m_configuration(configuration)
         , m_rtcDescription(WTFMove(rtcDescription))
     { }
 
-    Type m_type;
+    RTCSessionDescription::SdpType m_type;
     RefPtr<MediaEndpointSessionConfiguration> m_configuration;
 
     RefPtr<RTCSessionDescription> m_rtcDescription;

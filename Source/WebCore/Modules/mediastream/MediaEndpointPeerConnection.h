@@ -97,9 +97,8 @@ private:
 
     void replaceTrackTask(RTCRtpSender&, const String& mid, RefPtr<MediaStreamTrack>&&, PeerConnection::VoidPromise&);
 
-    bool localDescriptionTypeValidForState(MediaEndpointSessionDescription::Type) const;
-    bool remoteDescriptionTypeValidForState(MediaEndpointSessionDescription::Type) const;
-    MediaEndpointSessionDescription::Type parseDescriptionType(const String& typeName) const;
+    bool localDescriptionTypeValidForState(RTCSessionDescription::SdpType) const;
+    bool remoteDescriptionTypeValidForState(RTCSessionDescription::SdpType) const;
 
     MediaEndpointSessionDescription* internalLocalDescription() const;
     MediaEndpointSessionDescription* internalRemoteDescription() const;

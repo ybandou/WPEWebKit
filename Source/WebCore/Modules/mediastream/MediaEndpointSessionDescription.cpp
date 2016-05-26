@@ -50,28 +50,13 @@ STRING_FUNCTION(pranswer)
 STRING_FUNCTION(answer)
 STRING_FUNCTION(rollback)
 
-static MediaEndpointSessionDescription::Type parseDescriptionType(const String& typeName)
-{
-    if (typeName == offerString())
-        return MediaEndpointSessionDescription::Type::Offer;
-    if (typeName == pranswerString())
-        return MediaEndpointSessionDescription::Type::Pranswer;
-    if (typeName == answerString())
-        return MediaEndpointSessionDescription::Type::Answer;
-
-    ASSERT(typeName == rollbackString());
-    return MediaEndpointSessionDescription::Type::Rollback;
-}
-
-Ref<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(Type type, RefPtr<MediaEndpointSessionConfiguration>&& configuration)
+Ref<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(RTCSessionDescription::SdpType type, RefPtr<MediaEndpointSessionConfiguration>&& configuration)
 {
     return adoptRef(*new MediaEndpointSessionDescription(type, WTFMove(configuration), nullptr));
 }
 
 RefPtr<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(RefPtr<RTCSessionDescription>&& rtcDescription, const SDPProcessor& sdpProcessor, ExceptionCode& ec)
 {
-    MediaEndpointSessionDescription::Type type = parseDescriptionType(rtcDescription->type());
-
     RefPtr<MediaEndpointSessionConfiguration> configuration;
     SDPProcessor::Result result = sdpProcessor.parse(rtcDescription->sdp(), configuration);
     if (result != SDPProcessor::Result::Success) {
@@ -85,7 +70,7 @@ RefPtr<MediaEndpointSessionDescription> MediaEndpointSessionDescription::create(
         return nullptr;
     }
 
-    return adoptRef(new MediaEndpointSessionDescription(type, WTFMove(configuration), WTFMove(rtcDescription)));
+    return adoptRef(new MediaEndpointSessionDescription(rtcDescription->type(), WTFMove(configuration), WTFMove(rtcDescription)));
 }
 
 RefPtr<RTCSessionDescription> MediaEndpointSessionDescription::toRTCSessionDescription(const SDPProcessor& sdpProcessor) const
@@ -105,7 +90,7 @@ RefPtr<RTCSessionDescription> MediaEndpointSessionDescription::toRTCSessionDescr
         return m_rtcDescription;
     }
 
-    return RTCSessionDescription::create(typeString(), sdpString);
+    return RTCSessionDescription::create(m_type, sdpString);
 }
 
 bool MediaEndpointSessionDescription::isLaterThan(MediaEndpointSessionDescription* other) const
@@ -116,13 +101,13 @@ bool MediaEndpointSessionDescription::isLaterThan(MediaEndpointSessionDescriptio
 const String& MediaEndpointSessionDescription::typeString() const
 {
     switch (m_type) {
-    case Type::Offer:
+    case RTCSessionDescription::SdpType::Offer:
         return offerString();
-    case Type::Pranswer:
+    case RTCSessionDescription::SdpType::Pranswer:
         return pranswerString();
-    case Type::Answer:
+    case RTCSessionDescription::SdpType::Answer:
         return answerString();
-    case Type::Rollback:
+    case RTCSessionDescription::SdpType::Rollback:
         return rollbackString();
     }
 

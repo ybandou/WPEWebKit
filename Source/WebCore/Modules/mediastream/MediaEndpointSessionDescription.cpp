@@ -93,11 +93,6 @@ RefPtr<RTCSessionDescription> MediaEndpointSessionDescription::toRTCSessionDescr
     return RTCSessionDescription::create(m_type, sdpString);
 }
 
-bool MediaEndpointSessionDescription::isLaterThan(MediaEndpointSessionDescription* other) const
-{
-    return !other || configuration()->sessionVersion() > other->configuration()->sessionVersion();
-}
-
 const String& MediaEndpointSessionDescription::typeString() const
 {
     switch (m_type) {
@@ -113,6 +108,11 @@ const String& MediaEndpointSessionDescription::typeString() const
 
     ASSERT_NOT_REACHED();
     return emptyString();
+}
+
+bool MediaEndpointSessionDescription::isLaterThan(MediaEndpointSessionDescription* other) const
+{
+    return !other || configuration()->sessionVersion() > other->configuration()->sessionVersion();
 }
 
 } // namespace WebCore

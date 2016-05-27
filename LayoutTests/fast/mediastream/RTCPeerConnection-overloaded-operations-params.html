@@ -61,6 +61,13 @@
                         return promiseShouldReject(`pc.${functionName}(null, null)`, "reason");
                     })
                     .then(function () {
+                        debug("*** Bad input for callback arguments");
+                        return promiseShouldReject(`pc.${functionName}({}, emptyFunc)`, "'TypeError: Type error'");
+                    })
+                    .then(function () {
+                        return promiseShouldReject(`pc.${functionName}(emptyFunc, {})`, "'TypeError: Type error'");
+                    })
+                    .then(function () {
                         debug("");
                         resolve();
                     })
@@ -156,6 +163,13 @@
                     })
                     .then(function () {
                         return promiseShouldReject(`pc.${functionName}(1, emptyFunc, emptyFunc)`, "'TypeError: Type error'");
+                    })
+                    .then(function () {
+                        debug("*** Bad input for callback arguments");
+                        return promiseShouldReject(`pc.${functionName}(${firstArg}, {}, emptyFunc)`, "'TypeError: Type error'");
+                    })
+                    .then(function () {
+                        return promiseShouldReject(`pc.${functionName}(${firstArg}, emptyFunc, {})`, "'TypeError: Type error'");
                     })
                     .then(function () {
                         resolve();

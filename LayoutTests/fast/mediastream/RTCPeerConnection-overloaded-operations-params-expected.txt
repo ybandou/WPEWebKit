@@ -19,6 +19,9 @@ PASS promise pc.createOffer({}, emptyFunc, emptyFunc) rejected with TypeError: T
 PASS promise pc.createOffer(emptyFunc, null) rejected with TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.createOffer must be a function
 PASS promise pc.createOffer(null, emptyFunc) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createOffer must be a function
 PASS promise pc.createOffer(null, null) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createOffer must be a function
+*** Bad input for callback arguments
+PASS promise pc.createOffer({}, emptyFunc) rejected with TypeError: Type error
+PASS promise pc.createOffer(emptyFunc, {}) rejected with TypeError: Type error
 
 *** Test createAnswer
 PASS promise pc.createAnswer() did not reject with TypeError.
@@ -35,6 +38,9 @@ PASS promise pc.createAnswer({}, emptyFunc, emptyFunc) rejected with TypeError: 
 PASS promise pc.createAnswer(emptyFunc, null) rejected with TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.createAnswer must be a function
 PASS promise pc.createAnswer(null, emptyFunc) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createAnswer must be a function
 PASS promise pc.createAnswer(null, null) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createAnswer must be a function
+*** Bad input for callback arguments
+PASS promise pc.createAnswer({}, emptyFunc) rejected with TypeError: Type error
+PASS promise pc.createAnswer(emptyFunc, {}) rejected with TypeError: Type error
 
 *** Test setLocalDescription
 PASS promise pc.setLocalDescription(desc) did not reject with TypeError.
@@ -56,6 +62,9 @@ PASS promise pc.setLocalDescription('foo') rejected with TypeError: Type error
 PASS promise pc.setLocalDescription('foo', emptyFunc, emptyFunc) rejected with TypeError: Type error
 PASS promise pc.setLocalDescription(1) rejected with TypeError: Type error
 PASS promise pc.setLocalDescription(1, emptyFunc, emptyFunc) rejected with TypeError: Type error
+*** Bad input for callback arguments
+PASS promise pc.setLocalDescription(desc, emptyFunc, {}) rejected with TypeError: Type error
+PASS promise pc.setLocalDescription(desc, {}, emptyFunc) rejected with TypeError: Type error
 
 *** Test setRemoteDescription
 PASS promise pc.setRemoteDescription(desc) did not reject with TypeError.
@@ -77,6 +86,9 @@ PASS promise pc.setRemoteDescription('foo') rejected with TypeError: Type error
 PASS promise pc.setRemoteDescription('foo', emptyFunc, emptyFunc) rejected with TypeError: Type error
 PASS promise pc.setRemoteDescription(1) rejected with TypeError: Type error
 PASS promise pc.setRemoteDescription(1, emptyFunc, emptyFunc) rejected with TypeError: Type error
+*** Bad input for callback arguments
+PASS promise pc.setRemoteDescription(desc, emptyFunc, {}) rejected with TypeError: Type error
+PASS promise pc.setRemoteDescription(desc, {}, emptyFunc) rejected with TypeError: Type error
 
 *** Test addIceCandidate
 PASS promise pc.addIceCandidate(candidate) did not reject with TypeError.
@@ -98,6 +110,9 @@ PASS promise pc.addIceCandidate('foo') rejected with TypeError: Type error
 PASS promise pc.addIceCandidate('foo', emptyFunc, emptyFunc) rejected with TypeError: Type error
 PASS promise pc.addIceCandidate(1) rejected with TypeError: Type error
 PASS promise pc.addIceCandidate(1, emptyFunc, emptyFunc) rejected with TypeError: Type error
+*** Bad input for callback arguments
+PASS promise pc.addIceCandidate(candidate, emptyFunc, {}) rejected with TypeError: Type error
+PASS promise pc.addIceCandidate(candidate, {}, emptyFunc) rejected with TypeError: Type error
 
 *** Test getStats
 PASS promise pc.getStats() did not reject with TypeError.
@@ -117,6 +132,9 @@ PASS promise pc.getStats('foo') rejected with TypeError: Type error
 PASS promise pc.getStats('foo', emptyFunc, emptyFunc) rejected with TypeError: Type error
 PASS promise pc.getStats(1) rejected with TypeError: Type error
 PASS promise pc.getStats(1, emptyFunc, emptyFunc) rejected with TypeError: Type error
+*** Bad input for callback arguments
+PASS promise pc.getStats(selector, emptyFunc, {}) rejected with TypeError: Type error
+PASS promise pc.getStats(selector, {}, emptyFunc) rejected with TypeError: Type error
 
 PASS successfullyParsed is true
 

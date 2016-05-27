@@ -192,7 +192,11 @@ function setLocalDescription()
 
     const peerConnection = this;
 
-    return @objectAndCallbacksOverload(arguments, "setLocalDescription", @RTCSessionDescription, {}, function (description) {
+    const objectInfo = {
+        "argName": "description",
+        "argType": "RTCSessionDescription"
+    };
+    return @objectAndCallbacksOverload(arguments, "setLocalDescription", @RTCSessionDescription, objectInfo, function (description) {
         // Promise mode
         return @enqueueOperation(peerConnection, function () {
             return peerConnection.@queuedSetLocalDescription(description);
@@ -213,7 +217,11 @@ function setRemoteDescription()
 
     const peerConnection = this;
 
-    return @objectAndCallbacksOverload(arguments, "setRemoteDescription", @RTCSessionDescription, {}, function (description) {
+    const objectInfo = {
+        "argName": "description",
+        "argType": "RTCSessionDescription"
+    };
+    return @objectAndCallbacksOverload(arguments, "setRemoteDescription", @RTCSessionDescription, objectInfo, function (description) {
         // Promise mode
         return @enqueueOperation(peerConnection, function () {
             return peerConnection.@queuedSetRemoteDescription(description);
@@ -234,7 +242,11 @@ function addIceCandidate()
 
     const peerConnection = this;
 
-    return @objectAndCallbacksOverload(arguments, "addIceCandidate", @RTCIceCandidate, {}, function (candidate) {
+    const objectInfo = {
+        "argName": "candidate",
+        "argType": "RTCIceCandidate"
+    };
+    return @objectAndCallbacksOverload(arguments, "addIceCandidate", @RTCIceCandidate, objectInfo, function (candidate) {
         // Promise mode
         return @enqueueOperation(peerConnection, function () {
             return peerConnection.@queuedAddIceCandidate(candidate);
@@ -255,8 +267,12 @@ function getStats()
 
     const peerConnection = this;
 
-    const objectOptions = { "optionalAndNullable": true };
-    return @objectAndCallbacksOverload(arguments, "getStats", @MediaStreamTrack, objectOptions, function (selector) {
+    const objectInfo = {
+        "argName": "selector",
+        "argType": "MediaStreamTrack",
+        "defaultsToNull": true
+    };
+    return @objectAndCallbacksOverload(arguments, "getStats", @MediaStreamTrack, objectInfo, function (selector) {
         // Promise mode
         return peerConnection.@privateGetStats(selector);
     }, function (selector, successCallback, errorCallback) {

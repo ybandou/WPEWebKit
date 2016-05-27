@@ -45,7 +45,8 @@
                     })
                     .then(function () {
                         debug("*** Options object must be last")
-                        return promiseShouldReject(`pc.${functionName}({}, emptyFunc, emptyFunc)`, "'TypeError: Type error'");
+                        reason = `TypeError: Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a function`;
+                        return promiseShouldReject(`pc.${functionName}({}, emptyFunc, emptyFunc)`, "reason");
                     })
                     .then(function () {
                         debug("*** Callbacks are not nullable");
@@ -62,10 +63,12 @@
                     })
                     .then(function () {
                         debug("*** Bad input for callback arguments");
-                        return promiseShouldReject(`pc.${functionName}({}, emptyFunc)`, "'TypeError: Type error'");
+                        reason = `TypeError: Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a function`;
+                        return promiseShouldReject(`pc.${functionName}({}, emptyFunc)`, "reason");
                     })
                     .then(function () {
-                        return promiseShouldReject(`pc.${functionName}(emptyFunc, {})`, "'TypeError: Type error'");
+                        reason = `TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`;
+                        return promiseShouldReject(`pc.${functionName}(emptyFunc, {})`, "reason");
                     })
                     .then(function () {
                         debug("");
@@ -90,6 +93,7 @@
                     })
                     .then(function () {
                         return badInputFull(functionName, "desc", {
+                            "arg1": `TypeError: Argument 1 ('description') to RTCPeerConnection.${functionName} must be an instance of RTCSessionDescription`,
                             "arg2": `TypeError: Argument 2 ('successCallback') to RTCPeerConnection.${functionName} must be a function`,
                             "arg3": `TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`
                         });
@@ -114,10 +118,10 @@
                     promiseShouldReject(`pc.${functionName}()`, "'TypeError: Not enough arguments'")
                     .then(function () {
                         debug(`*** ${firstArg} is not nullable`);
-                        return promiseShouldReject(`pc.${functionName}(null)`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}(null)`, "detailedErrors.arg1");
                     })
                     .then(function () {
-                        return promiseShouldReject(`pc.${functionName}(null, emptyFunc, emptyFunc)`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}(null, emptyFunc, emptyFunc)`, "detailedErrors.arg1");
                     })
                     .then(function () {
                         return badInput(functionName, firstArg, detailedErrorsArg);
@@ -136,10 +140,10 @@
                 detailedErrors = detailedErrorsArg;
 
                 return new Promise(function (resolve) {
-                    promiseShouldReject(`pc.${functionName}(1)`, "'TypeError: Type error'")
+                    promiseShouldReject(`pc.${functionName}(1)`, "detailedErrors.arg1")
                     .then(function () {
                         debug("*** Error callback is mandatory")
-                        return promiseShouldReject(`pc.${functionName}(${firstArg}, emptyFunc)`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}(${firstArg}, emptyFunc)`, "'TypeError: Not enough arguments'");
                     })
                     .then(function () {
                         debug("*** Callbacks are not nullable");
@@ -153,23 +157,23 @@
                     })
                     .then(function () {
                         debug(`*** Bad input as ${firstArg}`);
-                        return promiseShouldReject(`pc.${functionName}('foo')`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}('foo')`, "detailedErrors.arg1");
                     })
                     .then(function () {
-                        return promiseShouldReject(`pc.${functionName}('foo', emptyFunc, emptyFunc)`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}('foo', emptyFunc, emptyFunc)`, "detailedErrors.arg1");
                     })
                     .then(function () {
-                        return promiseShouldReject(`pc.${functionName}(1)`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}(1)`, "detailedErrors.arg1");
                     })
                     .then(function () {
-                        return promiseShouldReject(`pc.${functionName}(1, emptyFunc, emptyFunc)`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}(1, emptyFunc, emptyFunc)`, "detailedErrors.arg1");
                     })
                     .then(function () {
                         debug("*** Bad input for callback arguments");
-                        return promiseShouldReject(`pc.${functionName}(${firstArg}, {}, emptyFunc)`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}(${firstArg}, {}, emptyFunc)`, "detailedErrors.arg2");
                     })
                     .then(function () {
-                        return promiseShouldReject(`pc.${functionName}(${firstArg}, emptyFunc, {})`, "'TypeError: Type error'");
+                        return promiseShouldReject(`pc.${functionName}(${firstArg}, emptyFunc, {})`, "detailedErrors.arg3");
                     })
                     .then(function () {
                         resolve();
@@ -193,6 +197,7 @@
                     })
                     .then(function () {
                         return badInputFull("addIceCandidate", "candidate", {
+                            "arg1": "TypeError: Argument 1 ('candidate') to RTCPeerConnection.addIceCandidate must be an instance of RTCIceCandidate",
                             "arg2": "TypeError: Argument 2 ('successCallback') to RTCPeerConnection.addIceCandidate must be a function",
                             "arg3": "TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.addIceCandidate must be a function"
                         });
@@ -235,6 +240,7 @@
                     })
                     .then(function () {
                         return badInput("getStats", "selector", {
+                            "arg1": "TypeError: Argument 1 ('selector') to RTCPeerConnection.getStats must be an instance of MediaStreamTrack",
                             "arg2": "TypeError: Argument 2 ('successCallback') to RTCPeerConnection.getStats must be a function",
                             "arg3": "TypeError: Argument 3 ('errorCallback') to RTCPeerConnection.getStats must be a function"
                         });

@@ -57,7 +57,7 @@ function enqueueOperation(peerConnection, operation)
     });
 }
 
-function objectAndCallbacksOverload(args, functionName, objectConstructor, objectInfo, promiseMode, legacyMode)
+function objectAndCallbacksOverload(args, functionName, objectInfo, promiseMode, legacyMode)
 {
     "use strict";
 
@@ -73,7 +73,7 @@ function objectAndCallbacksOverload(args, functionName, objectConstructor, objec
         objectArgOk = true;
         argsCount = 1;
     } else {
-        const hasMatchingType = objectArg instanceof objectConstructor;
+        const hasMatchingType = objectArg instanceof objectInfo.constructor;
         objectArgOk = objectInfo.defaultsToNull ? (objectArg === null || typeof objectArg === "undefined" || hasMatchingType) : hasMatchingType;
     }
 

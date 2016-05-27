@@ -62,13 +62,21 @@
                         return promiseShouldReject(`pc.${functionName}(null, null)`, "reason");
                     })
                     .then(function () {
-                        debug("*** Bad input for callback arguments");
+                        debug("*** Bad input");
                         reason = `TypeError: Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a function`;
                         return promiseShouldReject(`pc.${functionName}({}, emptyFunc)`, "reason");
                     })
                     .then(function () {
                         reason = `TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`;
                         return promiseShouldReject(`pc.${functionName}(emptyFunc, {})`, "reason");
+                    })
+                    .then(function () {
+                        reason = `TypeError: Argument 1 ('options') to RTCPeerConnection.${functionName} must be a Dictionary`;
+                        return promiseShouldReject(`pc.${functionName}(1)`, "reason");
+                    })
+                    .then(function () {
+                        reason = `TypeError: Argument 3 ('options') to RTCPeerConnection.${functionName} must be a Dictionary`;
+                        return promiseShouldReject(`pc.${functionName}(emptyFunc, emptyFunc, 1)`, "reason");
                     })
                     .then(function () {
                         debug("");

@@ -103,18 +103,28 @@ function callbacksAndDictionaryOverload(args, functionName, promiseMode, legacyM
 {
     "use strict";
 
-    if (args.length == 0 || args.length == 1)
-        return promiseMode(args[0]);
+    if (args.length <= 1) {
+        // Zero or one arguments: Promise mode
+        const options = args[0];
+        if (args.length && !@isDictionary(options))
+            return @Promise.@reject(new @TypeError(`Argument 1 ('options') to RTCPeerConnection.${functionName} must be a Dictionary`));
+
+        return promiseMode(options);
+    }
 
     // More than one argument: Legacy mode
     const successCallback = args[0];
     const errorCallback = args[1];
+    const options = args[2];
 
     if (typeof successCallback !== "function")
         return @Promise.@reject(new @TypeError(`Argument 1 ('successCallback') to RTCPeerConnection.${functionName} must be a function`));
 
     if (typeof errorCallback !== "function")
         return @Promise.@reject(new @TypeError(`Argument 2 ('errorCallback') to RTCPeerConnection.${functionName} must be a function`));
+
+    if (args.length > 2 && !@isDictionary(options))
+        return @Promise.@reject(new @TypeError(`Argument 3 ('options') to RTCPeerConnection.${functionName} must be a Dictionary`));
 
     return legacyMode(successCallback, errorCallback, args[2]);
 }

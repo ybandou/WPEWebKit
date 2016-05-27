@@ -19,9 +19,11 @@ PASS promise pc.createOffer({}, emptyFunc, emptyFunc) rejected with TypeError: A
 PASS promise pc.createOffer(emptyFunc, null) rejected with TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.createOffer must be a function
 PASS promise pc.createOffer(null, emptyFunc) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createOffer must be a function
 PASS promise pc.createOffer(null, null) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createOffer must be a function
-*** Bad input for callback arguments
+*** Bad input
 PASS promise pc.createOffer({}, emptyFunc) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createOffer must be a function
 PASS promise pc.createOffer(emptyFunc, {}) rejected with TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.createOffer must be a function
+PASS promise pc.createOffer(1) rejected with TypeError: Argument 1 ('options') to RTCPeerConnection.createOffer must be a Dictionary
+PASS promise pc.createOffer(emptyFunc, emptyFunc, 1) rejected with TypeError: Argument 3 ('options') to RTCPeerConnection.createOffer must be a Dictionary
 
 *** Test createAnswer
 PASS promise pc.createAnswer() did not reject with TypeError.
@@ -38,9 +40,11 @@ PASS promise pc.createAnswer({}, emptyFunc, emptyFunc) rejected with TypeError: 
 PASS promise pc.createAnswer(emptyFunc, null) rejected with TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.createAnswer must be a function
 PASS promise pc.createAnswer(null, emptyFunc) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createAnswer must be a function
 PASS promise pc.createAnswer(null, null) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createAnswer must be a function
-*** Bad input for callback arguments
+*** Bad input
 PASS promise pc.createAnswer({}, emptyFunc) rejected with TypeError: Argument 1 ('successCallback') to RTCPeerConnection.createAnswer must be a function
 PASS promise pc.createAnswer(emptyFunc, {}) rejected with TypeError: Argument 2 ('errorCallback') to RTCPeerConnection.createAnswer must be a function
+PASS promise pc.createAnswer(1) rejected with TypeError: Argument 1 ('options') to RTCPeerConnection.createAnswer must be a Dictionary
+PASS promise pc.createAnswer(emptyFunc, emptyFunc, 1) rejected with TypeError: Argument 3 ('options') to RTCPeerConnection.createAnswer must be a Dictionary
 
 *** Test setLocalDescription
 PASS promise pc.setLocalDescription(desc) did not reject with TypeError.

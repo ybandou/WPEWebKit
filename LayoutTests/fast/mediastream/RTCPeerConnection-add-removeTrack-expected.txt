@@ -3,6 +3,19 @@ Test basic behavior of RTCPeerConnection.add/removeTrack()
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
 
 
+Test bad addTrack() arguments
+PASS pc.addTrack() threw exception TypeError: Not enough arguments.
+PASS pc.addTrack(null) threw exception TypeError: Argument 1 ('track') to RTCPeerConnection.privateAddTrack must be an instance of MediaStreamTrack.
+PASS pc.addTrack({}) threw exception TypeError: Argument 1 ('track') to RTCPeerConnection.privateAddTrack must be an instance of MediaStreamTrack.
+PASS pc.addTrack(track, null) threw exception TypeError: Argument 2 ('streams') to RTCPeerConnection.privateAddTrack must be an instance of MediaStream.
+PASS pc.addTrack(track, {}) threw exception TypeError: Argument 2 ('streams') to RTCPeerConnection.privateAddTrack must be an instance of MediaStream.
+PASS pc.addTrack(track, stream, null) threw exception TypeError: Argument 3 ('streams') to RTCPeerConnection.privateAddTrack must be an instance of MediaStream.
+
+Test bad removeTrack() arguments
+PASS pc.removeTrack() threw exception TypeError: Not enough arguments.
+PASS pc.removeTrack(null) threw exception TypeError: Argument 1 ('sender') to RTCPeerConnection.privateRemoveTrack must be an instance of RTCRtpSender.
+PASS pc.removeTrack({}) threw exception TypeError: Argument 1 ('sender') to RTCPeerConnection.privateRemoveTrack must be an instance of RTCRtpSender.
+
 PASS pc.getSenders().length is 0
 PASS sender = pc.addTrack(track, stream) did not throw exception.
 PASS sender is an instance of RTCRtpSender

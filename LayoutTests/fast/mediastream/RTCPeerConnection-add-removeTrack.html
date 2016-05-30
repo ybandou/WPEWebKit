@@ -32,6 +32,21 @@
                 stream = s;
                 track = stream.getTracks()[0];
 
+                debug("Test bad addTrack() arguments");
+                shouldThrow("pc.addTrack()");
+                shouldThrow("pc.addTrack(null)");
+                shouldThrow("pc.addTrack({})");
+                shouldThrow("pc.addTrack(track, null)");
+                shouldThrow("pc.addTrack(track, {})");
+                shouldThrow("pc.addTrack(track, stream, null)");
+                debug("");
+
+                debug("Test bad removeTrack() arguments");
+                shouldThrow("pc.removeTrack()");
+                shouldThrow("pc.removeTrack(null)");
+                shouldThrow("pc.removeTrack({})");
+                debug("");
+
                 shouldBe("pc.getSenders().length", "0");
 
                 shouldNotThrow("sender = pc.addTrack(track, stream)");

@@ -79,6 +79,7 @@ namespace WebCore {
     macro(ReadableStreamReader) \
     macro(ReadableStreamController) \
     macro(RTCIceCandidate) \
+    macro(RTCRtpSender) \
     macro(RTCSessionDescription) \
 
 class WebCoreBuiltinNames {

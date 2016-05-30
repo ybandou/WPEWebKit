@@ -76,6 +76,17 @@ function addTrack()
 {
     "use strict";
 
+    if (arguments.length < 1)
+        throw new @TypeError("Not enough arguments");
+
+    if (!(arguments[0] instanceof @MediaStreamTrack))
+        throw new @TypeError("Argument 1 ('track') to RTCPeerConnection.addTrack must be an instance of MediaStreamTrack");
+
+    for (let i = 1; i < arguments.length; ++i) {
+        if (!(arguments[i] instanceof @MediaStream))
+            throw new @TypeError(`Argument ${i + 1} ('streams') to RTCPeerConnection.addTrack must be an instance of MediaStream`);
+    }
+
     return this.@privateAddTrack.@apply(this, arguments);
 }
 
@@ -83,7 +94,14 @@ function removeTrack()
 {
     "use strict";
 
-    return this.@privateRemoveTrack.@apply(this, arguments);
+    if (arguments.length < 1)
+        throw new @TypeError("Not enough arguments");
+
+    const sender = arguments[0];
+    if (!(sender instanceof @RTCRtpSender))
+        throw new @TypeError("Argument 1 ('sender') to RTCPeerConnection.removeTrack must be an instance of RTCRtpSender");
+
+    return this.@privateRemoveTrack.@call(this, sender);
 }
 
 function addStream()

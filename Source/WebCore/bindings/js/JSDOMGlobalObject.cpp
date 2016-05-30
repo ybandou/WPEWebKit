@@ -33,6 +33,7 @@
 #include "JSMediaStream.h"
 #include "JSMediaStreamTrack.h"
 #include "JSRTCIceCandidate.h"
+#include "JSRTCRtpSender.h"
 #include "JSRTCSessionDescription.h"
 #include "JSReadableStream.h"
 #include "JSReadableStreamPrivateConstructors.h"
@@ -95,6 +96,7 @@ void JSDOMGlobalObject::addBuiltinGlobals(VM& vm)
         JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().ReadableStreamReaderPrivateName(), privateReadableStreamReaderConstructor, DontDelete | ReadOnly),
 #if ENABLE(WEB_RTC)
         JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().RTCIceCandidatePrivateName(), JSRTCIceCandidate::getConstructor(vm, this), DontDelete | ReadOnly),
+        JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().RTCRtpSenderPrivateName(), JSRTCRtpSender::getConstructor(vm, this), DontDelete | ReadOnly),
         JSDOMGlobalObject::GlobalPropertyInfo(clientData.builtinNames().RTCSessionDescriptionPrivateName(), JSRTCSessionDescription::getConstructor(vm, this), DontDelete | ReadOnly),
 #endif
     };

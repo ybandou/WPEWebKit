@@ -210,8 +210,6 @@ RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(Ref<MediaStreamTrack
         return nullptr;
     }
 
-    // FIXME: Check if there is a sender with track already (has github issue)?
-
     String transceiverMid = RTCRtpTransceiver::getNextMid();
     const String& trackKind = track->kind();
     const String& trackId = track->id();

@@ -214,9 +214,9 @@ RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(Ref<MediaStreamTrack
     const String& trackKind = track->kind();
     const String& trackId = track->id();
 
-    RefPtr<RTCRtpSender> sender = RTCRtpSender::create(WTFMove(track), Vector<String>(), *this);
-    RefPtr<RTCRtpReceiver> receiver = m_backend->createReceiver(transceiverMid, trackKind, trackId);
-    Ref<RTCRtpTransceiver> transceiver = RTCRtpTransceiver::create(WTFMove(sender), WTFMove(receiver));
+    auto sender = RTCRtpSender::create(WTFMove(track), Vector<String>(), *this);
+    auto receiver = m_backend->createReceiver(transceiverMid, trackKind, trackId);
+    auto transceiver = RTCRtpTransceiver::create(WTFMove(sender), WTFMove(receiver));
     transceiver->setProvisionalMid(transceiverMid);
 
     return completeAddTransceiver(WTFMove(transceiver), init);
@@ -237,9 +237,9 @@ RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(const String& kind, 
     String transceiverMid = RTCRtpTransceiver::getNextMid();
     String trackId = createCanonicalUUIDString();
 
-    RefPtr<RTCRtpSender> sender = RTCRtpSender::create(kind, Vector<String>(), *this);
-    RefPtr<RTCRtpReceiver> receiver = m_backend->createReceiver(transceiverMid, kind, trackId);
-    Ref<RTCRtpTransceiver> transceiver = RTCRtpTransceiver::create(WTFMove(sender), WTFMove(receiver));
+    auto sender = RTCRtpSender::create(kind, Vector<String>(), *this);
+    auto receiver = m_backend->createReceiver(transceiverMid, kind, trackId);
+    auto transceiver = RTCRtpTransceiver::create(WTFMove(sender), WTFMove(receiver));
     transceiver->setProvisionalMid(transceiverMid);
 
     return completeAddTransceiver(WTFMove(transceiver), init);

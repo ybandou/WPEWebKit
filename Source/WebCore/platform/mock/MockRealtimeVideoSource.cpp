@@ -49,14 +49,14 @@
 namespace WebCore {
 
 #if !PLATFORM(MAC) && !PLATFORM(IOS)
-RefPtr<MockRealtimeVideoSource> MockRealtimeVideoSource::create()
+Ref<MockRealtimeVideoSource> MockRealtimeVideoSource::create()
 {
-    return adoptRef(new MockRealtimeVideoSource(MockRealtimeMediaSource::mockVideoSourceName()));
+    return adoptRef(*new MockRealtimeVideoSource(MockRealtimeMediaSource::mockVideoSourceName()));
 }
 
-RefPtr<MockRealtimeVideoSource> MockRealtimeVideoSource::createMuted(const String& name)
+Ref<MockRealtimeVideoSource> MockRealtimeVideoSource::createMuted(const String& name)
 {
-    RefPtr<MockRealtimeVideoSource> source = adoptRef(new MockRealtimeVideoSource(name));
+    Ref<MockRealtimeVideoSource> source = adoptRef(*new MockRealtimeVideoSource(name));
     source->m_muted = true;
 
     return source;

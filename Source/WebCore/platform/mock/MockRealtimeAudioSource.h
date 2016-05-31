@@ -43,8 +43,8 @@ namespace WebCore {
 class MockRealtimeAudioSource : public MockRealtimeMediaSource {
 public:
 
-    static RefPtr<MockRealtimeAudioSource> create();
-    static RefPtr<MockRealtimeAudioSource> createMuted(const String& name);
+    static Ref<MockRealtimeAudioSource> create();
+    static Ref<MockRealtimeAudioSource> createMuted(const String& name);
 
     virtual ~MockRealtimeAudioSource() { }
 

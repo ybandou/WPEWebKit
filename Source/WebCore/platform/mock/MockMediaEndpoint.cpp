@@ -182,18 +182,13 @@ void MockMediaEndpoint::addRemoteCandidate(IceCandidate& candidate, const String
     UNUSED_PARAM(password);
 }
 
-RefPtr<RealtimeMediaSource> MockMediaEndpoint::createMutedRemoteSource(const String&, RealtimeMediaSource::Type type)
+Ref<RealtimeMediaSource> MockMediaEndpoint::createMutedRemoteSource(const String&, RealtimeMediaSource::Type type)
 {
-    switch (type) {
-    case RealtimeMediaSource::Audio:
+    if (type == RealtimeMediaSource::Audio)
         return MockRealtimeAudioSource::createMuted("remote audio");
-    case RealtimeMediaSource::Video:
-        return MockRealtimeVideoSource::createMuted("remote video");
-    case RealtimeMediaSource::None:
-        ASSERT_NOT_REACHED();
-    }
 
-    return nullptr;
+    ASSERT(type == RealtimeMediaSource::Video);
+    return MockRealtimeVideoSource::createMuted("remote video");
 }
 
 void MockMediaEndpoint::replaceSendSource(RealtimeMediaSource& newSource, const String& mid)

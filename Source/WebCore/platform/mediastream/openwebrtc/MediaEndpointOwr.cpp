@@ -298,7 +298,7 @@ void MediaEndpointOwr::addRemoteCandidate(IceCandidate& candidate, const String&
     }
 }
 
-RefPtr<RealtimeMediaSource> MediaEndpointOwr::createMutedRemoteSource(const String& mid, RealtimeMediaSource::Type type)
+Ref<RealtimeMediaSource> MediaEndpointOwr::createMutedRemoteSource(const String& mid, RealtimeMediaSource::Type type)
 {
     String name;
     String id("not used");
@@ -313,7 +313,7 @@ RefPtr<RealtimeMediaSource> MediaEndpointOwr::createMutedRemoteSource(const Stri
     RefPtr<RealtimeMediaSourceOwr> source = adoptRef(new RealtimeMediaSourceOwr(nullptr, id, type, name));
     m_mutedRemoteSources.set(mid, source);
 
-    return source;
+    return *source;
 }
 
 void MediaEndpointOwr::replaceSendSource(RealtimeMediaSource& newSource, const String& mid)

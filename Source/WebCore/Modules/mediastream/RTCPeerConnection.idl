@@ -79,8 +79,8 @@
     [JSBuiltin] void addStream(MediaStream stream);
     [JSBuiltin] void removeStream(MediaStream stream);
 
-    [StrictTypeChecking, RaisesException] RTCRtpTransceiver addTransceiver(MediaStreamTrack track, optional Dictionary init);
-    [StrictTypeChecking, RaisesException] RTCRtpTransceiver addTransceiver(DOMString kind, optional Dictionary init);
+    [StrictTypeChecking, RaisesException] RTCRtpTransceiver addTransceiver(MediaStreamTrack track, optional RTCRtpTransceiverInit init);
+    [StrictTypeChecking, RaisesException] RTCRtpTransceiver addTransceiver(DOMString kind, optional RTCRtpTransceiverInit init);
 
     [JSBuiltin] Promise setLocalDescription(RTCSessionDescription description);
     // Legacy signature: Promise setLocalDescription(RTCSessionDescription description
@@ -130,4 +130,15 @@
     attribute EventHandler oniceconnectionstatechange;
     attribute EventHandler onicegatheringstatechange;
     attribute EventHandler ondatachannel;
+};
+
+enum RTCRtpTransceiverDirection {
+    "sendrecv",
+    "sendonly",
+    "recvonly",
+    "inactive"
+};
+
+dictionary RTCRtpTransceiverInit {
+    RTCRtpTransceiverDirection direction = "sendrecv";
 };

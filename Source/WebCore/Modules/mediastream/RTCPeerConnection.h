@@ -73,8 +73,19 @@ public:
     RefPtr<RTCRtpSender> privateAddTrack(Ref<MediaStreamTrack>&&, Vector<MediaStream*>, ExceptionCode&);
     void privateRemoveTrack(RTCRtpSender&, ExceptionCode&);
 
-    RefPtr<RTCRtpTransceiver> addTransceiver(Ref<MediaStreamTrack>&&, const Dictionary& init, ExceptionCode&);
-    RefPtr<RTCRtpTransceiver> addTransceiver(const String& kind, const Dictionary& init, ExceptionCode&);
+    enum class RtpTransceiverDirection {
+        Sendrecv,
+        Sendonly,
+        Recvonly,
+        Inactive
+    };
+
+    struct RtpTransceiverInit {
+        RtpTransceiverDirection direction;
+    };
+
+    RefPtr<RTCRtpTransceiver> addTransceiver(Ref<MediaStreamTrack>&&, const RtpTransceiverInit& init, ExceptionCode&);
+    RefPtr<RTCRtpTransceiver> addTransceiver(const String& kind, const RtpTransceiverInit& init, ExceptionCode&);
 
     void queuedCreateOffer(const Dictionary& offerOptions, PeerConnection::SessionDescriptionPromise&&);
     void queuedCreateAnswer(const Dictionary& answerOptions, PeerConnection::SessionDescriptionPromise&&);
@@ -116,7 +127,7 @@ private:
     RTCPeerConnection(ScriptExecutionContext&, RefPtr<RTCConfiguration>&&, ExceptionCode&);
 
     RTCRtpSenderClient& senderClient() { return *this; }
-    RefPtr<RTCRtpTransceiver> completeAddTransceiver(Ref<RTCRtpTransceiver>&&, const Dictionary& init, ExceptionCode&);
+    RefPtr<RTCRtpTransceiver> completeAddTransceiver(Ref<RTCRtpTransceiver>&&, const RtpTransceiverInit& init);
 
     // EventTarget implementation.
     void refEventTarget() override { ref(); }

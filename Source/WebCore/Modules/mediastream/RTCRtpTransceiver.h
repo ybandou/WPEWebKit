@@ -43,8 +43,6 @@
 
 namespace WebCore {
 
-class Dictionary;
-
 class RTCRtpTransceiver : public RefCounted<RTCRtpTransceiver>, public ScriptWrappable {
 public:
     enum class Direction {
@@ -56,8 +54,6 @@ public:
 
     static Ref<RTCRtpTransceiver> create(RefPtr<RTCRtpSender>&&, RefPtr<RTCRtpReceiver>&&);
     virtual ~RTCRtpTransceiver() { }
-
-    bool configureWithDictionary(const Dictionary&);
 
     bool hasSendingDirection() const;
     void enableSendingDirection();

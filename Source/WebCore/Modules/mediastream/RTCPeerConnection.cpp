@@ -203,7 +203,7 @@ void RTCPeerConnection::privateRemoveTrack(RTCRtpSender& sender, ExceptionCode& 
     m_backend->markAsNeedingNegotiation();
 }
 
-RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(Ref<MediaStreamTrack>&& track, const Dictionary& init, ExceptionCode& ec)
+RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(Ref<MediaStreamTrack>&& track, const RtpTransceiverInit& init, ExceptionCode& ec)
 {
     if (m_signalingState == SignalingState::Closed) {
         ec = INVALID_STATE_ERR;
@@ -219,10 +219,10 @@ RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(Ref<MediaStreamTrack
     Ref<RTCRtpTransceiver> transceiver = RTCRtpTransceiver::create(WTFMove(sender), WTFMove(receiver));
     transceiver->setProvisionalMid(transceiverMid);
 
-    return completeAddTransceiver(WTFMove(transceiver), init, ec);
+    return completeAddTransceiver(WTFMove(transceiver), init);
 }
 
-RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(const String& kind, const Dictionary& init, ExceptionCode& ec)
+RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(const String& kind, const RtpTransceiverInit& init, ExceptionCode& ec)
 {
     if (m_signalingState == SignalingState::Closed) {
         ec = INVALID_STATE_ERR;
@@ -242,15 +242,12 @@ RefPtr<RTCRtpTransceiver> RTCPeerConnection::addTransceiver(const String& kind, 
     Ref<RTCRtpTransceiver> transceiver = RTCRtpTransceiver::create(WTFMove(sender), WTFMove(receiver));
     transceiver->setProvisionalMid(transceiverMid);
 
-    return completeAddTransceiver(WTFMove(transceiver), init, ec);
+    return completeAddTransceiver(WTFMove(transceiver), init);
 }
 
-RefPtr<RTCRtpTransceiver> RTCPeerConnection::completeAddTransceiver(Ref<RTCRtpTransceiver>&& transceiver, const Dictionary& init, ExceptionCode& ec)
+RefPtr<RTCRtpTransceiver> RTCPeerConnection::completeAddTransceiver(Ref<RTCRtpTransceiver>&& transceiver, const RtpTransceiverInit& init)
 {
-    if (!transceiver->configureWithDictionary(init)) {
-        ec = TypeError;
-        return nullptr;
-    }
+    transceiver->setDirection(static_cast<RTCRtpTransceiver::Direction>(init.direction));
 
     m_transceiverSet.append(transceiver.copyRef());
     m_backend->markAsNeedingNegotiation();

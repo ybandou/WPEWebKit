@@ -33,7 +33,6 @@
 
 #if ENABLE(WEB_RTC)
 
-#include "Dictionary.h"
 #include <wtf/NeverDestroyed.h>
 
 namespace WebCore {
@@ -80,34 +79,6 @@ const String& RTCRtpTransceiver::directionString() const
 
     ASSERT_NOT_REACHED();
     return emptyString();
-}
-
-static bool parseDirectionString(const String& string, RTCRtpTransceiver::Direction& outDirection)
-{
-    if (string == sendrecvString())
-        outDirection = RTCRtpTransceiver::Direction::Sendrecv;
-    else if (string == sendonlyString())
-        outDirection = RTCRtpTransceiver::Direction::Sendonly;
-    else if (string == recvonlyString())
-        outDirection = RTCRtpTransceiver::Direction::Recvonly;
-    else if (string == inactiveString())
-        outDirection = RTCRtpTransceiver::Direction::Inactive;
-    else
-        return false;
-
-    return true;
-}
-
-bool RTCRtpTransceiver::configureWithDictionary(const Dictionary& dictionary)
-{
-    String direction;
-    if (dictionary.get("direction", direction)) {
-        if (!parseDirectionString(direction, m_direction))
-            return false;
-    }
-
-    // FIMXE: fix streams
-    return true;
 }
 
 bool RTCRtpTransceiver::hasSendingDirection() const

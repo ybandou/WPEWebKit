@@ -100,28 +100,6 @@ RTCPeerConnection::~RTCPeerConnection()
     stop();
 }
 
-Vector<RefPtr<RTCRtpSender>> RTCPeerConnection::getSenders() const
-{
-    Vector<RefPtr<RTCRtpSender>> senders;
-    senders.reserveCapacity(m_transceiverSet.size());
-
-    for (auto& transceiver : m_transceiverSet)
-        senders.append(transceiver->sender());
-
-    return senders;
-}
-
-Vector<RefPtr<RTCRtpReceiver>> RTCPeerConnection::getReceivers() const
-{
-    Vector<RefPtr<RTCRtpReceiver>> receivers;
-    receivers.reserveCapacity(m_transceiverSet.size());
-
-    for (auto& transceiver : m_transceiverSet)
-        receivers.append(transceiver->receiver());
-
-    return receivers;
-}
-
 Vector<RefPtr<MediaStream>> RTCPeerConnection::privateGetRemoteStreams() const
 {
     return m_backend->getRemoteStreams();
@@ -140,7 +118,7 @@ RefPtr<RTCRtpSender> RTCPeerConnection::privateAddTrack(Ref<MediaStreamTrack>&& 
         return nullptr;
     }
 
-    for (auto& sender : getSenders()) {
+    for (auto& sender : m_transceiverSet->getSenders()) {
         if (sender->trackId() == track->id()) {
             // FIXME: Spec says InvalidParameter
             ec = INVALID_MODIFICATION_ERR;
@@ -155,7 +133,7 @@ RefPtr<RTCRtpSender> RTCPeerConnection::privateAddTrack(Ref<MediaStreamTrack>&& 
     RTCRtpSender* sender = nullptr;
 
     // Reuse an existing sender with the same track kind if it has never been used to send before.
-    for (auto& transceiver : m_transceiverSet) {
+    for (auto& transceiver : m_transceiverSet->list()) {
         RTCRtpSender& existingSender = *transceiver->sender();
         if (existingSender.trackKind() == track->kind() && existingSender.trackId().isNull() && !transceiver->hasSendingDirection()) {
             existingSender.setTrack(WTFMove(track));
@@ -180,7 +158,7 @@ RefPtr<RTCRtpSender> RTCPeerConnection::privateAddTrack(Ref<MediaStreamTrack>&& 
         transceiver->setProvisionalMid(transceiverMid);
 
         sender = transceiver->sender();
-        m_transceiverSet.append(WTFMove(transceiver));
+        m_transceiverSet->append(WTFMove(transceiver));
     }
 
     m_backend->markAsNeedingNegotiation();
@@ -195,7 +173,7 @@ void RTCPeerConnection::privateRemoveTrack(RTCRtpSender& sender, ExceptionCode& 
         return;
     }
 
-    if (!getSenders().contains(&sender))
+    if (!m_transceiverSet->getSenders().contains(&sender))
         return;
 
     sender.stop();
@@ -249,7 +227,7 @@ RefPtr<RTCRtpTransceiver> RTCPeerConnection::completeAddTransceiver(Ref<RTCRtpTr
 {
     transceiver->setDirection(static_cast<RTCRtpTransceiver::Direction>(init.direction));
 
-    m_transceiverSet.append(transceiver.copyRef());
+    m_transceiverSet->append(transceiver.copyRef());
     m_backend->markAsNeedingNegotiation();
 
     return WTFMove(transceiver);
@@ -459,8 +437,8 @@ void RTCPeerConnection::close()
     m_iceConnectionState = IceConnectionState::Closed;
     m_signalingState = SignalingState::Closed;
 
-    for (auto& transceiver : m_transceiverSet)
-        transceiver->sender()->stop();
+    for (auto& sender : m_transceiverSet->getSenders())
+        sender->stop();
 }
 
 void RTCPeerConnection::stop()
@@ -481,7 +459,7 @@ bool RTCPeerConnection::canSuspendForDocumentSuspension() const
 
 void RTCPeerConnection::addTransceiver(RefPtr<RTCRtpTransceiver>&& transceiver)
 {
-    m_transceiverSet.append(WTFMove(transceiver));
+    m_transceiverSet->append(WTFMove(transceiver));
 }
 
 void RTCPeerConnection::setSignalingState(SignalingState newState)

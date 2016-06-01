@@ -132,12 +132,8 @@
     attribute EventHandler ondatachannel;
 };
 
-enum RTCRtpTransceiverDirection {
-    "sendrecv",
-    "sendonly",
-    "recvonly",
-    "inactive"
-};
+// This enum is mirrored in RTCRtpTransceiver.idl
+enum RTCRtpTransceiverDirection { "sendrecv", "sendonly", "recvonly", "inactive" };
 
 dictionary RTCRtpTransceiverInit {
     RTCRtpTransceiverDirection direction = "sendrecv";

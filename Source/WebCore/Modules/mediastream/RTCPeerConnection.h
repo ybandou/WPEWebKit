@@ -73,12 +73,8 @@ public:
     RefPtr<RTCRtpSender> privateAddTrack(Ref<MediaStreamTrack>&&, Vector<MediaStream*>, ExceptionCode&);
     void privateRemoveTrack(RTCRtpSender&, ExceptionCode&);
 
-    enum class RtpTransceiverDirection {
-        Sendrecv,
-        Sendonly,
-        Recvonly,
-        Inactive
-    };
+    // This enum is mirrored in RTCRtpTransceiver.h
+    enum class RtpTransceiverDirection { Sendrecv, Sendonly, Recvonly, Inactive };
 
     struct RtpTransceiverInit {
         RtpTransceiverDirection direction;

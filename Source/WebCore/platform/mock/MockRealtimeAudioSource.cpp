@@ -47,9 +47,8 @@ Ref<MockRealtimeAudioSource> MockRealtimeAudioSource::create()
 
 Ref<MockRealtimeAudioSource> MockRealtimeAudioSource::createMuted(const String& name)
 {
-    Ref<MockRealtimeAudioSource> source = adoptRef(*new MockRealtimeAudioSource(name));
+    auto source = adoptRef(*new MockRealtimeAudioSource(name));
     source->m_muted = true;
-
     return source;
 }
 

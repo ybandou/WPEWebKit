@@ -45,12 +45,8 @@ namespace WebCore {
 
 class RTCRtpTransceiver : public RefCounted<RTCRtpTransceiver>, public ScriptWrappable {
 public:
-    enum class Direction {
-        Sendrecv,
-        Sendonly,
-        Recvonly,
-        Inactive
-    };
+    // This enum is mirrored in RTCPeerConnection.h
+    enum class Direction { Sendrecv, Sendonly, Recvonly, Inactive };
 
     static Ref<RTCRtpTransceiver> create(RefPtr<RTCRtpSender>&&, RefPtr<RTCRtpReceiver>&&);
     virtual ~RTCRtpTransceiver() { }

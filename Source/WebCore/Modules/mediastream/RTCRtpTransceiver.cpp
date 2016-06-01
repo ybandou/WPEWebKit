@@ -78,7 +78,7 @@ const String& RTCRtpTransceiver::directionString() const
     }
 
     ASSERT_NOT_REACHED();
-    return emptyString();
+    return inactiveString();
 }
 
 bool RTCRtpTransceiver::hasSendingDirection() const

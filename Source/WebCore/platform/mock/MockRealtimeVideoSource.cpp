@@ -56,9 +56,8 @@ Ref<MockRealtimeVideoSource> MockRealtimeVideoSource::create()
 
 Ref<MockRealtimeVideoSource> MockRealtimeVideoSource::createMuted(const String& name)
 {
-    Ref<MockRealtimeVideoSource> source = adoptRef(*new MockRealtimeVideoSource(name));
+    auto source = adoptRef(*new MockRealtimeVideoSource(name));
     source->m_muted = true;
-
     return source;
 }
 #endif

@@ -44,7 +44,6 @@ class MediaEndpoint;
 class MediaEndpointClient;
 class MediaEndpointSessionConfiguration;
 class MediaPayload;
-class PeerMediaDescription;
 class RealtimeMediaSource;
 
 typedef std::unique_ptr<MediaEndpoint> (*CreateMediaEndpoint)(MediaEndpointClient&);

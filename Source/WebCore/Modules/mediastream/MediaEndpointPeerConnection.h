@@ -43,6 +43,7 @@ namespace WebCore {
 
 class MediaStream;
 class MediaStreamTrack;
+class PeerMediaDescription;
 class SDPProcessor;
 
 typedef Vector<RefPtr<PeerMediaDescription>> MediaDescriptionVector;

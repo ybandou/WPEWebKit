@@ -202,7 +202,7 @@ void MediaEndpointPeerConnection::createOfferTask(RTCOfferOptions&, SessionDescr
 
     configurationSnapshot->setSessionVersion(m_sdpOfferSessionVersion++);
 
-    RtpTransceiverVector transceivers = RtpTransceiverVector(m_client->getTransceivers());
+    auto transceivers = RtpTransceiverVector(m_client->getTransceivers());
 
     // Remove any transceiver objects from transceivers that can be matched to an existing media description.
     for (auto& mediaDescription : configurationSnapshot->mediaDescriptions()) {

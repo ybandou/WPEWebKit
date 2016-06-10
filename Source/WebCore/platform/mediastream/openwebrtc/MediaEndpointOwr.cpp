@@ -52,7 +52,7 @@ static void gotIncomingSource(OwrMediaSession*, OwrMediaSource*, MediaEndpointOw
 
 static const Vector<String> candidateTypes = { "host", "srflx", "prflx", "relay" };
 static const Vector<String> candidateTcpTypes = { "", "active", "passive", "so" };
-static const Vector<String> codecTypes = { "NONE", "PCMU", "PCMA", "OPUS", "H264", "VP8" };
+static const Vector<String> codecTypes = { "NONE", "PCMU", "PCMA", "OPUS", "H264" };
 
 static std::unique_ptr<MediaEndpoint> createMediaEndpointOwr(MediaEndpointClient& client)
 {
@@ -135,15 +135,6 @@ MediaPayloadVector MediaEndpointOwr::getDefaultVideoPayloads()
     payload->setCcmfir(true);
     payload->setNackpli(true);
     payload->addParameter("packetizationMode", 1);
-    payloads.append(payload);
-
-    payload = MediaPayload::create();
-    payload->setType(100);
-    payload->setEncodingName("VP8");
-    payload->setClockRate(90000);
-    payload->setCcmfir(true);
-    payload->setNackpli(true);
-    payload->setNack(true);
     payloads.append(payload);
 
     payload = MediaPayload::create();

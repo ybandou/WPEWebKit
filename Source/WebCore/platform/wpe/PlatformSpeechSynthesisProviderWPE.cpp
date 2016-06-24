@@ -178,6 +178,7 @@ namespace WebCore {
     void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesisUtterance> utteranceWrapper)
     {
         m_utterance = utteranceWrapper;
+
         if (!m_speakThread) {
             if (!(m_speakThread = createThread(speakFunctionThread ,this, "WebCore: PlatformSpeechSynthesisProviderWPE"))) {
                 printf("ERROR  in creating speaking  Thread\n");
@@ -332,21 +333,52 @@ void PlatformSpeechSynthesisProviderWPE::speak(PassRefPtr<PlatformSpeechSynthesi
 
     void PlatformSpeechSynthesisProviderWPE::speakFunctionThread(void* context )
     {
-        cst_voice *v;
         PlatformSpeechSynthesisProviderWPE *providerContext = (PlatformSpeechSynthesisProviderWPE*) context;
         int status = 0;
+        cst_voice *vs;
+        char name[4];
+        PlatformSpeechSynthesisVoice* sVoice;
 
-        v = register_cmu_us_kal(NULL); //TODO:Based on user settings 
-        printf ("This is line %d of file %s (function %s) speak for\n",__LINE__, __FILE__, __func__);
+        memset(name,0,sizeof(name));
+        sVoice = providerContext->m_utterance->voice();
+        if(sVoice){
+            /*switch  the voice type to FLITE  compatilble voice type  */
+            if (!strcmp(sVoice->name().utf8().data(), "US English Male")) {
+                printf("US English Male -> kal \n");
+                strncpy(name, "kal", 3);
+            }
+           else if (!strcmp (sVoice->name().utf8().data(), "US English Female")) {
+               printf("US English Female -> slt \n");
+               strncpy(name, "slt", 3);
+           }
+           else if(!strcmp(sVoice->name().utf8().data(), "Scottish English Male")) {
+               printf("Scottish English Male -> awb \n");
+               strncpy(name,"awb", 3);
+           }
+           else {
+               printf ("WARNING :: Voice name  is not metioned.Setting to default value \n");
+               strncpy(name, "kal", 3);
+           }
+       } else {
+               printf ("WARNING :: Voice name  is not metioned.Setting to default value \n");
+               strncpy(name, "kal", 3);
+       }
+       flite_voice_list = flite_set_voice_list();
+       if (flite_voice_list == NULL) {
+           flite_set_voice_list();
+       }
+       printf ("Going tro  set  %s : \n",name);
+       vs = flite_voice_select(name);
+       if (vs == 0)
+       vs = flite_voice_select(NULL);
 
         //Creating Wav File
-        flite_text_to_speech(providerContext->m_utterance->text().utf8().data(), v, WAV_FILE);
+        flite_text_to_speech(providerContext->m_utterance->text().utf8().data(), vs, WAV_FILE);
         providerContext->m_cancelled = 0;
         providerContext->m_isPaused = 0;
 
         //Play back Wav  File
         providerContext->speechMain();
-
         status = remove(WAV_FILE);
         if (status) {
             printf("Unable to delete the WAV file \n");
@@ -487,6 +519,7 @@ int PlatformSpeechSynthesisProviderWPE::speechMain()
         WaveChunkHeader *c;
         u_int type, len;
         int bigEndian, nativeFormat;
+        WaveFmtBody *f; /*for rate control of  stream */
 
         if (size < sizeof(WaveHeader))
             return -1;
@@ -525,6 +558,9 @@ int PlatformSpeechSynthesisProviderWPE::speechMain()
             fprintf(stderr, ("Warning: format is changed to %s\n"),
                     snd_pcm_format_name((snd_pcm_format_t)nativeFormat));    
         hwparams.format = (snd_pcm_format_t)nativeFormat;
+        f = (WaveFmtBody*) buffer;
+        hwparams.rate = TO_CPU_INT(f->sample_fq, bigEndian); //setiing the rate param for voices
+
         if (size > len)
             memmove((u_char *)buffer, (u_char *)buffer + len, size - len);
         size -= len;

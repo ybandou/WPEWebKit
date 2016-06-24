@@ -74,6 +74,14 @@ typedef struct au_header {
     u_int sample_rate;      /* sample rate */
     u_int channels;         /* number of channels (voices) */
 } AuHeader;
+typedef struct {
+        u_short format;         /* see WAV_FMT_* */
+        u_short channels;
+        u_int sample_fq;        /* frequence of sample */
+        u_int byte_p_sec;
+        u_short byte_p_spl;     /* samplesize; 1 or 2 bytes */
+        u_short bit_p_spl;      /* 8, 12 or 16 bit */
+} WaveFmtBody;
 
 
 

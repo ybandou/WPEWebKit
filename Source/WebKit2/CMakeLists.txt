@@ -461,6 +461,7 @@ set(WebKit2_SOURCES
     UIProcess/API/C/WKVibration.cpp
     UIProcess/API/C/WKViewportAttributes.cpp
     UIProcess/API/C/WKWindowFeaturesRef.cpp
+    UIProcess/API/C/WKProxy.cpp
 
     UIProcess/Authentication/AuthenticationChallengeProxy.cpp
     UIProcess/Authentication/AuthenticationDecisionListener.cpp

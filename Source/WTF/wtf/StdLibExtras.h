@@ -361,6 +361,24 @@ T exchange(T& t, U&& newValue)
 }
 #endif
 
+#if COMPILER_SUPPORTS(CXX_USER_LITERALS)
+// These literals are available in C++14, so once we require C++14 compilers we can get rid of them here.
+// (User-literals need to have a leading underscore so we add it here - the "real" literals don't have underscores).
+namespace literals {
+namespace chrono_literals {
+    constexpr inline chrono::seconds operator"" _s(unsigned long long s)
+    {
+        return chrono::seconds(static_cast<chrono::seconds::rep>(s));
+    }
+
+    constexpr chrono::milliseconds operator"" _ms(unsigned long long ms)
+    {
+        return chrono::milliseconds(static_cast<chrono::milliseconds::rep>(ms));
+    }
+}
+}
+#endif
+
 template<WTF::CheckMoveParameterTag, typename T>
 ALWAYS_INLINE constexpr typename remove_reference<T>::type&& move(T&& value)
 {
@@ -391,7 +409,7 @@ using WTF::is8ByteAligned;
 using WTF::safeCast;
 using WTF::tryBinarySearch;
 
-#if !COMPILER(CLANG) || __cplusplus >= 201400L
+#if COMPILER_SUPPORTS(CXX_USER_LITERALS)
 // We normally don't want to bring in entire std namespaces, but literals are an exception.
 using namespace std::literals::chrono_literals;
 #endif

@@ -45,7 +45,7 @@ NetworkResourceLoadParameters::NetworkResourceLoadParameters()
     , shouldClearReferrerOnHTTPSToHTTPRedirect(true)
     , defersLoading(false)
     , needsCertificateInfo(false)
-    , maximumBufferingTime(0ms)
+    , maximumBufferingTime(0_ms)
 {
 }
 

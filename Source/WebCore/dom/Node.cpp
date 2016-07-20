@@ -2087,7 +2087,7 @@ void Node::unregisterMutationObserver(MutationObserverRegistration* registration
     if (!registry)
         return;
 
-    registry->removeFirstMatching([registration](auto& current) {
+    registry->removeFirstMatching([registration] (const std::unique_ptr<MutationObserverRegistration>& current) {
         return current.get() == registration;
     });
 }

@@ -380,7 +380,7 @@ void NetworkProcess::fetchWebsiteData(SessionID sessionID, OptionSet<WebsiteData
     }
 
     if (websiteDataTypes.contains(WebsiteDataType::DiskCache)) {
-        fetchDiskCacheEntries(sessionID, fetchOptions, [callbackAggregator = WTFMove(callbackAggregator)](auto entries) mutable {
+        fetchDiskCacheEntries(sessionID, fetchOptions, [callbackAggregator = WTFMove(callbackAggregator)](Vector<WebsiteData::Entry> entries) mutable {
             callbackAggregator->m_websiteData.entries.appendVector(entries);
         });
     }

@@ -146,7 +146,7 @@ MediaTime MediaSource::currentTime() const
 
 std::unique_ptr<PlatformTimeRanges> MediaSource::buffered() const
 {
-    if (m_buffered && m_activeSourceBuffers->length() && std::all_of(m_activeSourceBuffers->begin(), m_activeSourceBuffers->end(), [](auto& buffer) { return !buffer->isBufferedDirty(); }))
+    if (m_buffered && m_activeSourceBuffers->length() && std::all_of(m_activeSourceBuffers->begin(), m_activeSourceBuffers->end(), [] (RefPtr<SourceBuffer>& buffer) { return !buffer->isBufferedDirty(); }))
         return std::make_unique<PlatformTimeRanges>(*m_buffered);
 
     m_buffered = std::make_unique<PlatformTimeRanges>();
@@ -264,7 +264,7 @@ void MediaSource::monitorSourceBuffers()
     // playback position:
     auto begin = m_activeSourceBuffers->begin();
     auto end = m_activeSourceBuffers->end();
-    if (std::any_of(begin, end, [](auto& sourceBuffer) {
+    if (std::any_of(begin, end, [](RefPtr<SourceBuffer>& sourceBuffer) {
         return !sourceBuffer->hasCurrentTime();
     })) {
         // 1. Set the HTMLMediaElement.readyState attribute to HAVE_METADATA.
@@ -278,7 +278,7 @@ void MediaSource::monitorSourceBuffers()
 
     // ↳ If buffered for all objects in activeSourceBuffers contain TimeRanges that include the current
     // playback position and enough data to ensure uninterrupted playback:
-    if (std::all_of(begin, end, [](auto& sourceBuffer) {
+    if (std::all_of(begin, end, [](RefPtr<SourceBuffer>& sourceBuffer) {
         return sourceBuffer->hasFutureTime() && sourceBuffer->canPlayThrough();
     })) {
         // 1. Set the HTMLMediaElement.readyState attribute to HAVE_ENOUGH_DATA.
@@ -295,7 +295,7 @@ void MediaSource::monitorSourceBuffers()
 
     // ↳ If buffered for all objects in activeSourceBuffers contain a TimeRange that includes
     // the current playback position and some time beyond the current playback position, then run the following steps:
-    if (std::all_of(begin, end, [](auto& sourceBuffer) {
+    if (std::all_of(begin, end, [](RefPtr<SourceBuffer>& sourceBuffer) {
         return sourceBuffer->hasFutureTime();
     })) {
         // 1. Set the HTMLMediaElement.readyState attribute to HAVE_FUTURE_DATA.
@@ -429,7 +429,7 @@ void MediaSource::endOfStream(Optional<EndOfStreamError> error, ExceptionCode& e
 
     // 2. If the updating attribute equals true on any SourceBuffer in sourceBuffers, then throw an
     // INVALID_STATE_ERR exception and abort these steps.
-    if (std::any_of(m_sourceBuffers->begin(), m_sourceBuffers->end(), [](auto& sourceBuffer) { return sourceBuffer->updating(); })) {
+    if (std::any_of(m_sourceBuffers->begin(), m_sourceBuffers->end(), [](RefPtr<SourceBuffer>& sourceBuffer) { return sourceBuffer->updating(); })) {
         ec = INVALID_STATE_ERR;
         return;
     }
@@ -574,26 +574,26 @@ void MediaSource::removeSourceBuffer(SourceBuffer& buffer, ExceptionCode& ec)
 
         // 5.3 For each AudioTrack object in the SourceBuffer audioTracks list, run the following steps:
         while (audioTracks->length()) {
-            auto& track = *audioTracks->lastItem();
+            AudioTrack* track = audioTracks->lastItem();
 
             // 5.3.1 Set the sourceBuffer attribute on the AudioTrack object to null.
-            track.setSourceBuffer(nullptr);
+            track->setSourceBuffer(nullptr);
 
             // 5.3.2 If the enabled attribute on the AudioTrack object is true, then set the removed enabled
             // audio track flag to true.
-            if (track.enabled())
+            if (track->enabled())
                 removedEnabledAudioTrack = true;
 
             // 5.3.3 Remove the AudioTrack object from the HTMLMediaElement audioTracks list.
             // 5.3.4 Queue a task to fire a trusted event named removetrack, that does not bubble and is not
             // cancelable, and that uses the TrackEvent interface, at the HTMLMediaElement audioTracks list.
             if (mediaElement())
-                mediaElement()->removeAudioTrack(track);
+                mediaElement()->removeAudioTrack(*track);
 
             // 5.3.5 Remove the AudioTrack object from the SourceBuffer audioTracks list.
             // 5.3.6 Queue a task to fire a trusted event named removetrack, that does not bubble and is not
             // cancelable, and that uses the TrackEvent interface, at the SourceBuffer audioTracks list.
-            audioTracks->remove(track);
+            audioTracks->remove(*track);
         }
 
         // 5.4 If the removed enabled audio track flag equals true, then queue a task to fire a simple event
@@ -614,26 +614,26 @@ void MediaSource::removeSourceBuffer(SourceBuffer& buffer, ExceptionCode& ec)
 
         // 7.3 For each VideoTrack object in the SourceBuffer videoTracks list, run the following steps:
         while (videoTracks->length()) {
-            auto& track = *videoTracks->lastItem();
+            VideoTrack* track = videoTracks->lastItem();
 
             // 7.3.1 Set the sourceBuffer attribute on the VideoTrack object to null.
-            track.setSourceBuffer(nullptr);
+            track->setSourceBuffer(nullptr);
 
             // 7.3.2 If the selected attribute on the VideoTrack object is true, then set the removed selected
             // video track flag to true.
-            if (track.selected())
+            if (track->selected())
                 removedSelectedVideoTrack = true;
 
             // 7.3.3 Remove the VideoTrack object from the HTMLMediaElement videoTracks list.
             // 7.3.4 Queue a task to fire a trusted event named removetrack, that does not bubble and is not
             // cancelable, and that uses the TrackEvent interface, at the HTMLMediaElement videoTracks list.
             if (mediaElement())
-                mediaElement()->removeVideoTrack(track);
+                mediaElement()->removeVideoTrack(*track);
 
             // 7.3.5 Remove the VideoTrack object from the SourceBuffer videoTracks list.
             // 7.3.6 Queue a task to fire a trusted event named removetrack, that does not bubble and is not
             // cancelable, and that uses the TrackEvent interface, at the SourceBuffer videoTracks list.
-            videoTracks->remove(track);
+            videoTracks->remove(*track);
         }
 
         // 7.4 If the removed selected video track flag equals true, then queue a task to fire a simple event
@@ -654,26 +654,26 @@ void MediaSource::removeSourceBuffer(SourceBuffer& buffer, ExceptionCode& ec)
 
         // 9.3 For each TextTrack object in the SourceBuffer textTracks list, run the following steps:
         while (textTracks->length()) {
-            auto& track = *textTracks->lastItem();
+            TextTrack* track = textTracks->lastItem();
 
             // 9.3.1 Set the sourceBuffer attribute on the TextTrack object to null.
-            track.setSourceBuffer(nullptr);
+            track->setSourceBuffer(nullptr);
 
             // 9.3.2 If the mode attribute on the TextTrack object is set to "showing" or "hidden", then
             // set the removed enabled text track flag to true.
-            if (track.mode() == TextTrack::Mode::Showing || track.mode() == TextTrack::Mode::Hidden)
+            if (track->mode() == TextTrack::Mode::Showing || track->mode() == TextTrack::Mode::Hidden)
                 removedEnabledTextTrack = true;
 
             // 9.3.3 Remove the TextTrack object from the HTMLMediaElement textTracks list.
             // 9.3.4 Queue a task to fire a trusted event named removetrack, that does not bubble and is not
             // cancelable, and that uses the TrackEvent interface, at the HTMLMediaElement textTracks list.
             if (mediaElement())
-                mediaElement()->removeTextTrack(track);
+                mediaElement()->removeTextTrack(*track);
 
             // 9.3.5 Remove the TextTrack object from the SourceBuffer textTracks list.
             // 9.3.6 Queue a task to fire a trusted event named removetrack, that does not bubble and is not
             // cancelable, and that uses the TrackEvent interface, at the SourceBuffer textTracks list.
-            textTracks->remove(track);
+            textTracks->remove(*track);
         }
         
         // 9.4 If the removed enabled text track flag equals true, then queue a task to fire a simple event

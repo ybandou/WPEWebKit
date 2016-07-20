@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2016-06-15  Romain Bellessort  <romain.bellessort@crf.canon.fr>
 
         Enabling Shadow DOM for all platforms
@@ -4639,6 +4640,8 @@
 
         * Configurations/Base.xcconfig:
 
+=======
+>>>>>>> parent of c9860ae... Move to C++14.
 2016-05-22  Saam barati  <sbarati@apple.com>
 
         REGRESSION(r199075): String.prototype.replace fails after being used many times with different replace values

@@ -90,11 +90,11 @@ RefPtr<NetscapePlugInStreamLoader> WebLoaderStrategy::schedulePluginStreamLoad(F
 static std::chrono::milliseconds maximumBufferingTime(CachedResource* resource)
 {
 #if !ENABLE(NETWORK_CACHE)
-    return 0ms;
+    return 0_ms;
 #endif
 
     if (!resource)
-        return 0ms;
+        return 0_ms;
 
     switch (resource->type()) {
     case CachedResource::CSSStyleSheet:
@@ -105,7 +105,7 @@ static std::chrono::milliseconds maximumBufferingTime(CachedResource* resource)
     case CachedResource::FontResource:
         return std::chrono::milliseconds::max();
     case CachedResource::ImageResource:
-        return 500ms;
+        return 500_ms;
     case CachedResource::MediaResource:
     case CachedResource::MainResource:
     case CachedResource::RawResource:
@@ -121,11 +121,11 @@ static std::chrono::milliseconds maximumBufferingTime(CachedResource* resource)
 #if ENABLE(XSLT)
     case CachedResource::XSLStyleSheet:
 #endif
-        return 0ms;
+        return 0_ms;
     }
 
     ASSERT_NOT_REACHED();
-    return 0ms;
+    return 0_ms;
 }
 
 void WebLoaderStrategy::scheduleLoad(ResourceLoader& resourceLoader, CachedResource* resource, bool shouldClearReferrerOnHTTPSToHTTPRedirect)

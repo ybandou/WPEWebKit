@@ -3220,7 +3220,7 @@ void Element::detachAttrNodeFromElementWithValue(Attr* attrNode, const AtomicStr
     attrNode->detachFromElementWithValue(value);
 
     auto& attrNodeList = *attrNodeListForElement(*this);
-    bool found = attrNodeList.removeFirstMatching([attrNode](auto& attribute) {
+    bool found = attrNodeList.removeFirstMatching([attrNode] (const RefPtr<Attr>& attribute) {
         return attribute->qualifiedName() == attrNode->qualifiedName();
     });
     ASSERT_UNUSED(found, found);

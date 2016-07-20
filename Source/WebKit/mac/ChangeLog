@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2016-06-15  Romain Bellessort  <romain.bellessort@crf.canon.fr>
 
         Enabling Shadow DOM for all platforms
@@ -338,6 +339,8 @@
 
         * Configurations/Base.xcconfig:
 
+=======
+>>>>>>> parent of c9860ae... Move to C++14.
 2016-05-20  Enrica Casucci  <enrica@apple.com>
 
         Drag cannot start if no drag data or custom data is available in the Pasteboard.

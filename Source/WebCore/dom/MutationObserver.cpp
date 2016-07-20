@@ -265,7 +265,7 @@ void MutationObserver::notifyMutationObservers()
         Vector<RefPtr<MutationObserver>> notifyList;
         copyToVector(activeMutationObservers(), notifyList);
         activeMutationObservers().clear();
-        std::sort(notifyList.begin(), notifyList.end(), [](auto& lhs, auto& rhs) {
+        std::sort(notifyList.begin(), notifyList.end(), [](const RefPtr<MutationObserver>& lhs, const RefPtr<MutationObserver>& rhs) {
             return lhs->m_priority < rhs->m_priority;
         });
 

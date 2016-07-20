@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2016-05-23  Michael Catanzaro  <mcatanzaro@igalia.com>
 
         woff2_dec.cc triggers -Wsign-compare, -Wunused-but-set-variable
@@ -16,6 +17,8 @@
 
         * gtest/xcode/Config/General.xcconfig:
 
+=======
+>>>>>>> parent of c9860ae... Move to C++14.
 2016-03-17  Csaba Osztrogonác  <ossy@webkit.org>
 
         Unreviewed, line ending fixes.

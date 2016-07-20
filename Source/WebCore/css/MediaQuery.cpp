@@ -73,9 +73,11 @@ MediaQuery::MediaQuery(Restrictor restrictor, const String& mediaType, Vector<Me
     , m_mediaType(mediaType.convertToASCIILowercase())
     , m_expressions(WTFMove(expressions))
 {
-    std::sort(m_expressions.begin(), m_expressions.end(), [](auto& a, auto& b) {
-        return codePointCompare(a.serialize(), b.serialize()) < 0;
+
+    std::sort(m_expressions.begin(), m_expressions.end(), [](const MediaQueryExpression& a, const MediaQueryExpression& b) {
+        return codePointCompare(a.serialize(),b.serialize()) < 0;
     });
+
 
     // Remove all duplicated expressions.
     String key;

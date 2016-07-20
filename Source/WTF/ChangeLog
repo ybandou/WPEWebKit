@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2016-06-14  Myles C. Maxfield  <mmaxfield@apple.com>
 
         Honor bidi unicode codepoints
@@ -1014,6 +1015,8 @@
         (std::literals::chrono_literals::operator _s): Deleted.
         (std::literals::chrono_literals::operator _ms): Deleted.
 
+=======
+>>>>>>> parent of c9860ae... Move to C++14.
 2016-05-20  Rawinder Singh  <rawinder.singh-webkit@cisra.canon.com.au>
 
         Implement operator== for WeakPtr

@@ -38,13 +38,13 @@ using namespace WebCore;
 
 namespace WebKit {
 
-static const std::chrono::seconds swipeSnapshotRemovalWatchdogAfterFirstVisuallyNonEmptyLayoutDuration = 3s;
-static const std::chrono::milliseconds swipeSnapshotRemovalActiveLoadMonitoringInterval = 250ms;
+static const std::chrono::seconds swipeSnapshotRemovalWatchdogAfterFirstVisuallyNonEmptyLayoutDuration = 3_s;
+static const std::chrono::milliseconds swipeSnapshotRemovalActiveLoadMonitoringInterval = 250_ms;
 
 #if PLATFORM(MAC)
-static const std::chrono::seconds swipeSnapshotRemovalWatchdogDuration = 5s;
+static const std::chrono::seconds swipeSnapshotRemovalWatchdogDuration = 5_s;
 #else
-static const std::chrono::seconds swipeSnapshotRemovalWatchdogDuration = 3s;
+static const std::chrono::seconds swipeSnapshotRemovalWatchdogDuration = 3_s;
 #endif
 
 static HashMap<uint64_t, ViewGestureController*>& viewGestureControllersForAllPages()

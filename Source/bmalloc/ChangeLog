@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2016-06-12  David Kilzer  <ddkilzer@apple.com>
 
         Crash in com.apple.WebKit.WebContent at std::__1::__call_once_proxy<std::__1::tuple<CrashReporterSupportLibrary()::$_0&&> >
@@ -74,6 +75,8 @@
 
         * Configurations/Base.xcconfig:
 
+=======
+>>>>>>> parent of c9860ae... Move to C++14.
 2016-05-17  Geoffrey Garen  <ggaren@apple.com>
 
         REGRESSION: JetStream crashes on some iPhones

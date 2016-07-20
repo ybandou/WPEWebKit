@@ -101,7 +101,7 @@ void MediaQueryMatcher::addListener(Ref<MediaQueryListListener>&& listener, Medi
 
 void MediaQueryMatcher::removeListener(MediaQueryListListener& listener, MediaQueryList& query)
 {
-    m_listeners.removeFirstMatching([&listener, &query](auto& existingListener) {
+    m_listeners.removeFirstMatching([&listener, &query](const Listener& existingListener) {
         return existingListener.listener.get() == listener && existingListener.query.ptr() == &query;
     });
 }

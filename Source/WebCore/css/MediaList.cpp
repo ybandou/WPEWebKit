@@ -175,7 +175,7 @@ bool MediaQuerySet::remove(const String& queryString)
     auto parsedQuery = internalParse(queryString);
     if (!parsedQuery)
         return false;
-    return m_queries.removeFirstMatching([&parsedQuery](auto& query) {
+    return m_queries.removeFirstMatching([&parsedQuery](MediaQuery query) {
         return query == parsedQuery.value();
     });
 }

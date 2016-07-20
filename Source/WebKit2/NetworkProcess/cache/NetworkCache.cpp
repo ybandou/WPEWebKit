@@ -150,7 +150,7 @@ static bool responseHasExpired(const WebCore::ResourceResponse& response, std::c
     auto age = WebCore::computeCurrentAge(response, timestamp);
     auto lifetime = WebCore::computeFreshnessLifetimeForHTTPFamily(response, timestamp);
 
-    auto maximumStaleness = maxStale ? maxStale.value() : 0ms;
+    auto maximumStaleness = maxStale ? maxStale.value() : 0_ms;
     bool hasExpired = age - lifetime > maximumStaleness;
 
 #ifndef LOG_DISABLED
@@ -167,7 +167,7 @@ static bool responseNeedsRevalidation(const WebCore::ResourceResponse& response,
     if (requestDirectives.noCache)
         return true;
     // For requests we ignore max-age values other than zero.
-    if (requestDirectives.maxAge && requestDirectives.maxAge.value() == 0ms)
+    if (requestDirectives.maxAge && requestDirectives.maxAge.value() == 0_ms)
         return true;
 
     return responseHasExpired(response, timestamp, requestDirectives.maxStale);
@@ -284,7 +284,7 @@ static StoreDecision makeStoreDecision(const WebCore::ResourceRequest& originalR
     bool storeUnconditionallyForHistoryNavigation = isMainResource || originalRequest.priority() == WebCore::ResourceLoadPriority::VeryHigh;
     if (!storeUnconditionallyForHistoryNavigation) {
         auto now = std::chrono::system_clock::now();
-        bool hasNonZeroLifetime = !response.cacheControlContainsNoCache() && WebCore::computeFreshnessLifetimeForHTTPFamily(response, now) > 0ms;
+        bool hasNonZeroLifetime = !response.cacheControlContainsNoCache() && WebCore::computeFreshnessLifetimeForHTTPFamily(response, now) > 0_ms;
 
         bool possiblyReusable = response.hasCacheValidatorFields() || hasNonZeroLifetime;
         if (!possiblyReusable)

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2016-06-15  Romain Bellessort  <romain.bellessort@crf.canon.fr>
 
         Enabling Shadow DOM for all platforms
@@ -2264,6 +2265,8 @@
         (WebKit::RemoteLayerTreeDrawingArea::scheduleCompositingLayerFlushImmediately):
         (WebKit::RemoteLayerTreeDrawingArea::scheduleCompositingLayerFlush):
 
+=======
+>>>>>>> parent of c9860ae... Move to C++14.
 2016-05-21  Andy Estes  <aestes@apple.com>
 
         REGRESSION (r188642): All pages are blank when printing a webpage in iOS Safari

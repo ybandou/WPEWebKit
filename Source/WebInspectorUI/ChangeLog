@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2016-06-14  Matt Baker  <mattbaker@apple.com>
 
         Web Inspector: Rename DataGrid.showColumn to setColumnVisible
@@ -1167,6 +1168,8 @@
 
         * Configurations/Base.xcconfig:
 
+=======
+>>>>>>> parent of c9860ae... Move to C++14.
 2016-05-21  Matt Baker  <mattbaker@apple.com>
 
         Web Inspector: Creating the CSSStyleDetailsSidebarPanel takes about 50ms (20%) of main load

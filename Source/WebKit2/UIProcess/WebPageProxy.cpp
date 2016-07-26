@@ -2729,7 +2729,7 @@ void WebPageProxy::getBytecodeProfile(std::function<void (const String&, Callbac
 void WebPageProxy::isWebProcessResponsive(std::function<void (bool isWebProcessResponsive)> callbackFunction)
 {
     if (!isValid()) {
-        RunLoop::main().dispatch([callbackFunction = WTFMove(callbackFunction)] {
+        RunLoop::main().dispatch([callbackFunction] {
             bool isWebProcessResponsive = true;
             callbackFunction(isWebProcessResponsive);
         });

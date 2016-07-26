@@ -5418,7 +5418,7 @@ void Document::addAutoSizedNode(Text& node, float candidateSize)
 
 void Document::updateAutoSizedNodes()
 {
-    m_textAutoSizedNodes.removeIf([](auto& keyAndValue) {
+    m_textAutoSizedNodes.removeIf([] (TextAutoSizingMap::KeyValuePairType& keyAndValue) {
         return keyAndValue.value->adjustTextNodeSizes() == TextAutoSizingValue::StillHasNodes::No;
     });
 }

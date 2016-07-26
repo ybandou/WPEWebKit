@@ -2804,7 +2804,7 @@ void SerializedScriptValue::writeBlobsToDiskForIndexedDB(NoncopyableFunction<voi
     ASSERT(hasBlobURLs());
 
     RefPtr<SerializedScriptValue> protectedThis(this);
-    blobRegistry().writeBlobsToTemporaryFiles(m_blobURLs, [completionHandler = WTFMove(completionHandler), this, protectedThis = WTFMove(protectedThis)](auto& blobFilePaths) {
+    blobRegistry().writeBlobsToTemporaryFiles(m_blobURLs, [completionHandler = WTFMove(completionHandler), this, protectedThis = WTFMove(protectedThis)](const Vector<String>& blobFilePaths) {
         ASSERT(isMainThread());
 
         if (blobFilePaths.isEmpty()) {

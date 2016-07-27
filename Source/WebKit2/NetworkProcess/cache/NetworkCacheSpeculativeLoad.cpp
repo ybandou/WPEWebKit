@@ -105,7 +105,7 @@ void SpeculativeLoad::didReceiveBuffer(Ref<SharedBuffer>&& buffer, int reportedE
 void SpeculativeLoad::didFinishLoading(double finishTime)
 {
     if (!m_cacheEntryForValidation && m_bufferedDataForCache)
-        m_cacheEntryForValidation = NetworkCache::singleton().store(m_originalRequest, m_response, WTFMove(m_bufferedDataForCache), [](auto& mappedBody) { });
+        m_cacheEntryForValidation = NetworkCache::singleton().store(m_originalRequest, m_response, WTFMove(m_bufferedDataForCache), [](NetworkCache::MappedBody& mappedBody) { });
 
     didComplete();
 }

@@ -306,27 +306,31 @@ static RefPtr<API::UserContentExtension> createExtension(const String& identifie
 
 void UserContentExtensionStore::lookupContentExtension(const WTF::String& identifier, std::function<void(RefPtr<API::UserContentExtension>, std::error_code)> completionHandler)
 {
-    m_readQueue->dispatch([protectedThis = Ref<Object>(*this), identifier = identifier.isolatedCopy(), storePath = m_storePath.isolatedCopy(), completionHandler = WTFMove(completionHandler)]() mutable {
-        auto path = constructedPath(storePath, identifier);
+    RefPtr<UserContentExtensionStore> self(this);
+    StringCapture identifierCapture(identifier);
+    StringCapture pathCapture(m_storePath);
+
+    m_readQueue->dispatch([self, identifierCapture, pathCapture, completionHandler] {
+        auto path = constructedPath(pathCapture.string(), identifierCapture.string());
         
         ContentExtensionMetaData metaData;
         Data fileData;
         if (!openAndMapContentExtension(path, metaData, fileData)) {
-            RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), completionHandler = WTFMove(completionHandler)] {
+            RunLoop::main().dispatch([self, completionHandler] {
                 completionHandler(nullptr, Error::LookupFailed);
             });
             return;
         }
         
         if (metaData.version != UserContentExtensionStore::CurrentContentExtensionFileVersion) {
-            RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), completionHandler = WTFMove(completionHandler)] {
+            RunLoop::main().dispatch([self, completionHandler] {
                 completionHandler(nullptr, Error::VersionMismatch);
             });
             return;
         }
         
-        RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), identifier = WTFMove(identifier), fileData = WTFMove(fileData), metaData = WTFMove(metaData), completionHandler = WTFMove(completionHandler)] {
-            RefPtr<API::UserContentExtension> userContentExtension = createExtension(identifier, metaData, fileData);
+        RunLoop::main().dispatch([self, identifierCapture, fileData, metaData, completionHandler] {
+            RefPtr<API::UserContentExtension> userContentExtension = createExtension(identifierCapture.string(), metaData, fileData);
             completionHandler(userContentExtension, { });
         });
     });
@@ -334,21 +338,26 @@ void UserContentExtensionStore::lookupContentExtension(const WTF::String& identi
 
 void UserContentExtensionStore::compileContentExtension(const WTF::String& identifier, WTF::String&& json, std::function<void(RefPtr<API::UserContentExtension>, std::error_code)> completionHandler)
 {
-    m_compileQueue->dispatch([protectedThis = Ref<Object>(*this), identifier = identifier.isolatedCopy(), json = json.isolatedCopy(), storePath = m_storePath.isolatedCopy(), completionHandler = WTFMove(completionHandler)] () mutable {
-        auto path = constructedPath(storePath, identifier);
+    RefPtr<UserContentExtensionStore> self(this);
+    StringCapture identifierCapture(identifier);
+    StringCapture jsonCapture(WTFMove(json));
+    StringCapture pathCapture(m_storePath);
+
+    m_compileQueue->dispatch([self, identifierCapture, jsonCapture, pathCapture, completionHandler] () mutable {
+        auto path = constructedPath(pathCapture.string(), identifierCapture.string());
 
         ContentExtensionMetaData metaData;
         Data fileData;
-        auto error = compiledToFile(WTFMove(json), path, metaData, fileData);
+        auto error = compiledToFile(jsonCapture.releaseString(), path, metaData, fileData);
         if (error) {
-            RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), error = WTFMove(error), completionHandler = WTFMove(completionHandler)] {
+            RunLoop::main().dispatch([self, error, completionHandler] {
                 completionHandler(nullptr, error);
             });
             return;
         }
 
-        RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), identifier = WTFMove(identifier), fileData = WTFMove(fileData), metaData = WTFMove(metaData), completionHandler = WTFMove(completionHandler)] {
-            RefPtr<API::UserContentExtension> userContentExtension = createExtension(identifier, metaData, fileData);
+        RunLoop::main().dispatch([self, identifierCapture, fileData, metaData, completionHandler] {
+            RefPtr<API::UserContentExtension> userContentExtension = createExtension(identifierCapture.string(), metaData, fileData);
             completionHandler(userContentExtension, { });
         });
     });
@@ -356,17 +365,21 @@ void UserContentExtensionStore::compileContentExtension(const WTF::String& ident
 
 void UserContentExtensionStore::removeContentExtension(const WTF::String& identifier, std::function<void(std::error_code)> completionHandler)
 {
-    m_removeQueue->dispatch([protectedThis = Ref<Object>(*this), identifier = identifier.isolatedCopy(), storePath = m_storePath.isolatedCopy(), completionHandler = WTFMove(completionHandler)]() mutable {
-        auto path = constructedPath(storePath, identifier);
+    RefPtr<UserContentExtensionStore> self(this);
+    StringCapture identifierCapture(identifier);
+    StringCapture pathCapture(m_storePath);
+
+    m_removeQueue->dispatch([self, identifierCapture, pathCapture, completionHandler] {
+        auto path = constructedPath(pathCapture.string(), identifierCapture.string());
 
         if (!WebCore::deleteFile(path)) {
-            RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), completionHandler = WTFMove(completionHandler)] {
+            RunLoop::main().dispatch([self, completionHandler] {
                 completionHandler(Error::RemoveFailed);
             });
             return;
         }
 
-        RunLoop::main().dispatch([protectedThis = WTFMove(protectedThis), completionHandler = WTFMove(completionHandler)] {
+        RunLoop::main().dispatch([self, completionHandler] {
             completionHandler({ });
         });
     });

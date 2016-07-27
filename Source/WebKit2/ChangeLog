@@ -1354,79 +1354,6 @@
         * WebProcess/WebPage/ios/WebPageIOS.mm:
         (WebKit::WebPage::selectTextWithGranularityAtPoint):
 
-2016-06-01  Brady Eidson  <beidson@apple.com>
-
-        Modernize lambda usage for all callers of RunLoop::dispatch().
-        https://bugs.webkit.org/show_bug.cgi?id=158265
-
-        Reviewed by Chris Dumez.
-
-        * DatabaseProcess/DatabaseProcess.cpp:
-        (WebKit::DatabaseProcess::fetchWebsiteData):
-        (WebKit::DatabaseProcess::deleteWebsiteData):
-        (WebKit::DatabaseProcess::deleteWebsiteDataForOrigins):
-        
-        * NetworkProcess/NetworkProcess.cpp:
-        (WebKit::fetchDiskCacheEntries):
-        (WebKit::NetworkProcess::fetchWebsiteData):
-        
-        * NetworkProcess/cache/NetworkCacheStorage.cpp:
-        (WebKit::NetworkCache::Storage::remove):
-        (WebKit::NetworkCache::retrieveFromMemory):
-        
-        * Platform/IPC/Connection.cpp:
-        (IPC::Connection::SyncMessageState::processIncomingMessage):
-        (IPC::Connection::processIncomingMessage):
-        (IPC::Connection::connectionDidClose):
-        (IPC::Connection::enqueueIncomingMessage):
-        * Platform/IPC/mac/ConnectionMac.mm:
-        (IPC::Connection::receiveSourceEventHandler):
-        
-        * Shared/mac/CookieStorageShim.mm:
-        (-[WKNSURLSessionLocal _getCookieHeadersForTask:completionHandler:]):
-        * UIProcess/API/APIUserContentExtensionStore.cpp:
-        (API::UserContentExtensionStore::lookupContentExtension):
-        (API::UserContentExtensionStore::compileContentExtension):
-        (API::UserContentExtensionStore::removeContentExtension):
-        
-        * UIProcess/Launcher/ProcessLauncher.cpp:
-        (WebKit::ProcessLauncher::ProcessLauncher):
-        * UIProcess/Launcher/mac/ProcessLauncherMac.mm:
-        (WebKit::connectToService):
-        
-        * UIProcess/Storage/StorageManager.cpp:
-        (WebKit::StorageManager::getSessionStorageOrigins):
-        (WebKit::StorageManager::deleteSessionStorageOrigins):
-        (WebKit::StorageManager::deleteSessionStorageEntriesForOrigins):
-        (WebKit::StorageManager::getLocalStorageOrigins):
-        (WebKit::StorageManager::getLocalStorageOriginDetails):
-        (WebKit::StorageManager::deleteLocalStorageEntriesForOrigin):
-        (WebKit::StorageManager::deleteLocalStorageOriginsModifiedSince):
-        (WebKit::StorageManager::deleteLocalStorageEntriesForOrigins):
-        
-        * UIProcess/WebPageProxy.cpp:
-        (WebKit::WebPageProxy::isWebProcessResponsive):
-        
-        * UIProcess/WebProcessProxy.cpp:
-        (WebKit::WebProcessProxy::isResponsive):
-        
-        * UIProcess/WebsiteData/WebsiteDataStore.cpp:
-        (WebKit::WebsiteDataStore::fetchData):
-        
-        * WebProcess/Plugins/Netscape/NetscapePlugin.cpp:
-        (WebKit::NetscapePlugin::pluginThreadAsyncCall):
-        
-        * WebProcess/Plugins/PluginView.cpp:
-        (WebKit::PluginView::unprotectPluginFromDestruction):
-        
-        * WebProcess/WebPage/EventDispatcher.cpp:
-        (WebKit::EventDispatcher::wheelEvent):
-        (WebKit::EventDispatcher::gestureEvent):
-        (WebKit::EventDispatcher::touchEvent):
-        
-        * WebProcess/WebPage/ViewUpdateDispatcher.cpp:
-        (WebKit::ViewUpdateDispatcher::visibleContentRectUpdate):
-
 2016-05-31  Yusuke Suzuki  <utatane.tea@gmail.com>
 
         Unreviewed, roll out r201481, r201523: 0.3% regression in Octane code-load
@@ -2016,57 +1943,6 @@
         * UIProcess/WebsiteData/WebsiteDataStore.cpp:
         (WebKit::WebsiteDataStore::fetchData):
         (WebKit::WebsiteDataStore::removeData):
-
-2016-05-24  Chris Dumez  <cdumez@apple.com>
-
-        Use auto for some of our lambda function parameters
-        https://bugs.webkit.org/show_bug.cgi?id=158001
-
-        Reviewed by Darin Adler.
-
-        Use auto for some of our lambda function parameters now that we build with c++14.
-
-        * DatabaseProcess/IndexedDB/WebIDBConnectionToClient.cpp:
-        (WebKit::WebIDBConnectionToClient::didGetRecord):
-        * NetworkProcess/NetworkConnectionToWebProcess.cpp:
-        (WebKit::NetworkConnectionToWebProcess::writeBlobsToTemporaryFiles):
-        * NetworkProcess/NetworkProcess.cpp:
-        (WebKit::fetchDiskCacheEntries):
-        (WebKit::NetworkProcess::fetchWebsiteData):
-        (WebKit::clearDiskCacheEntries):
-        * NetworkProcess/NetworkResourceLoader.cpp:
-        (WebKit::NetworkResourceLoader::retrieveCacheEntry):
-        (WebKit::NetworkResourceLoader::tryStoreAsCacheEntry):
-        * NetworkProcess/cache/NetworkCacheSpeculativeLoad.cpp:
-        (WebKit::NetworkCache::SpeculativeLoad::didFinishLoading):
-        * NetworkProcess/cache/NetworkCacheSpeculativeLoadManager.cpp:
-        (WebKit::NetworkCache::SpeculativeLoadManager::registerLoad):
-        (WebKit::NetworkCache::SpeculativeLoadManager::retrieveEntryFromStorage):
-        (WebKit::NetworkCache::SpeculativeLoadManager::revalidateEntry):
-        (WebKit::NetworkCache::SpeculativeLoadManager::preloadEntry):
-        (WebKit::NetworkCache::SpeculativeLoadManager::retrieveSubresourcesEntry):
-        * NetworkProcess/cache/NetworkCacheStorage.cpp:
-        (WebKit::NetworkCache::Storage::removeFromPendingWriteOperations):
-        * NetworkProcess/cocoa/NetworkSessionCocoa.mm:
-        (-[WKNetworkSessionDelegate URLSession:task:willPerformHTTPRedirection:newRequest:completionHandler:]):
-        (-[WKNetworkSessionDelegate URLSession:task:_schemeUpgraded:completionHandler:]):
-        * Shared/API/Cocoa/_WKRemoteObjectInterface.mm:
-        (-[_WKRemoteObjectInterface debugDescription]):
-        * UIProcess/API/C/WKApplicationCacheManager.cpp:
-        (WKApplicationCacheManagerGetApplicationCacheOrigins):
-        * UIProcess/API/C/WKKeyValueStorageManager.cpp:
-        (WKKeyValueStorageManagerGetKeyValueStorageOrigins):
-        (WKKeyValueStorageManagerGetStorageDetailsByOrigin):
-        * UIProcess/API/C/WKResourceCacheManager.cpp:
-        (WKResourceCacheManagerGetCacheOrigins):
-        * UIProcess/API/Cocoa/WKWebsiteDataStore.mm:
-        (-[WKWebsiteDataStore _fetchDataRecordsOfTypes:withOptions:completionHandler:]):
-        * UIProcess/UserContent/WebUserContentControllerProxy.cpp:
-        (WebKit::WebUserContentControllerProxy::removeAllUserScripts):
-        (WebKit::WebUserContentControllerProxy::removeAllUserStyleSheets):
-        (WebKit::WebUserContentControllerProxy::removeAllUserMessageHandlers):
-        * WebProcess/WebPage/mac/PlatformCALayerRemote.cpp:
-        (WebKit::PlatformCALayerRemote::removeAnimationForKey):
 
 2016-05-23  Yusuke Suzuki  <utatane.tea@gmail.com>
 

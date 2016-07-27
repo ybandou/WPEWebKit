@@ -521,7 +521,7 @@ Data Storage::encodeRecord(const Record& record, Optional<BlobStorage::Blob> blo
 void Storage::removeFromPendingWriteOperations(const Key& key)
 {
     while (true) {
-        auto found = m_pendingWriteOperations.findIf([&key](auto& operation) {
+        auto found = m_pendingWriteOperations.findIf([&key](const std::unique_ptr<WriteOperation>& operation) {
             return operation->record.key == key;
         });
 
@@ -662,7 +662,8 @@ template <class T> bool retrieveFromMemory(const T& operations, const Key& key, 
     for (auto& operation : operations) {
         if (operation->record.key == key) {
             LOG(NetworkCacheStorage, "(NetworkProcess) found write operation in progress");
-            RunLoop::main().dispatch([record = operation->record, completionHandler = WTFMove(completionHandler)] {
+            auto record = operation->record;
+            RunLoop::main().dispatch([record, completionHandler] {
                 completionHandler(std::make_unique<Storage::Record>(record));
             });
             return true;

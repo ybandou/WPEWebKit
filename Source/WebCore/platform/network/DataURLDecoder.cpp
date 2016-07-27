@@ -135,7 +135,7 @@ static std::unique_ptr<DecodeTask> createDecodeTask(const URL& url, const Schedu
     auto mediaType = (isBase64 ? header.substring(0, header.length() - strlen(base64String)) : header).toString();
 
     return std::make_unique<DecodeTask>(DecodeTask {
-        urlString.isolatedCopy(),
+        WTFMove(urlString),
         WTFMove(encodedData),
         isBase64,
         scheduleContext,
@@ -172,7 +172,8 @@ void decode(const URL& url, const ScheduleContext& scheduleContext, DecodeComple
 {
     ASSERT(url.protocolIsData());
 
-    decodeQueue().dispatch([decodeTask = createDecodeTask(url, scheduleContext, WTFMove(completionHandler))]() mutable {
+    auto decodeTask = createDecodeTask(url, scheduleContext, WTFMove(completionHandler));
+    decodeQueue().dispatch([decodeTask = WTFMove(decodeTask)]() mutable {
         if (decodeTask->isBase64)
             decodeBase64(*decodeTask);
         else

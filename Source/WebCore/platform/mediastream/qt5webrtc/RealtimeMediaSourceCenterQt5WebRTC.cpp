@@ -73,14 +73,19 @@ void RealtimeVideoSourceQt5WebRTC::stopProducingData()
 
 void RealtimeVideoSourceQt5WebRTC::startRenderer()
 {
-    if (isProducingData() && !m_rtcRenderer) {
+    if (isProducingData() && !m_rtcRenderer)
         m_rtcRenderer.reset(getRTCMediaSourceCenter().createVideoRenderer(rtcStream(), this));
-    }
 }
 
 void RealtimeVideoSourceQt5WebRTC::stopRenderer()
 {
     m_rtcRenderer.reset();
+}
+
+void RealtimeVideoSourceQt5WebRTC::updateVideoRectangle(int x, int y, int w, int h)
+{
+    if (m_rtcRenderer)
+        m_rtcRenderer->setVideoRectangle(x,y,w,h);
 }
 
 void RealtimeVideoSourceQt5WebRTC::renderFrame(const unsigned char *data, int byteCount, int width, int height)
@@ -99,6 +104,23 @@ void RealtimeVideoSourceQt5WebRTC::renderFrame(const unsigned char *data, int by
     LockHolder lock(m_drawMutex);
     bool succeeded = m_platformLayerProxy->scheduleUpdateOnCompositorThread([this, frame] {
         this->pushTextureToCompositor(frame);
+    });
+    if (succeeded) {
+        m_drawCondition.wait(m_drawMutex);
+    } else {
+        printf("***Error: scheduleUpdateOnCompositorThread failed\n");
+    }
+#endif
+}
+
+void RealtimeVideoSourceQt5WebRTC::punchHole(int width, int height)
+{
+#if USE(COORDINATED_GRAPHICS_THREADED)
+    LockHolder lock(m_drawMutex);
+    bool succeeded = m_platformLayerProxy->scheduleUpdateOnCompositorThread([this, width, height] {
+        IntSize size(width, height);
+        // TODO: update m_size
+        m_platformLayerProxy->pushNextBuffer(std::make_unique<TextureMapperPlatformLayerBuffer>(0, size, TextureMapperGL::ShouldOverwriteRect));
     });
     if (succeeded) {
         m_drawCondition.wait(m_drawMutex);

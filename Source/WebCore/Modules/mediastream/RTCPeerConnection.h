@@ -59,10 +59,11 @@ class RTCIceCandidate;
 class RTCPeerConnectionErrorCallback;
 class RTCSessionDescription;
 class RTCStatsCallback;
+class MediaConstraints;
 
 class RTCPeerConnection final : public RefCounted<RTCPeerConnection>, public PeerConnectionBackendClient, public RTCRtpSenderClient, public EventTargetWithInlineData, public ActiveDOMObject {
 public:
-    static RefPtr<RTCPeerConnection> create(ScriptExecutionContext&, const Dictionary& rtcConfiguration, ExceptionCode&);
+    static RefPtr<RTCPeerConnection> create(ScriptExecutionContext&, const Dictionary& rtcConfiguration, const Dictionary& rtcConstraints, ExceptionCode&);
     ~RTCPeerConnection();
 
     Vector<RefPtr<RTCRtpSender>> getSenders() const override { return m_senderSet; }
@@ -113,7 +114,7 @@ public:
     void addRemoteStream(RefPtr<MediaStream>&&) override;
     void addRemoteDataChannel(std::unique_ptr<RTCDataChannelHandler>&&) override;
 private:
-    RTCPeerConnection(ScriptExecutionContext&, RefPtr<RTCConfiguration>&&, ExceptionCode&);
+    RTCPeerConnection(ScriptExecutionContext&, RefPtr<RTCConfiguration>&&, RefPtr<MediaConstraints>&&, ExceptionCode&);
 
     // EventTarget implementation.
     void refEventTarget() override { ref(); }
@@ -152,6 +153,7 @@ private:
     std::unique_ptr<PeerConnectionBackend> m_backend;
 
     RefPtr<RTCConfiguration> m_configuration;
+    RefPtr<MediaConstraints> m_constraints;
 
     // Deprecated or removed from spec
     Vector<RefPtr<MediaStream>> m_remoteStreams;

@@ -31,7 +31,7 @@ public:
     virtual RefPtr<RTCSessionDescription> currentRemoteDescription() const override;
     virtual RefPtr<RTCSessionDescription> pendingRemoteDescription() const override;
 
-    virtual void setConfiguration(RTCConfiguration&) override;
+    virtual void setConfiguration(RTCConfiguration&, const MediaConstraints&) override;
     virtual void addIceCandidate(RTCIceCandidate&, PeerConnection::VoidPromise&&) override;
 
     virtual void getStats(MediaStreamTrack*, PeerConnection::StatsPromise&&) override;
@@ -71,8 +71,7 @@ private:
     Optional<PeerConnection::SessionDescriptionPromise> m_sessionDescriptionPromise;
     int m_voidRequestId { WRTCInt::InvalidRequestId };
     Optional<PeerConnection::VoidPromise> m_voidPromise;
-    int m_statsRequestId { WRTCInt::InvalidRequestId };
-    Optional<PeerConnection::StatsPromise> m_statsPromise;
+    HashMap<int, Optional<PeerConnection::StatsPromise>> m_statsPromises;
 };
 
 class RTCDataChannelHandlerQt5WebRTC

@@ -54,6 +54,7 @@ class RTCStatsResponse;
 class ScriptExecutionContext;
 class MediaStream;
 class RTCDataChannelHandler;
+class MediaConstraints;
 
 namespace PeerConnection {
 typedef DOMPromise<RefPtr<RTCSessionDescription>, RefPtr<DOMError>> SessionDescriptionPromise;
@@ -105,7 +106,7 @@ public:
     virtual RefPtr<RTCSessionDescription> currentRemoteDescription() const = 0;
     virtual RefPtr<RTCSessionDescription> pendingRemoteDescription() const = 0;
 
-    virtual void setConfiguration(RTCConfiguration&) = 0;
+    virtual void setConfiguration(RTCConfiguration&, const MediaConstraints&) = 0;
     virtual void addIceCandidate(RTCIceCandidate&, PeerConnection::VoidPromise&&) = 0;
 
     virtual void getStats(MediaStreamTrack*, PeerConnection::StatsPromise&&) = 0;

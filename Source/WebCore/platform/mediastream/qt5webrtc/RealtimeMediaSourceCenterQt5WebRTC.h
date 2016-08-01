@@ -73,7 +73,9 @@ class RealtimeVideoSourceQt5WebRTC final : public RealtimeMediaSourceQt5WebRTC
     // WRTCInt::VideoPlayerClient
     void startRenderer();
     void stopRenderer();
+    void updateVideoRectangle(int x, int y, int w, int h);
     void renderFrame(const unsigned char *data, int byteCount, int width, int height) override;
+    void punchHole(int width, int height) override;
 
   private:
 #if USE(COORDINATED_GRAPHICS_THREADED)

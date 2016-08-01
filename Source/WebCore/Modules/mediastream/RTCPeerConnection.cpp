@@ -56,6 +56,7 @@
 #include <wtf/MainThread.h>
 #include <wtf/text/Base64.h>
 
+#include "MediaConstraintsImpl.h"
 #include "MediaStreamEvent.h"
 #include "EventNames.h"
 
@@ -64,13 +65,15 @@ namespace WebCore {
 using namespace PeerConnection;
 using namespace PeerConnectionStates;
 
-RefPtr<RTCPeerConnection> RTCPeerConnection::create(ScriptExecutionContext& context, const Dictionary& rtcConfiguration, ExceptionCode& ec)
+RefPtr<RTCPeerConnection> RTCPeerConnection::create(ScriptExecutionContext& context, const Dictionary& rtcConfiguration, const Dictionary& rtcConstraints, ExceptionCode& ec)
 {
     RefPtr<RTCConfiguration> configuration = RTCConfiguration::create(rtcConfiguration, ec);
     if (ec)
         return nullptr;
 
-    RefPtr<RTCPeerConnection> peerConnection = adoptRef(new RTCPeerConnection(context, WTFMove(configuration), ec));
+    RefPtr<MediaConstraints> constraints = MediaConstraintsImpl::create(rtcConstraints);
+
+    RefPtr<RTCPeerConnection> peerConnection = adoptRef(new RTCPeerConnection(context, WTFMove(configuration), WTFMove(constraints), ec));
     peerConnection->suspendIfNeeded();
     if (ec)
         return nullptr;
@@ -78,12 +81,13 @@ RefPtr<RTCPeerConnection> RTCPeerConnection::create(ScriptExecutionContext& cont
     return peerConnection;
 }
 
-RTCPeerConnection::RTCPeerConnection(ScriptExecutionContext& context, RefPtr<RTCConfiguration>&& configuration, ExceptionCode& ec)
+RTCPeerConnection::RTCPeerConnection(ScriptExecutionContext& context, RefPtr<RTCConfiguration>&& configuration, RefPtr<MediaConstraints>&& constraints, ExceptionCode& ec)
     : ActiveDOMObject(&context)
     , m_signalingState(SignalingState::Stable)
     , m_iceGatheringState(IceGatheringState::New)
     , m_iceConnectionState(IceConnectionState::New)
     , m_configuration(WTFMove(configuration))
+    , m_constraints(WTFMove(constraints))
 {
     Document& document = downcast<Document>(context);
 
@@ -98,7 +102,7 @@ RTCPeerConnection::RTCPeerConnection(ScriptExecutionContext& context, RefPtr<RTC
         return;
     }
 
-    m_backend->setConfiguration(*m_configuration);
+    m_backend->setConfiguration(*m_configuration, *m_constraints);
 }
 
 RTCPeerConnection::~RTCPeerConnection()
@@ -352,7 +356,7 @@ void RTCPeerConnection::setConfiguration(const Dictionary& configuration, Except
         return;
 
     m_configuration = WTFMove(newConfiguration);
-    m_backend->setConfiguration(*m_configuration);
+    m_backend->setConfiguration(*m_configuration, *m_constraints);
 }
 
 void RTCPeerConnection::privateGetStats(MediaStreamTrack* selector, PeerConnection::StatsPromise&& promise)

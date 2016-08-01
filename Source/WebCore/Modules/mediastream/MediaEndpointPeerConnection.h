@@ -63,7 +63,7 @@ public:
     RefPtr<RTCSessionDescription> currentRemoteDescription() const override;
     RefPtr<RTCSessionDescription> pendingRemoteDescription() const override;
 
-    void setConfiguration(RTCConfiguration&) override;
+    void setConfiguration(RTCConfiguration&, const MediaConstraints&) override;
     void addIceCandidate(RTCIceCandidate&, PeerConnection::VoidPromise&&) override;
 
     void getStats(MediaStreamTrack*, PeerConnection::StatsPromise&&) override;

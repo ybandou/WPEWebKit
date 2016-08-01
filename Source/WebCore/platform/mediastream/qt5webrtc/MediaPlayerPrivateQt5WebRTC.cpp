@@ -57,18 +57,45 @@ FloatSize MediaPlayerPrivateQt5WebRTC::naturalSize() const
 
 void MediaPlayerPrivateQt5WebRTC::setSize(const IntSize& size)
 {
+    if (size == m_size)
+        return;
+
     m_size = size;
+
+    updateVideoRectangle();
+}
+
+void MediaPlayerPrivateQt5WebRTC::setPosition(const IntPoint& position)
+{
+    if (position == m_position)
+        return;
+
+    m_position = position;
+
+    updateVideoRectangle();
 }
 
 void MediaPlayerPrivateQt5WebRTC::play()
 {
     if (!m_stream || !m_stream->isProducingData())
         return;
+
     m_paused = false;
+
     MediaStreamTrackPrivate *videoTrack = m_stream->activeVideoTrack();
     if (videoTrack) {
         RealtimeVideoSourceQt5WebRTC& videoSource = static_cast<RealtimeVideoSourceQt5WebRTC&>(videoTrack->source());
         videoSource.startRenderer();
+        updateVideoRectangle();
+    }
+}
+
+void MediaPlayerPrivateQt5WebRTC::updateVideoRectangle()
+{
+    MediaStreamTrackPrivate *videoTrack = m_stream ? m_stream->activeVideoTrack() : nullptr;
+    if (videoTrack) {
+        RealtimeVideoSourceQt5WebRTC& videoSource = static_cast<RealtimeVideoSourceQt5WebRTC&>(videoTrack->source());
+        videoSource.updateVideoRectangle(m_position.x(), m_position.y(), m_size.width(), m_size.height());
     }
 }
 

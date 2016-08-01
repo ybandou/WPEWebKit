@@ -97,11 +97,8 @@ function getStats()
     var peerConnection = this;
     var selector = null;
 
-    if (arguments.length == 2) {
+    if (arguments.length >= 1 && typeof arguments[0] === "function") {
         // Legacy qtwebkit mode
-        selector = arguments[1];
-        if (selector != null && !(selector instanceof @MediaStreamTrack))
-            throw new @TypeError("Argument 2 ('selector') to RTCPeerConnection.getStats must be an instance of MediaStreamTrack");
         var successCallback = @extractCallbackArg(arguments, 0, "successCallback", "getStats");
         return peerConnection.@privateGetStats(selector).then(successCallback, null);
     }

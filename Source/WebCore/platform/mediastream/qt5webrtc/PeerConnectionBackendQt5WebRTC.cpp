@@ -153,7 +153,7 @@ RefPtr<RTCSessionDescription> PeerConnectionBackendQt5WebRTC::pendingRemoteDescr
     return RefPtr<RTCSessionDescription>();
 }
 
-void PeerConnectionBackendQt5WebRTC::setConfiguration(RTCConfiguration& config)
+void PeerConnectionBackendQt5WebRTC::setConfiguration(RTCConfiguration& config, const MediaConstraints& constraints)
 {
     WRTCInt::RTCConfiguration wrtcConfig;
     for(auto& server : config.iceServers()) {
@@ -165,7 +165,24 @@ void PeerConnectionBackendQt5WebRTC::setConfiguration(RTCConfiguration& config)
         }
         wrtcConfig.iceServers.push_back(wrtcICEServer);
     }
-    m_rtcConnection->setConfiguration(wrtcConfig);
+
+    WRTCInt::RTCMediaConstraints wrtcConstraints;
+    Vector<MediaConstraint> mediaConstraints;
+    constraints.getMandatoryConstraints(mediaConstraints);
+    for (auto& c : mediaConstraints) {
+        std::string name = c.m_name.utf8().data();
+        std::string value = c.m_value.utf8().data();
+        wrtcConstraints[name] = value;
+    }
+    mediaConstraints.clear();
+    constraints.getOptionalConstraints(mediaConstraints);
+    for (auto& c : mediaConstraints) {
+        std::string name = c.m_name.utf8().data();
+        std::string value = c.m_value.utf8().data();
+        wrtcConstraints[name] = value;
+    }
+
+    m_rtcConnection->setConfiguration(wrtcConfig, wrtcConstraints);
 }
 
 void PeerConnectionBackendQt5WebRTC::addIceCandidate(RTCIceCandidate& candidate, PeerConnection::VoidPromise&& promise)
@@ -184,13 +201,9 @@ void PeerConnectionBackendQt5WebRTC::addIceCandidate(RTCIceCandidate& candidate,
 
 void PeerConnectionBackendQt5WebRTC::getStats(MediaStreamTrack*, PeerConnection::StatsPromise&& promise)
 {
-    ASSERT(WRTCInt::InvalidRequestId == m_statsRequestId);
-    ASSERT(!m_statsPromise);
-
     int id = m_rtcConnection->getStats();
     if (WRTCInt::InvalidRequestId != id) {
-        m_statsRequestId = id;
-        m_statsPromise = WTFMove(promise);
+        m_statsPromises.add(id, WTFMove(promise));
     } else {
         promise.reject(DOMError::create("Failed to get stats"));
     }
@@ -263,7 +276,7 @@ void PeerConnectionBackendQt5WebRTC::requestSucceeded(int id, const WRTCInt::RTC
     ASSERT(id == m_sessionDescriptionRequestId);
     ASSERT(m_sessionDescriptionPromise);
 
-    printf("%p:%s: %d, type=%s sdp=\n%s\n", this, __func__, id, desc.type.c_str(), desc.sdp.c_str());
+    // printf("%p:%s: %d, type=%s sdp=\n%s\n", this, __func__, id, desc.type.c_str(), desc.sdp.c_str());
 
     String type = desc.type.c_str();
     String sdp = desc.sdp.c_str();
@@ -277,8 +290,11 @@ void PeerConnectionBackendQt5WebRTC::requestSucceeded(int id, const WRTCInt::RTC
 
 void PeerConnectionBackendQt5WebRTC::requestSucceeded(int id, const std::vector<std::unique_ptr<WRTCInt::RTCStatsReport>>& reports)
 {
-    ASSERT(id == m_statsRequestId);
-    ASSERT(m_statsPromise);
+    Optional<PeerConnection::StatsPromise> statsPromise = m_statsPromises.take(id);
+    if (!statsPromise) {
+        printf("***Error: couldn't find promise for stats request: %d\n", id);
+        return;
+    }
 
     Ref<RTCStatsResponse> response = RTCStatsResponse::create();
     for(auto& r : reports)
@@ -293,10 +309,7 @@ void PeerConnectionBackendQt5WebRTC::requestSucceeded(int id, const std::vector<
         }
     }
 
-    m_statsPromise->resolve(WTFMove(response));
-
-    m_statsRequestId = WRTCInt::InvalidRequestId;
-    m_statsPromise = WTF::Nullopt;
+    statsPromise->resolve(WTFMove(response));
 }
 
 void PeerConnectionBackendQt5WebRTC::requestSucceeded(int id)

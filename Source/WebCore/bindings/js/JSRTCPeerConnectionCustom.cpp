@@ -47,7 +47,12 @@ EncodedJSValue JSC_HOST_CALL constructJSRTCPeerConnection(ExecState* exec)
     if (exec->hadException())
         return JSValue::encode(jsUndefined());
 
-    // Support for null configuration
+    Dictionary rtcConstraints;
+    if (exec->argumentCount() >= 2) {
+        rtcConstraints = Dictionary(exec, exec->argument(1));
+        if (exec->hadException())
+            return JSValue::encode(jsUndefined());
+    }
     // if (!rtcConfiguration.isObject())
     //     return throwVMError(exec, createTypeError(exec, "RTCPeerConnection argument must be a valid Dictionary"));
 
@@ -56,7 +61,7 @@ EncodedJSValue JSC_HOST_CALL constructJSRTCPeerConnection(ExecState* exec)
     if (!scriptExecutionContext)
         return throwVMError(exec, createReferenceError(exec, "RTCPeerConnection constructor associated document is unavailable"));
 
-    RefPtr<RTCPeerConnection> peerConnection = RTCPeerConnection::create(*scriptExecutionContext, rtcConfiguration, ec);
+    RefPtr<RTCPeerConnection> peerConnection = RTCPeerConnection::create(*scriptExecutionContext, rtcConfiguration, rtcConstraints, ec);
     if (ec == TYPE_MISMATCH_ERR) {
         setDOMException(exec, ec);
         return throwVMError(exec, createTypeError(exec, "Invalid RTCPeerConnection constructor arguments"));

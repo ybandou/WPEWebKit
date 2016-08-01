@@ -237,7 +237,7 @@ RefPtr<RTCSessionDescription> MediaEndpointPeerConnection::pendingRemoteDescript
     return nullptr;
 }
 
-void MediaEndpointPeerConnection::setConfiguration(RTCConfiguration& configuration)
+void MediaEndpointPeerConnection::setConfiguration(RTCConfiguration& configuration, const MediaConstraints&)
 {
     UNUSED_PARAM(configuration);
 

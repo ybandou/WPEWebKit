@@ -40,6 +40,7 @@ public:
     void setMuted(bool) override { }
     void setVisible(bool) override { }
     void setSize(const IntSize&) override;
+    void setPosition(const IntPoint&) override;
     void paint(GraphicsContext&, const FloatRect&) override { }
 
     MediaPlayer::NetworkState networkState() const override {return MediaPlayer::Empty; }
@@ -53,9 +54,11 @@ public:
 private:
     static void getSupportedTypes(HashSet<String, ASCIICaseInsensitiveHash>&);
     static MediaPlayer::SupportsType supportsType(const MediaEngineSupportParameters&);
+    void updateVideoRectangle();
 
     MediaPlayer* m_player;
     IntSize m_size;
+    IntPoint m_position;
     MediaStreamPrivate* m_stream {nullptr};
     bool m_paused {true};
 };

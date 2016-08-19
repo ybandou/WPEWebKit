@@ -123,14 +123,3 @@ function getStats()
 
     peerConnection.@privateGetStats(selector).then(successCallback, errorCallback);
 }
-
-function addStream()
-{
-    "use strict";
-    var peerConnection = this;
-    if (arguments.length < 1)
-        throw new @TypeError("Not enough arguments");
-    var stream = arguments[0];
-    var videoTrack = stream.getVideoTracks()[0];
-    peerConnection.addTrack(videoTrack, stream);
-}

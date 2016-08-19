@@ -110,6 +110,24 @@ RTCPeerConnection::~RTCPeerConnection()
     stop();
 }
 
+void RTCPeerConnection::addStream(Ref<MediaStream>&& stream, ExceptionCode& ec)
+{
+    if (m_signalingState == SignalingState::Closed) {
+        ec = INVALID_STATE_ERR;
+        return;
+    }
+
+    if (m_localStreams.contains(stream.ptr()))
+        return;
+
+    Vector<MediaStream*> streams;
+    streams.append(stream.ptr());
+    for (auto& track : stream->getTracks()) {
+        ExceptionCode ignore;
+        addTrack(track.releaseNonNull(), streams, ignore);
+    }
+}
+
 void RTCPeerConnection::addRemoteStream(RefPtr<MediaStream>&& stream)
 {
     if (!stream)

@@ -109,6 +109,7 @@ public:
     using RefCounted<RTCPeerConnection>::deref;
 
     // Deprecated or removed from spec
+    void addStream(Ref<MediaStream>&&, ExceptionCode&);
     Vector<RefPtr<MediaStream>> getRemoteStreams() const {return m_remoteStreams; }
     Vector<RefPtr<MediaStream>> getLocalStreams() const {return m_localStreams; }
     void addRemoteStream(RefPtr<MediaStream>&&) override;

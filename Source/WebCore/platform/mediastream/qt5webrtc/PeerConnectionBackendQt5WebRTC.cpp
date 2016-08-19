@@ -375,7 +375,8 @@ void PeerConnectionBackendQt5WebRTC::didAddRemoteStream(
         videoSource->setRTCStream(rtcStream);
         videoSources.append(videoSource.release());
     }
-    RefPtr<MediaStreamPrivate> privateStream = MediaStreamPrivate::create(audioSources, videoSources);
+    String id = rtcStream->id().c_str();
+    RefPtr<MediaStreamPrivate> privateStream = MediaStreamPrivate::create(id, audioSources, videoSources);
     RefPtr<MediaStream> mediaStream = MediaStream::create(*m_client->scriptExecutionContext(), privateStream.copyRef());
     privateStream->startProducingData();
     m_client->addRemoteStream(WTFMove(mediaStream));

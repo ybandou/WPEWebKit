@@ -254,7 +254,8 @@ void RealtimeMediaSourceCenterQt5WebRTC::createMediaStream(MediaStreamCreationCl
         videoSources.append(videoSource.release());
     }
 
-    client->didCreateStream(MediaStreamPrivate::create(audioSources, videoSources));
+    String id = rtcStream->id().c_str();
+    client->didCreateStream(MediaStreamPrivate::create(id, audioSources, videoSources));
 }
 
 bool RealtimeMediaSourceCenterQt5WebRTC::getMediaStreamTrackSources(PassRefPtr<MediaStreamTrackSourcesRequestClient> prpClient)

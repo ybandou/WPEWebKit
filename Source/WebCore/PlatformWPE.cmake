@@ -244,6 +244,7 @@ if (ENABLE_SPEECH_SYNTHESIS)
     )
    list(APPEND WebCore_LIBRARIES
          ${CFLITE_LIBRARIES}
+         ${FFMPEG_LIB}
     )
     list(APPEND WebCore_SOURCES
         platform/wpe/PlatformSpeechSynthesizerWPE.cpp

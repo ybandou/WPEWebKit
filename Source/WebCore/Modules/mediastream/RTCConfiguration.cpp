@@ -123,14 +123,18 @@ void RTCConfiguration::initialize(const Dictionary& configuration, ExceptionCode
     ArrayValue iceServers;
     bool ok = configuration.get("iceServers", iceServers);
     if (!ok || iceServers.isUndefinedOrNull()) {
+#if !USE(QT5WEBRTC)
         ec = TYPE_MISMATCH_ERR;
+#endif
         return;
     }
 
     size_t numberOfServers;
     ok = iceServers.length(numberOfServers);
     if (!ok || !numberOfServers) {
+#if !USE(QT5WEBRTC)
         ec = !ok ? TYPE_MISMATCH_ERR : INVALID_ACCESS_ERR;
+#endif
         return;
     }
 

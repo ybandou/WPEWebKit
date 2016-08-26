@@ -12,10 +12,6 @@
 #include <wtf/PassRefPtr.h>
 #include <wtf/text/WTFString.h>
 
-#if USE(COORDINATED_GRAPHICS_THREADED)
-#include "TextureMapperPlatformLayerProxy.h"
-#endif
-
 #include <wrtcint.h>
 
 namespace WebCore {
@@ -55,38 +51,9 @@ class RealtimeAudioSourceQt5WebRTC final : public RealtimeMediaSourceQt5WebRTC
 };
 
 class RealtimeVideoSourceQt5WebRTC final : public RealtimeMediaSourceQt5WebRTC
-    , public WRTCInt::RTCVideoRendererClient
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    , public TextureMapperPlatformLayerProxyProvider
-#endif
 {
   public:
     RealtimeVideoSourceQt5WebRTC(const String& id, const String& name);
-    void stopProducingData() override;
-
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    PlatformLayer* platformLayer() const override { return const_cast<RealtimeVideoSourceQt5WebRTC*>(this); }
-    RefPtr<TextureMapperPlatformLayerProxy> proxy() const override { return m_platformLayerProxy.copyRef(); }
-    void swapBuffersIfNeeded() override { }
-#endif
-
-    // WRTCInt::VideoPlayerClient
-    void startRenderer();
-    void stopRenderer();
-    void updateVideoRectangle(int x, int y, int w, int h);
-    void renderFrame(const unsigned char *data, int byteCount, int width, int height) override;
-    void punchHole(int width, int height) override;
-
-  private:
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    void pushTextureToCompositor(RefPtr<Image> frame);
-    IntSize m_size;
-    RefPtr<TextureMapperPlatformLayerProxy> m_platformLayerProxy;
-    RefPtr<GraphicsContext3D> m_context3D;
-    Condition m_drawCondition;
-    Lock m_drawMutex;
-#endif
-    std::unique_ptr<WRTCInt::RTCVideoRenderer> m_rtcRenderer;
 };
 
 typedef HashMap<String, RefPtr<RealtimeMediaSourceQt5WebRTC>> RealtimeMediaSourceQt5WebRTCMap;

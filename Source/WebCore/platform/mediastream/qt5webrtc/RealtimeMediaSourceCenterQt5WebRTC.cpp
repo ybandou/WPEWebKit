@@ -14,13 +14,6 @@
 #include <wtf/MainThread.h>
 #include <NotImplemented.h>
 
-#if USE(COORDINATED_GRAPHICS_THREADED)
-#include "TextureMapperGL.h"
-#include "TextureMapperPlatformLayerBuffer.h"
-#endif
-
-#include "BitmapImage.h"
-#include "BitmapTextureGL.h"
 #include "FloatRect.h"
 
 #include <cairo.h>
@@ -54,127 +47,11 @@ void RealtimeMediaSourceQt5WebRTC::stopProducingData()
 
 RealtimeVideoSourceQt5WebRTC::RealtimeVideoSourceQt5WebRTC(const String& id, const String& name)
     : RealtimeMediaSourceQt5WebRTC(id, RealtimeMediaSource::Video, name)
-    , m_size(320, 240)
 {
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    m_platformLayerProxy = adoptRef(new TextureMapperPlatformLayerProxy());
-    LockHolder locker(m_platformLayerProxy->lock());
-    m_platformLayerProxy->pushNextBuffer(std::make_unique<TextureMapperPlatformLayerBuffer>(0, m_size, TextureMapperGL::ShouldOverwriteRect));
-#endif
-    m_currentSettings.setWidth(m_size.width());
-    m_currentSettings.setHeight(m_size.height());
+    // TODO: obtain settings from the device
+    m_currentSettings.setWidth(320);
+    m_currentSettings.setHeight(240);
 }
-
-void RealtimeVideoSourceQt5WebRTC::stopProducingData()
-{
-    stopRenderer();
-    RealtimeMediaSourceQt5WebRTC::stopProducingData();
-}
-
-void RealtimeVideoSourceQt5WebRTC::startRenderer()
-{
-    if (isProducingData() && !m_rtcRenderer)
-        m_rtcRenderer.reset(getRTCMediaSourceCenter().createVideoRenderer(rtcStream(), this));
-}
-
-void RealtimeVideoSourceQt5WebRTC::stopRenderer()
-{
-    m_rtcRenderer.reset();
-}
-
-void RealtimeVideoSourceQt5WebRTC::updateVideoRectangle(int x, int y, int w, int h)
-{
-    if (m_rtcRenderer)
-        m_rtcRenderer->setVideoRectangle(x,y,w,h);
-}
-
-void RealtimeVideoSourceQt5WebRTC::renderFrame(const unsigned char *data, int byteCount, int width, int height)
-{
-    if (!isProducingData() || muted())
-        return;
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    cairo_format_t cairoFormat = CAIRO_FORMAT_ARGB32;
-    int stride = cairo_format_stride_for_width (cairoFormat, width);
-    ASSERT(byteCount >= (height * stride));
-    RefPtr<cairo_surface_t> surface = adoptRef(
-        cairo_image_surface_create_for_data(
-            (unsigned char*)data, cairoFormat, width, height, stride));
-    ASSERT(cairo_surface_status(surface.get()) == CAIRO_STATUS_SUCCESS);
-    RefPtr<BitmapImage> frame = BitmapImage::create(WTFMove(surface));
-    LockHolder lock(m_drawMutex);
-    bool succeeded = m_platformLayerProxy->scheduleUpdateOnCompositorThread([this, frame] {
-        this->pushTextureToCompositor(frame);
-    });
-    if (succeeded) {
-        m_drawCondition.wait(m_drawMutex);
-    } else {
-        printf("***Error: scheduleUpdateOnCompositorThread failed\n");
-    }
-#endif
-}
-
-void RealtimeVideoSourceQt5WebRTC::punchHole(int width, int height)
-{
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    LockHolder lock(m_drawMutex);
-    bool succeeded = m_platformLayerProxy->scheduleUpdateOnCompositorThread([this, width, height] {
-        IntSize size(width, height);
-        // TODO: update m_size
-        m_platformLayerProxy->pushNextBuffer(std::make_unique<TextureMapperPlatformLayerBuffer>(0, size, TextureMapperGL::ShouldOverwriteRect));
-    });
-    if (succeeded) {
-        m_drawCondition.wait(m_drawMutex);
-    } else {
-        printf("***Error: scheduleUpdateOnCompositorThread failed\n");
-    }
-#endif
-}
-
-#if USE(COORDINATED_GRAPHICS_THREADED)
-void RealtimeVideoSourceQt5WebRTC::pushTextureToCompositor(RefPtr<Image> frame)
-{
-    class ConditionNotifier {
-    public:
-        ConditionNotifier(Lock& lock, Condition& condition)
-            : m_locker(lock), m_condition(condition)
-        {
-        }
-        ~ConditionNotifier()
-        {
-            m_condition.notifyOne();
-        }
-    private:
-        LockHolder m_locker;
-        Condition& m_condition;
-    };
-    ConditionNotifier notifier(m_drawMutex, m_drawCondition);
-    LockHolder holder(m_platformLayerProxy->lock());
-    if (!m_platformLayerProxy->isActive()) {
-        printf("***Error: platformLayerProxy is not ready yet\n");
-        return;
-    }
-    // TODO: update m_size
-    IntSize size(frame->width(), frame->height());
-    std::unique_ptr<TextureMapperPlatformLayerBuffer> buffer =
-        m_platformLayerProxy->getAvailableBuffer(size, GraphicsContext3D::DONT_CARE);
-    if (UNLIKELY(!buffer)) {
-        if (UNLIKELY(!m_context3D))
-            m_context3D = GraphicsContext3D::create(GraphicsContext3D::Attributes(),
-                                                    nullptr, GraphicsContext3D::RenderToCurrentGLContext);
-        RefPtr<BitmapTexture> texture = adoptRef(new BitmapTextureGL(m_context3D));
-        texture->reset(size, BitmapTexture::SupportsAlpha);
-        buffer = std::make_unique<TextureMapperPlatformLayerBuffer>(WTFMove(texture));
-    }
-
-    IntRect rect(IntPoint(),size);
-    buffer->textureGL().updateContents(frame.get(),
-                                       rect, /*offset*/ IntPoint(),
-                                       BitmapTexture::UpdateContentsFlag::UpdateCanModifyOriginalImageData);
-
-    m_platformLayerProxy->pushNextBuffer(WTFMove(buffer));
-}
-#endif
-
 
 RealtimeMediaSourceCenter& RealtimeMediaSourceCenter::platformCenter()
 {
@@ -254,7 +131,8 @@ void RealtimeMediaSourceCenterQt5WebRTC::createMediaStream(MediaStreamCreationCl
         videoSources.append(videoSource.release());
     }
 
-    client->didCreateStream(MediaStreamPrivate::create(audioSources, videoSources));
+    String id = rtcStream->id().c_str();
+    client->didCreateStream(MediaStreamPrivate::create(id, audioSources, videoSources));
 }
 
 bool RealtimeMediaSourceCenterQt5WebRTC::getMediaStreamTrackSources(PassRefPtr<MediaStreamTrackSourcesRequestClient> prpClient)

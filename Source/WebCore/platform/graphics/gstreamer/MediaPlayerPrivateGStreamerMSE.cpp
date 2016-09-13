@@ -694,6 +694,10 @@ void MediaPlayerPrivateGStreamerMSE::updateStates()
                 m_networkState = MediaPlayer::Loading;
             }
             GST_DEBUG("m_readyState=%s", dumpReadyState(m_readyState));
+
+            if (m_eosMarked && state == GST_STATE_PLAYING)
+                m_eosPending = true;
+
             break;
         default:
             ASSERT_NOT_REACHED();
@@ -942,7 +946,8 @@ void MediaPlayerPrivateGStreamerMSE::markEndOfStream(MediaSourcePrivate::EndOfSt
         return;
 
     GST_DEBUG("Marking end of stream");
-    m_eosPending = true;
+    m_eosMarked = true;
+    updateStates();
 }
 
 class GStreamerMediaDescription : public MediaDescription {

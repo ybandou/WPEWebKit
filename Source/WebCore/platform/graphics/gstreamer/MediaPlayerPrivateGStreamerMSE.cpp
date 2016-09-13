@@ -40,13 +40,14 @@
 #include "TimeRanges.h"
 #include "URL.h"
 #include "VideoTrackPrivateGStreamer.h"
-#include <wtf/Condition.h>
 
 #include <gst/app/gstappsink.h>
 #include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
 #include <gst/pbutils/pbutils.h>
 #include <gst/video/video.h>
+
+#include <wtf/Condition.h>
 
 #if USE(PLAYREADY)
 #include "PlayreadySession.h"
@@ -302,12 +303,6 @@ float MediaPlayerPrivateGStreamerMSE::duration() const
         return 0;
 
     return m_mediaTimeDuration.toFloat();
-}
-
-float MediaPlayerPrivateGStreamerMSE::mediaTimeForTimeValue(float timeValue) const
-{
-    GstClockTime position = toGstClockTime(timeValue);
-    return MediaTime(position, GST_SECOND).toFloat();
 }
 
 void MediaPlayerPrivateGStreamerMSE::seek(float time)

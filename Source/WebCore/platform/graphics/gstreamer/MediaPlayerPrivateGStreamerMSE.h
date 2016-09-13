@@ -70,7 +70,6 @@ public:
     MediaTime durationMediaTime() const override { return m_mediaTimeDuration; }
     float duration() const override;
 
-    float mediaTimeForTimeValue(float timeValue) const;
     void setRate(float) override;
     std::unique_ptr<PlatformTimeRanges> buffered() const override;
     float maxTimeSeekable() const override;

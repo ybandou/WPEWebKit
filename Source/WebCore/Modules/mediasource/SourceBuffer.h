@@ -201,6 +201,8 @@ private:
     friend class Internals;
     WEBCORE_EXPORT Vector<String> bufferedSamplesForTrackID(const AtomicString&);
 
+    MediaTime& currentTimeFudgeFactor() const;
+
     Ref<SourceBufferPrivate> m_private;
     MediaSource* m_source;
     GenericEventQueue m_asyncEventQueue;

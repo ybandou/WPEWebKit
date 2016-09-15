@@ -65,13 +65,6 @@ namespace WebCore {
 
 static const double ExponentialMovingAverageCoefficient = 0.1;
 
-// Allow hasCurrentTime() to be off by as much as the length of two 24fps video frames
-static const MediaTime& currentTimeFudgeFactor()
-{
-    static NeverDestroyed<MediaTime> fudgeFactor(2002, 24000);
-    return fudgeFactor;
-}
-
 struct SourceBuffer::TrackBuffer {
     MediaTime lastDecodeTimestamp;
     MediaTime lastFrameDuration;
@@ -130,6 +123,15 @@ SourceBuffer::~SourceBuffer()
     ASSERT(isRemoved());
 
     m_private->setClient(nullptr);
+}
+
+// Allow hasCurrentTime() to be off by as much as the length of two 24fps video frames
+MediaTime& SourceBuffer::currentTimeFudgeFactor() const
+{
+    static NeverDestroyed<MediaTime> fudgeFactorVideo(2002, 24000);
+    static NeverDestroyed<MediaTime> fudgeFactorAudio(MediaTime::createWithDouble(0.03));
+
+    return (hasAudio())?fudgeFactorAudio:fudgeFactorVideo;
 }
 
 RefPtr<TimeRanges> SourceBuffer::buffered(ExceptionCode& ec) const

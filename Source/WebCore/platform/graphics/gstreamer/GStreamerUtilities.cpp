@@ -186,6 +186,16 @@ GstClockTime toGstClockTime(float time)
     return GST_TIMEVAL_TO_TIME(timeValue);
 }
 
+MediaTime toMediaTime(GstClockTime time)
+{
+    if (time == GST_CLOCK_TIME_NONE)
+        return MediaTime::invalidTime();
+    if (!time)
+        return MediaTime::zeroTime();
+
+    return MediaTime::createWithDouble(static_cast<double>(time) / GST_SECOND);
+}
+
 bool gstRegistryHasElementForMediaType(GList* elementFactories, const char* capsString)
 {
     GRefPtr<GstCaps> caps = adoptGRef(gst_caps_from_string(capsString));

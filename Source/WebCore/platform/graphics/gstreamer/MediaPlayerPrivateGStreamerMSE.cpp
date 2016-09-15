@@ -1037,11 +1037,11 @@ GStreamerMediaSample::GStreamerMediaSample(GstSample* sample, const FloatSize& p
         return;
 
     if (GST_BUFFER_PTS_IS_VALID(buffer))
-        m_pts = MediaTime(GST_BUFFER_PTS(buffer), GST_SECOND);
+        m_pts = toMediaTime(GST_BUFFER_PTS(buffer));
     if (GST_BUFFER_DTS_IS_VALID(buffer))
-        m_dts = MediaTime(GST_BUFFER_DTS(buffer), GST_SECOND);
+        m_dts = toMediaTime(GST_BUFFER_DTS(buffer));
     if (GST_BUFFER_DURATION_IS_VALID(buffer))
-        m_duration = MediaTime(GST_BUFFER_DURATION(buffer), GST_SECOND);
+        m_duration = toMediaTime(GST_BUFFER_DURATION(buffer));
     m_size = gst_buffer_get_size(buffer);
     m_sample = sample;
 

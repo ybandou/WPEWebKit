@@ -99,6 +99,7 @@ typedef const struct OpaqueWKResourceCacheManager* WKResourceCacheManagerRef;
 typedef const struct OpaqueWKColorPickerResultListener* WKColorPickerResultListenerRef;
 typedef const struct OpaqueWKContext* WKContextRef;
 typedef const struct OpaqueWKContextConfiguration* WKContextConfigurationRef;
+typedef const struct OpaqueWKCookie* WKCookieRef;
 typedef const struct OpaqueWKCookieManager* WKCookieManagerRef;
 typedef const struct OpaqueWKCredential* WKCredentialRef;
 typedef const struct OpaqueWKDownload* WKDownloadRef;
@@ -149,6 +150,7 @@ typedef const struct OpaqueWKVibration* WKVibrationRef;
 typedef const struct OpaqueWKViewportAttributes* WKViewportAttributesRef;
 typedef const struct OpaqueWKWebsiteDataStore* WKWebsiteDataStoreRef;
 typedef const struct OpaqueWKWindowFeatures* WKWindowFeaturesRef;
+typedef const struct OpaqueWKProxy* WKProxyRef;
 
 /* WebKit2 Bundle types */
 

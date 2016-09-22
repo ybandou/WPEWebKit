@@ -111,14 +111,14 @@ void EGLTarget::initialize(uint32_t width, uint32_t height)
     if (nativeWindow)
         return;
 
-    NXPL_NativeWindowInfo windowInfo;
+    NXPL_NativeWindowInfoEXT windowInfo;
     windowInfo.x = 0;
     windowInfo.y = 0;
     windowInfo.width = width;
     windowInfo.height = height;
     windowInfo.stretch = false;
     windowInfo.clientID = 0; // For now we only accept 0. See Mail David Montgomery
-    nativeWindow = NXPL_CreateNativeWindow(&windowInfo);
+    nativeWindow = NXPL_CreateNativeWindowEXT(&windowInfo);
 
     this->width = width;
     this->height = height;

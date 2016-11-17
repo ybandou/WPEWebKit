@@ -30,15 +30,8 @@
 #include "WesterosViewbackendInput.h"
 #include "WesterosViewbackendOutput.h"
 #include <cstdio>
-#include <cstdlib>
-#include <westeros-compositor.h>
 
 namespace Westeros {
-
-static void compositorDestroyedCallback(WstCompositor*, void*)
-{
-    exit(1);
-}
 
 struct ViewBackend {
     ViewBackend(struct wpe_view_backend*);
@@ -47,7 +40,6 @@ struct ViewBackend {
     void initialize();
 
     struct wpe_view_backend* backend;
-    WstCompositor* compositor;
 
     WesterosViewbackendInput* input_handler;
     WesterosViewbackendOutput* output_handler;
@@ -67,12 +59,6 @@ ViewBackend::~ViewBackend()
     if(output_handler)
         output_handler->deinitialize();
 
-    if (compositor) {
-        WstCompositorStop(compositor);
-        WstCompositorDestroy(compositor);
-        compositor = nullptr;
-    }
-
     if(input_handler)
         delete input_handler;
     if(output_handler)
@@ -81,36 +67,13 @@ ViewBackend::~ViewBackend()
 
 void ViewBackend::initialize()
 {
-    compositor = WstCompositorCreate();
-    if (!compositor)
-        return;
-
     input_handler = new WesterosViewbackendInput(backend);
     output_handler = new WesterosViewbackendOutput(backend);
-    const char* nestedTargetDisplay = std::getenv("WAYLAND_DISPLAY");
-    if (nestedTargetDisplay) {
-        fprintf(stderr, "ViewBackendWesteros: running as the nested compositor\n");
-        WstCompositorSetIsNested(compositor, true);
-        WstCompositorSetIsRepeater(compositor, true);
-        WstCompositorSetNestedDisplayName(compositor, nestedTargetDisplay);
-        WstCompositorSetTerminatedCallback(compositor, &compositorDestroyedCallback, this);
-        //Register for all the necessary callback before starting the compositor
-        input_handler->initializeNestedInputHandler(compositor);
-        output_handler->initializeNestedOutputHandler(compositor);
-        const char * nestedDisplayName = WstCompositorGetDisplayName(compositor);
-        setenv("WAYLAND_DISPLAY", nestedDisplayName, 1);
-    }
 
-    if (!WstCompositorStart(compositor))
-    {
-        fprintf(stderr, "ViewBackendWesteros: failed to start the compositor: %s\n",
-            WstCompositorGetLastErrorDetail(compositor));
-        WstCompositorDestroy(compositor);
-        compositor = nullptr;
-        delete input_handler;
-        delete output_handler;
-        input_handler = nullptr;
-        output_handler = nullptr;
+    if (0) {
+        //FIXME:Register for all the necessary callback before starting the compositor
+        //input_handler->initializeNestedInputHandler(compositor);
+        //output_handler->initializeNestedOutputHandler(compositor);
     }
 }
 

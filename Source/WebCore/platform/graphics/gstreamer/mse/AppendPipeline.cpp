@@ -213,6 +213,31 @@ AppendPipeline::~AppendPipeline()
     m_demuxerSrcPadCaps = nullptr;
 };
 
+void AppendPipeline::dispatchPendingDecryptionKey()
+{
+    ASSERT(m_decryptor);
+    ASSERT(m_pendingKey);
+    ASSERT(m_appendState == KeyNegotiation);
+    GST_TRACE("dispatching key to append pipeline %p", this);
+    gst_element_send_event(m_pipeline.get(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB,
+        gst_structure_new("drm-cipher", "key", GST_TYPE_BUFFER, m_pendingKey.get(), nullptr)));
+    m_pendingKey.clear();
+    setAppendState(Ongoing);
+}
+
+void AppendPipeline::dispatchDecryptionKey(GstBuffer* buffer)
+{
+    if (m_appendState == KeyNegotiation) {
+        GST_TRACE("append pipeline %p in key negotiation", this);
+        m_pendingKey = buffer;
+        if (m_decryptor)
+            dispatchPendingDecryptionKey();
+        else
+            GST_TRACE("no decryptor yet, waiting for it");
+    } else
+        GST_TRACE("append pipeline %p not in key negotiation", this);
+}
+
 void AppendPipeline::clearPlayerPrivate()
 {
     ASSERT(WTF::isMainThread());
@@ -924,6 +949,9 @@ void AppendPipeline::connectDemuxerSrcPadToAppsinkFromAnyThread(GstPad* demuxerS
 
             gst_element_sync_state_with_parent(m_appsink.get());
             gst_element_sync_state_with_parent(m_decryptor.get());
+
+            if (m_pendingKey)
+                dispatchPendingDecryptionKey();
         } else {
 #endif
             gst_pad_link(demuxerSrcPad, appsinkSinkPad.get());

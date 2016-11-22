@@ -56,6 +56,7 @@ public:
 
     GstFlowReturn handleNewAppsinkSample(GstElement*);
     GstFlowReturn pushNewBuffer(GstBuffer*);
+    void dispatchDecryptionKey(GstBuffer* buffer);
 
     // Takes ownership of caps.
     void parseDemuxerSrcPadCaps(GstCaps*);
@@ -91,6 +92,7 @@ private:
     void handleAppsrcNeedDataReceived();
     void removeAppsrcDataLeavingProbe();
     void setAppsrcDataLeavingProbe();
+    void dispatchPendingDecryptionKey();
 
 private:
     Ref<MediaSourceClientGStreamerMSE> m_mediaSourceClient;
@@ -146,6 +148,7 @@ private:
     RefPtr<WebCore::TrackPrivateBase> m_track;
 
     GRefPtr<GstBuffer> m_pendingBuffer;
+    GRefPtr<GstBuffer> m_pendingKey;
 };
 
 } // namespace WebCore.

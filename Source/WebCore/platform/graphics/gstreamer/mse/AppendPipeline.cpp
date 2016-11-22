@@ -222,12 +222,12 @@ void AppendPipeline::dispatchPendingDecryptionKey()
     gst_element_send_event(m_pipeline.get(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB,
         gst_structure_new("drm-cipher", "key", GST_TYPE_BUFFER, m_pendingKey.get(), nullptr)));
     m_pendingKey.clear();
-    setAppendState(Ongoing);
+    setAppendState(AppendState::Ongoing);
 }
 
 void AppendPipeline::dispatchDecryptionKey(GstBuffer* buffer)
 {
-    if (m_appendState == KeyNegotiation) {
+    if (m_appendState == AppendState::KeyNegotiation) {
         GST_TRACE("append pipeline %p in key negotiation", this);
         m_pendingKey = buffer;
         if (m_decryptor)

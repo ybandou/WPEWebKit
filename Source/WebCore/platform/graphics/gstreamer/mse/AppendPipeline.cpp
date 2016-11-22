@@ -77,10 +77,10 @@ static GstPadProbeReturn appendPipelinePadProbeDebugInformation(GstPad*, GstPadP
 static GstFlowReturn appendPipelineAppsinkNewSample(GstElement*, AppendPipeline*);
 static void appendPipelineAppsinkEOS(GstElement*, AppendPipeline*);
 
-static void appendPipelineElementMessageCallback(GstBus*, GstMessage* message, AppendPipeline* appendPipeline)
+static void appendPipelineNeedContextMessageCallback(GstBus*, GstMessage* message, AppendPipeline* appendPipeline)
 {
     GST_TRACE("received callback");
-    appendPipeline->handleElementMessage(message);
+    appendPipeline->handleNeedContextSyncMessage(message);
 }
 
 static void appendPipelineApplicationMessageCallback(GstBus*, GstMessage* message, AppendPipeline* appendPipeline)
@@ -112,7 +112,7 @@ AppendPipeline::AppendPipeline(Ref<MediaSourceClientGStreamerMSE> mediaSourceCli
     gst_bus_add_signal_watch_full(m_bus.get(), G_PRIORITY_HIGH + 30);
     gst_bus_enable_sync_message_emission(m_bus.get());
 
-    g_signal_connect(m_bus.get(), "sync-message::element", G_CALLBACK(appendPipelineElementMessageCallback), this);
+    g_signal_connect(m_bus.get(), "sync-message::need-context", G_CALLBACK(appendPipelineNeedContextMessageCallback), this);
     g_signal_connect(m_bus.get(), "message::application", G_CALLBACK(appendPipelineApplicationMessageCallback), this);
 
     // We assign the created instances here instead of adoptRef() because gst_bin_add_many()
@@ -240,12 +240,12 @@ void AppendPipeline::clearPlayerPrivate()
         gst_element_set_state(m_pipeline.get(), GST_STATE_NULL);
 }
 
-void AppendPipeline::handleElementMessage(GstMessage* message)
+void AppendPipeline::handleNeedContextSyncMessage(GstMessage* message)
 {
-    ASSERT(WTF::isMainThread());
-
-    const GstStructure* structure = gst_message_get_structure(message);
-    if (gst_structure_has_name(structure, "drm-key-needed"))
+    const gchar* contextType = nullptr;
+    gst_message_parse_context_type(message, &contextType);
+    GST_TRACE("context type: %s", contextType);
+    if (g_strcmp0(contextType, "drm-preferred-decryption-system-id") == 0)
         setAppendState(AppendPipeline::AppendState::KeyNegotiation);
 
     // MediaPlayerPrivateGStreamerBase will take care of setting up encryption.

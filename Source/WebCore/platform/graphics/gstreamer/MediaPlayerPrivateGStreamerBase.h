@@ -283,6 +283,13 @@ private:
 #if USE(GSTREAMER_GL)
     std::unique_ptr<VideoTextureCopierGStreamer> m_videoTextureCopier;
 #endif
+
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
+    Lock m_protectionMutex;
+    Condition m_protectionCondition;
+    String m_lastGenerateKeyRequestKeySystemUuid;
+    void receivedGenerateKeyRequest(const String&);
+#endif
 };
 
 }

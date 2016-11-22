@@ -47,7 +47,7 @@ public:
     AppendPipeline(Ref<MediaSourceClientGStreamerMSE>, Ref<SourceBufferPrivateGStreamer>, MediaPlayerPrivateGStreamerMSE&);
     virtual ~AppendPipeline();
 
-    void handleElementMessage(GstMessage*);
+    void handleNeedContextSyncMessage(GstMessage*);
     void handleApplicationMessage(GstMessage*);
 
     gint id();

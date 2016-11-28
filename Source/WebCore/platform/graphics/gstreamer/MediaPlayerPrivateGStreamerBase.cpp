@@ -347,19 +347,19 @@ void MediaPlayerPrivateGStreamerBase::clearSamples()
 bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
 {
     UNUSED_PARAM(message);
-#if USE(GSTREAMER_GL)
     if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_NEED_CONTEXT) {
         const gchar* contextType;
         gst_message_parse_context_type(message, &contextType);
 
+#if USE(GSTREAMER_GL)
         GRefPtr<GstContext> elementContext = adoptGRef(requestGLContext(contextType, this));
         if (!elementContext)
             return false;
 
         gst_element_set_context(GST_ELEMENT(message->src), elementContext.get());
         return true;
-    }
 #endif // USE(GSTREAMER_GL)
+    }
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
     if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ELEMENT) {

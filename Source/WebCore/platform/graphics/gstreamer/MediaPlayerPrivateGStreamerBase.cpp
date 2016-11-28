@@ -137,6 +137,15 @@
 #include <runtime/Uint8Array.h>
 #endif
 
+#if USE(GSTREAMER_HTTP)
+#include "Cookie.h"
+#include "NetworkStorageSession.h"
+#include "PlatformCookieJar.h"
+#include <gst/http/gsthttpcookie.h>
+#include <gst/http/gsthttpcookiejar.h>
+#include <wtf/DateMath.h>
+#endif
+
 GST_DEBUG_CATEGORY(webkit_media_player_debug);
 #define GST_CAT_DEFAULT webkit_media_player_debug
 
@@ -344,12 +353,84 @@ void MediaPlayerPrivateGStreamerBase::clearSamples()
     m_sample = nullptr;
 }
 
+#if USE(GSTREAMER_HTTP)
+static void gstCookieJarChangedCallback(GstHttpCookieJar*, GObject* author, GstHttpCookie* oldCookie, GstHttpCookie* newCookie, gpointer userData)
+{
+    MediaPlayerPrivateGStreamerBase* player = reinterpret_cast<MediaPlayerPrivateGStreamerBase*>(userData);
+
+    // This is our own change, no need to modify.
+    if (author == G_OBJECT(player->pipeline()))
+        return;
+
+    player->updateHTTPCookie(oldCookie, newCookie);
+}
+
+void MediaPlayerPrivateGStreamerBase::updateHTTPCookie(GstHttpCookie* oldCookie, GstHttpCookie* newCookie)
+{
+    NetworkStorageSession& session = NetworkStorageSession::defaultStorageSession();
+    if (oldCookie)
+        deleteCookie(session, m_url, oldCookie->name);
+
+    if (newCookie) {
+        String expires(emptyString());
+        if (newCookie->expires) {
+            GUniquePtr<char> date(g_strdup_printf("%s, %02d-%s-%04d %02d:%02d:%02d GMT",
+                WTF::weekdayName[g_date_time_get_day_of_week(newCookie->expires)-1],
+                g_date_time_get_day_of_month(newCookie->expires),
+                WTF::monthName[g_date_time_get_month(newCookie->expires)-1],
+                g_date_time_get_year(newCookie->expires),
+                g_date_time_get_hour(newCookie->expires),
+                g_date_time_get_minute(newCookie->expires),
+                g_date_time_get_second(newCookie->expires)));
+            expires = String::format("; Expires=%s", date.get());
+        }
+
+        String cookies = String::format("%s=%s; Domain=%s; Path=%s %s%s%s", newCookie->name,
+            newCookie->value, newCookie->domain, newCookie->path, expires.utf8().data(),
+            newCookie->http_only ? "; HttpOnly":"", newCookie->secure ? "; Secure":"");
+        // In our webkithttpsrc element the first party and url are the same.
+        setCookiesFromDOM(session, m_url, m_url, cookies);
+    }
+}
+
+void MediaPlayerPrivateGStreamerBase::ensureGstCookieJar()
+{
+    if (m_gstCookieJar)
+        return;
+
+    m_gstCookieJar = adoptGRef(gst_http_cookie_jar_new());
+    g_signal_connect(m_gstCookieJar.get(), "changed", G_CALLBACK(gstCookieJarChangedCallback), this);
+    Vector<Cookie> cookies;
+    if (m_player->getRawCookies(m_url, cookies)) {
+        for (auto& cookie : cookies) {
+            GstHttpCookie* gstCookie = gst_http_cookie_new(cookie.name.utf8().data(), cookie.value.utf8().data(), cookie.domain.utf8().data(), cookie.path.utf8().data(), cookie.expires);
+            gst_http_cookie_set_secure(gstCookie, cookie.secure);
+            gst_http_cookie_set_http_only(gstCookie, cookie.httpOnly);
+            gst_http_cookie_jar_add_cookie(m_gstCookieJar.get(), G_OBJECT(pipeline()), gstCookie);
+        }
+    }
+}
+#endif
+
 bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
 {
-    UNUSED_PARAM(message);
+    GST_TRACE("Sync message %s received from element %s", GST_MESSAGE_TYPE_NAME(message), GST_MESSAGE_SRC_NAME(message));
+
     if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_NEED_CONTEXT) {
         const gchar* contextType;
         gst_message_parse_context_type(message, &contextType);
+
+#if USE(GSTREAMER_HTTP)
+        if (!g_strcmp0(contextType, "http")) {
+            GRefPtr<GstContext> context = adoptGRef(gst_context_new("http", FALSE));
+            GstStructure* contextStructure = gst_context_writable_structure(context.get());
+            ensureGstCookieJar();
+            // TODO: set referer and user-agent structure fields as well.
+            gst_structure_set(contextStructure, "cookie-jar", GST_TYPE_OBJECT, m_gstCookieJar.get(), nullptr);
+            gst_element_set_context(GST_ELEMENT(GST_MESSAGE_SRC(message)), context.get());
+            return true;
+        }
+#endif
 
 #if USE(GSTREAMER_GL)
         GRefPtr<GstContext> elementContext = adoptGRef(requestGLContext(contextType, this));
@@ -358,7 +439,7 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
 
         gst_element_set_context(GST_ELEMENT(message->src), elementContext.get());
         return true;
-#endif // USE(GSTREAMER_GL)
+#endif
     }
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)

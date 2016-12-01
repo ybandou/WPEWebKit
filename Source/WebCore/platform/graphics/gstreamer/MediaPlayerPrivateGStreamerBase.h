@@ -290,9 +290,12 @@ private:
     Lock m_protectionMutex;
     Condition m_protectionCondition;
     String m_lastGenerateKeyRequestKeySystemUuid;
-    HashMap<String, Vector<uint8_t>> m_initDatas;
     HashSet<uint32_t> m_handledProtectionEvents;
-    void trimInitData(String keySystemUuid, const unsigned char*& initDataPtr, unsigned &initDataLength);
+#endif
+
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
+    HashMap<String, Vector<uint8_t>> m_initDatas;
+    void trimInitData(String, const unsigned char*&, unsigned &);
 #endif
 };
 

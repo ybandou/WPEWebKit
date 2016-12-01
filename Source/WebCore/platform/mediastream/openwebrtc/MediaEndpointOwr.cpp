@@ -57,7 +57,6 @@ static void gotIncomingSource(OwrMediaSession*, OwrMediaSource*, MediaEndpointOw
 
 static const Vector<String> candidateTypes = { "host", "srflx", "prflx", "relay" };
 static const Vector<String> candidateTcpTypes = { "", "active", "passive", "so" };
-static const Vector<String> codecTypes = { "NONE", "PCMU", "PCMA", "OPUS", "H264", "VP8" };
 
 static const char* helperServerRegEx = "(turn|stun):([\\w\\.\\-]+|\\[[\\w\\:]+\\])(:\\d+)?(\\?.+)?";
 
@@ -82,6 +81,17 @@ MediaEndpointOwr::MediaEndpointOwr(MediaEndpointClient& client)
     GRegexCompileFlags compileFlags = G_REGEX_JAVASCRIPT_COMPAT;
     GRegexMatchFlags matchFlags = static_cast<GRegexMatchFlags>(0);
     m_helperServerRegEx = g_regex_new(helperServerRegEx, compileFlags, matchFlags, nullptr);
+
+    m_codecTypes.append("NONE");
+    m_codecTypes.append("PCMU");
+    m_codecTypes.append("PCMA");
+    if (owr_payload_supported(OWR_CODEC_TYPE_OPUS))
+        m_codecTypes.append("OPUS");
+    if (owr_payload_supported(OWR_CODEC_TYPE_H264))
+        m_codecTypes.append("H264");
+    if (owr_payload_supported(OWR_CODEC_TYPE_VP8))
+        m_codecTypes.append("VP8");
+
 }
 
 MediaEndpointOwr::~MediaEndpointOwr()
@@ -118,13 +128,14 @@ MediaPayloadVector MediaEndpointOwr::getDefaultAudioPayloads()
 {
     MediaPayloadVector payloads;
 
-    // FIXME: This list should be based on what is available in the platform (bug: http://webkit.org/b/163723)
-    MediaPayload payload1;
-    payload1.type = 111;
-    payload1.encodingName = "OPUS";
-    payload1.clockRate = 48000;
-    payload1.channels = 2;
-    payloads.append(WTFMove(payload1));
+    if (m_codecTypes.find("OPUS") != notFound) {
+        MediaPayload payload1;
+        payload1.type = 111;
+        payload1.encodingName = "OPUS";
+        payload1.clockRate = 48000;
+        payload1.channels = 2;
+        payloads.append(WTFMove(payload1));
+    }
 
     MediaPayload payload2;
     payload2.type = 8;
@@ -147,24 +158,27 @@ MediaPayloadVector MediaEndpointOwr::getDefaultVideoPayloads()
 {
     MediaPayloadVector payloads;
 
-    // FIXME: This list should be based on what is available in the platform (bug: http://webkit.org/b/163723)
-    MediaPayload payload1;
-    payload1.type = 103;
-    payload1.encodingName = "H264";
-    payload1.clockRate = 90000;
-    payload1.ccmfir = true;
-    payload1.nackpli = true;
-    payload1.addParameter("packetizationMode", 1);
-    payloads.append(WTFMove(payload1));
+    if (m_codecTypes.find("H264") != notFound) {
+        MediaPayload payload1;
+        payload1.type = 103;
+        payload1.encodingName = "H264";
+        payload1.clockRate = 90000;
+        payload1.ccmfir = true;
+        payload1.nackpli = true;
+        payload1.addParameter("packetizationMode", 1);
+        payloads.append(WTFMove(payload1));
+    }
 
-    MediaPayload payload2;
-    payload2.type = 100;
-    payload2.encodingName = "VP8";
-    payload2.clockRate = 90000;
-    payload2.ccmfir = true;
-    payload2.nackpli = true;
-    payload2.nack = true;
-    payloads.append(WTFMove(payload2));
+    if (m_codecTypes.find("VP8") != notFound) {
+        MediaPayload payload2;
+        payload2.type = 100;
+        payload2.encodingName = "VP8";
+        payload2.clockRate = 90000;
+        payload2.ccmfir = true;
+        payload2.nackpli = true;
+        payload2.nack = true;
+        payloads.append(WTFMove(payload2));
+    }
 
     MediaPayload payload3;
     payload3.type = 120;
@@ -301,8 +315,8 @@ MediaEndpoint::UpdateResult MediaEndpointOwr::updateSendConfiguration(MediaEndpo
         auto* rtxPayload = findRtxPayload(mdesc.payloads, payload->type);
         auto* source = static_cast<RealtimeMediaSourceOwr*>(sendSourceMap.get(mdesc.mid));
 
-        ASSERT(codecTypes.find(payload->encodingName.convertToASCIIUppercase()) != notFound);
-        auto codecType = static_cast<OwrCodecType>(codecTypes.find(payload->encodingName.convertToASCIIUppercase()));
+        ASSERT(m_codecTypes.find(payload->encodingName.convertToASCIIUppercase()) != notFound);
+        auto codecType = static_cast<OwrCodecType>(m_codecTypes.find(payload->encodingName.convertToASCIIUppercase()));
 
         OwrPayload* sendPayload;
         if (mdesc.type == "audio")
@@ -513,8 +527,8 @@ void MediaEndpointOwr::prepareMediaSession(OwrMediaSession* mediaSession, PeerMe
 
         auto* rtxPayload = findRtxPayload(mediaDescription->payloads, payload.type);
 
-        ASSERT(codecTypes.find(payload.encodingName) != notFound);
-        OwrCodecType codecType = static_cast<OwrCodecType>(codecTypes.find(payload.encodingName.convertToASCIIUppercase()));
+        ASSERT(m_codecTypes.find(payload.encodingName) != notFound);
+        OwrCodecType codecType = static_cast<OwrCodecType>(m_codecTypes.find(payload.encodingName.convertToASCIIUppercase()));
 
         OwrPayload* receivePayload;
         if (mediaDescription->type == "audio")

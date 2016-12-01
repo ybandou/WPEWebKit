@@ -142,6 +142,7 @@ private:
 
     String m_dtlsPrivateKey;
     String m_dtlsCertificate;
+    Vector<String> m_codecTypes;
 };
 
 } // namespace WebCore

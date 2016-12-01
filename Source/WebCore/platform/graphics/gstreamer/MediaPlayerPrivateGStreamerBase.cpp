@@ -172,6 +172,9 @@ void registerWebKitGStreamerElements()
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
 static AtomicString keySystemUuidToId(const AtomicString&);
+#endif
+
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
 static AtomicString keySystemIdToUuid(const AtomicString&);
 #endif
 
@@ -1605,7 +1608,7 @@ std::unique_ptr<CDMSession> MediaPlayerPrivateGStreamerBase::createSession(const
 #if USE(PLAYREADY)
     if (equalIgnoringASCIICase(keySystem, PLAYREADY_PROTECTION_SYSTEM_ID)
         || equalIgnoringASCIICase(keySystem, PLAYREADY_YT_PROTECTION_SYSTEM_ID))
-        return std::make_unique<CDMPRSessionGStreamer>(client);
+        return std::make_unique<CDMPRSessionGStreamer>(client, this);
 #endif
 
     return nullptr;
@@ -1660,26 +1663,20 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
 #endif
     gst_buffer_unmap(data, &mapInfo);
 }
-#endif
 
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-static AtomicString keySystemUuidToId(const AtomicString& uuid)
+void MediaPlayerPrivateGStreamerBase::receivedGenerateKeyRequest(const String& keySystem)
 {
-    if (equalIgnoringASCIICase(uuid, CLEAR_KEY_PROTECTION_SYSTEM_UUID))
-        return AtomicString(CLEAR_KEY_PROTECTION_SYSTEM_ID);
-
-#if USE(PLAYREADY)
-    if (equalIgnoringASCIICase(uuid, PLAYREADY_PROTECTION_SYSTEM_UUID))
-        return AtomicString(PLAYREADY_PROTECTION_SYSTEM_ID);
-#endif
-
-    return { };
+    GST_DEBUG("received generate key request for %s", keySystem.utf8().data());
+    m_lastGenerateKeyRequestKeySystemUuid = keySystemIdToUuid(keySystem);
+    m_protectionCondition.notifyOne();
 }
 
 static AtomicString keySystemIdToUuid(const AtomicString& id)
 {
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
     if (equalIgnoringASCIICase(id, CLEAR_KEY_PROTECTION_SYSTEM_ID))
         return AtomicString(CLEAR_KEY_PROTECTION_SYSTEM_UUID);
+#endif
 
 #if USE(PLAYREADY)
     if (equalIgnoringASCIICase(id, PLAYREADY_PROTECTION_SYSTEM_ID)
@@ -1689,12 +1686,22 @@ static AtomicString keySystemIdToUuid(const AtomicString& id)
 
     return { };
 }
+#endif
 
-void MediaPlayerPrivateGStreamerBase::receivedGenerateKeyRequest(const String& keySystem)
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
+static AtomicString keySystemUuidToId(const AtomicString& uuid)
 {
-    GST_DEBUG("received generate key request for %s", keySystem.utf8().data());
-    m_lastGenerateKeyRequestKeySystemUuid = keySystemIdToUuid(keySystem);
-    m_protectionCondition.notifyOne();
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
+    if (equalIgnoringASCIICase(uuid, CLEAR_KEY_PROTECTION_SYSTEM_UUID))
+        return AtomicString(CLEAR_KEY_PROTECTION_SYSTEM_ID);
+#endif
+
+#if USE(PLAYREADY)
+    if (equalIgnoringASCIICase(uuid, PLAYREADY_PROTECTION_SYSTEM_UUID))
+        return AtomicString(PLAYREADY_PROTECTION_SYSTEM_ID);
+#endif
+
+    return { };
 }
 #endif
 

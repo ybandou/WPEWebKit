@@ -151,6 +151,7 @@ public:
 
     virtual void dispatchDecryptionKey(GstBuffer*);
     void handleProtectionEvent(GstEvent*);
+    void receivedGenerateKeyRequest(const String&);
 #endif
 
     static bool supportsKeySystem(const String& keySystem, const String& mimeType);
@@ -291,7 +292,6 @@ private:
     String m_lastGenerateKeyRequestKeySystemUuid;
     HashMap<String, Vector<uint8_t>> m_initDatas;
     HashSet<uint32_t> m_handledProtectionEvents;
-    void receivedGenerateKeyRequest(const String&);
     void trimInitData(String keySystemUuid, const unsigned char*& initDataPtr, unsigned &initDataLength);
 #endif
 };

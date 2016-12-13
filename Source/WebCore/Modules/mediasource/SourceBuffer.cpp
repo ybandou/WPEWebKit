@@ -1670,11 +1670,11 @@ void SourceBuffer::sourceBufferPrivateDidReceiveSample(SourceBufferPrivate*, Med
         // disjoint ranges separated by less than a "fudge factor".
         auto presentationEndTime = presentationTimestamp + frameDuration;
         auto nearestToPresentationStartTime = m_buffered->ranges().nearest(presentationTimestamp);
-        if ((presentationTimestamp - nearestToPresentationStartTime).isBetween(MediaTime::zeroTime(), currentTimeFudgeFactor()))
+        if ((presentationTimestamp - nearestToPresentationStartTime).isBetween(MediaTime::zeroTime(), hasAudio() ? trackBuffer.lastFrameDuration : (trackBuffer.lastFrameDuration * 2)))
             presentationTimestamp = nearestToPresentationStartTime;
 
         auto nearestToPresentationEndTime = m_buffered->ranges().nearest(presentationEndTime);
-        if ((nearestToPresentationEndTime - presentationEndTime).isBetween(MediaTime::zeroTime(), currentTimeFudgeFactor()))
+        if ((nearestToPresentationEndTime - presentationEndTime).isBetween(MediaTime::zeroTime(), hasAudio() ? trackBuffer.lastFrameDuration : (trackBuffer.lastFrameDuration * 2)))
             presentationEndTime = nearestToPresentationEndTime;
 
         m_buffered->ranges().add(presentationTimestamp, presentationEndTime);

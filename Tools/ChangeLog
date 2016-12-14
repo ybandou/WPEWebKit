@@ -1,3 +1,13 @@
+2016-12-14  Carlos Alberto Lopez Perez  <clopez@igalia.com>
+
+        [GTK][EFL] Update the JHBuild version.
+        https://bugs.webkit.org/show_bug.cgi?id=165838
+
+        Reviewed by Michael Catanzaro.
+
+        * jhbuild/jhbuild-wrapper: This new version fixes a bug with the
+        usage of the JHBUILD_MIRROR feature with git repositories.
+
 2016-11-14  Mark Lam  <mark.lam@apple.com>
 
         Enhance run-jsc-stress-test script to allow optional test specific options to be added for all test run configurations.

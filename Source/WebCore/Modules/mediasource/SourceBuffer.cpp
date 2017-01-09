@@ -848,6 +848,19 @@ void SourceBuffer::removeTimerFired()
     scheduleEvent(eventNames().updateendEvent);
 }
 
+static bool aggressiveEviction() {
+    static bool initialized = false;
+    static bool result = false;
+
+    if (!initialized) {
+        String s(getenv("MSE_AGGRESSIVE_EVICTION"));
+        result = !s.isEmpty() && (s == "1" || s[0] == 't' || s[0] == 'T');
+        initialized = true;
+    }
+
+    return result;
+}
+
 void SourceBuffer::evictCodedFrames(size_t newDataSize)
 {
     // 3.5.13 Coded Frame Eviction Algorithm
@@ -872,9 +885,9 @@ void SourceBuffer::evictCodedFrames(size_t newDataSize)
 
     // NOTE: begin by removing data from the beginning of the buffered ranges, 30 seconds at
     // a time, up to 30 seconds before currentTime.
-    MediaTime thirtySeconds = MediaTime(30, 1);
+    MediaTime marginSeconds = aggressiveEviction() ? MediaTime(5, 1) : MediaTime(30, 1);
     MediaTime currentTime = m_source->currentTime();
-    MediaTime maximumRangeEnd = currentTime - thirtySeconds;
+    MediaTime maximumRangeEnd = currentTime - marginSeconds;
 
 #if !LOG_DISABLED
     LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - currentTime = %lf, require %zu bytes, maximum buffer size is %zu", this, m_source->currentTime().toDouble(), extraMemoryCost() + newDataSize, maximumBufferSize);
@@ -882,22 +895,23 @@ void SourceBuffer::evictCodedFrames(size_t newDataSize)
 #endif
 
     MediaTime rangeStart = MediaTime::zeroTime();
-    MediaTime rangeEnd = rangeStart + thirtySeconds;
+    MediaTime rangeEnd = rangeStart + marginSeconds;
     while (rangeStart < maximumRangeEnd) {
         // 4. For each range in removal ranges, run the coded frame removal algorithm with start and
         // end equal to the removal range start and end timestamp respectively.
         removeCodedFrames(rangeStart, std::min(rangeEnd, maximumRangeEnd));
         if (extraMemoryCost() + newDataSize < maximumBufferSize) {
-            LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - the buffer is not full anymore.", this);
+            LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - removing [%f, %f] from the begining", this, rangeStart.toDouble(), std::min(rangeEnd, maximumRangeEnd).toDouble());
             m_bufferFull = false;
-            break;
+            if (!aggressiveEviction())
+                break;
         }
 
-        rangeStart += thirtySeconds;
-        rangeEnd += thirtySeconds;
+        rangeStart += marginSeconds;
+        rangeEnd += marginSeconds;
     }
 
-    if (!m_bufferFull) {
+    if (!(m_bufferFull || aggressiveEviction())) {
         LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - evicted %zu bytes", this, initialBufferedSize - extraMemoryCost());
         return;
     }
@@ -908,15 +922,15 @@ void SourceBuffer::evictCodedFrames(size_t newDataSize)
     auto buffered = m_buffered->ranges();
     size_t currentTimeRange = buffered.find(currentTime);
     if (currentTimeRange == buffered.length() - 1) {
-        LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - evicted %zu bytes but FAILED to free enough", this, initialBufferedSize - extraMemoryCost());
+        LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - evicted %zu bytes starting from the begining%s", this, initialBufferedSize - extraMemoryCost(), m_bufferFull ? " but FAILED to free enough" : "");
         return;
     }
 
-    MediaTime minimumRangeStart = currentTime + thirtySeconds;
+    MediaTime minimumRangeStart = currentTime + marginSeconds;
     LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - minimumRangeStart: %f, duration: %f", this, minimumRangeStart.toDouble(), m_source->duration().toDouble());
 
     rangeEnd = m_source->duration();
-    rangeStart = rangeEnd - thirtySeconds;
+    rangeStart = rangeEnd - marginSeconds;
 
     auto removeFramesWhileFull = [&] (PlatformTimeRanges& ranges) {
         for (int i = ranges.length()-1; i >= 0; --i)
@@ -926,7 +940,8 @@ void SourceBuffer::evictCodedFrames(size_t newDataSize)
             if (extraMemoryCost() + newDataSize < maximumBufferSize) {
                 LOG(MediaSource, "SourceBuffer::evictCodedFrames(%p) - buffer is not full anymore.", this);
                 m_bufferFull = false;
-                break;
+                if (!aggressiveEviction())
+                    break;
             }
         }
     };
@@ -946,8 +961,8 @@ void SourceBuffer::evictCodedFrames(size_t newDataSize)
         if (m_bufferFull == false)
             break;
 
-        rangeStart -= thirtySeconds;
-        rangeEnd -= thirtySeconds;
+        rangeStart -= marginSeconds;
+        rangeEnd -= marginSeconds;
     }
 
     if (m_bufferFull && currentTimeRange == notFound)

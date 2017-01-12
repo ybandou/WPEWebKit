@@ -300,6 +300,12 @@ void MemoryPressureHandler::pollMemoryPressure(void*)
             if (!vmRSS)
                 return;
 
+            if (getProcessName().endsWith("WebProcess")) {
+                printf("### vmRSS: %zu, nonCriticalLimit: %zu, criticalLimit: %zu, %s, pollTimeSec: %u\n",
+                        vmRSS, s_pollMaximumProcessMemoryNonCriticalLimit, s_pollMaximumProcessMemoryCriticalLimit,
+                        (vmRSS > s_pollMaximumProcessMemoryCriticalLimit) ? "critical" : "not critical", s_pollTimeSec); fflush(stdout);
+            }
+
             if (vmRSS > s_pollMaximumProcessMemoryNonCriticalLimit) {
                 critical = vmRSS > s_pollMaximumProcessMemoryCriticalLimit;
                 break;
@@ -310,6 +316,12 @@ void MemoryPressureHandler::pollMemoryPressure(void*)
 
         if (!memFree)
             return;
+
+        if (getProcessName().endsWith("WebProcess")) {
+            printf("### memFree: %zu, nonCriticalLimit: %zu, criticalLimit: %zu, %s, pollTimeSec: %u\n",
+                    memFree, s_memNonCriticalLimit, s_memCriticalLimit,
+                    (memFree < s_memCriticalLimit) ? "critical" : "not critical", s_pollTimeSec); fflush(stdout);
+        }
 
         if (memFree < s_memNonCriticalLimit) {
             critical = memFree < s_memCriticalLimit;
@@ -324,6 +336,9 @@ void MemoryPressureHandler::pollMemoryPressure(void*)
 
     MemoryPressureHandler::singleton().setUnderMemoryPressure(critical);
     callOnMainThread([critical] {
+        if (getProcessName().endsWith("WebProcess")) {
+            printf("### High memory pressure (%s)\n", critical ? "critical" : "not critical"); fflush(stdout);
+        }
         MemoryPressureHandler::singleton().respondToMemoryPressure(critical ? Critical::Yes : Critical::No);
     });
 }
@@ -397,8 +412,13 @@ bool MemoryPressureHandler::tryEnsureEventFD()
 
 void MemoryPressureHandler::install()
 {
-    if (m_installed || m_holdOffTimer.isActive())
+    if (m_installed || m_holdOffTimer.isActive()) {
+            if (getProcessName().endsWith("WebProcess") && m_holdOffTimer.isActive()) {
+            printf("### Not installing because of holdOffTimer\n"); fflush(stdout);
+        }
+
         return;
+    }
 
     if (!tryEnsureEventFD())
         return;
@@ -423,6 +443,10 @@ void MemoryPressureHandler::install()
 
     setUnderMemoryPressure(false);
     m_installed = true;
+
+    if (getProcessName().endsWith("WebProcess")) {
+        printf("### Installed\n"); fflush(stdout);
+    }
 }
 
 void MemoryPressureHandler::uninstall()
@@ -469,6 +493,11 @@ void MemoryPressureHandler::respondToMemoryPressure(Critical critical, Synchrono
     uninstall();
 
     double startTime = monotonicallyIncreasingTime();
+
+    if (getProcessName().endsWith("WebProcess")) {
+        printf("### releaseMemory()\n"); fflush(stdout);
+    }
+
     releaseMemory(critical, synchronous);
     unsigned holdOffTime = (monotonicallyIncreasingTime() - startTime) * s_holdOffMultiplier;
     holdOff(std::max(holdOffTime, s_minimumHoldOffTime));

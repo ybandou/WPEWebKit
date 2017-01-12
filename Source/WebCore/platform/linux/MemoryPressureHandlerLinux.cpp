@@ -59,8 +59,8 @@ namespace WebCore {
 static const unsigned s_minimumHoldOffTime = 5;
 static const unsigned s_holdOffMultiplier = 20;
 static const unsigned s_pollTimeSec = 1;
-static const size_t s_memCriticalLimit = 3 * KB * KB; // 3 MB
-static const size_t s_memNonCriticalLimit = 5 * KB * KB; // 5 MB
+static size_t s_memCriticalLimit = 0;
+static size_t s_memNonCriticalLimit = 0;
 static size_t s_pollMaximumProcessMemoryCriticalLimit = 0;
 static size_t s_pollMaximumProcessMemoryNonCriticalLimit = 0;
 
@@ -70,7 +70,7 @@ static const char* s_cgroupEventControl = "/sys/fs/cgroup/memory/cgroup.event_co
 static const char* s_processStatus = "/proc/self/status";
 static const char* s_memInfo = "/proc/meminfo";
 static const char* s_cmdline = "/proc/self/cmdline";
-
+static const char* s_minFreeKbytes = "/proc/sys/vm/min_free_kbytes";
 
 #if USE(GLIB)
 typedef struct {
@@ -212,6 +212,21 @@ size_t readToken(const char* filename, const char* key, size_t fileUnits)
     return result;
 }
 
+size_t readValue(const char* filename, size_t fileUnits)
+{
+    size_t result = static_cast<size_t>(-1);
+    FILE* file = fopen(filename, "r");
+    if (!file)
+        return result;
+
+    String token = nextToken(file);
+    if (!token.isEmpty())
+        result = token.toUInt64() * fileUnits;
+
+    fclose(file);
+    return result;
+}
+
 static String getProcessName()
 {
     FILE* file = fopen(s_cmdline, "r");
@@ -262,6 +277,14 @@ static bool defaultPollMaximumProcessMemory(size_t &criticalLimit, size_t &nonCr
     }
 
     return false;
+}
+
+static void defaultPollMinimumSystemMemory(size_t &criticalLimit, size_t &nonCriticalLimit)
+{
+    size_t minFree = readValue(s_minFreeKbytes, KB);
+
+    criticalLimit = (static_cast<size_t>(-1) == minFree) ? 3 * MB : minFree + 1 * MB;
+    nonCriticalLimit = criticalLimit + 2 * MB;
 }
 
 void MemoryPressureHandler::pollMemoryPressure(void*)
@@ -322,6 +345,9 @@ inline void MemoryPressureHandler::logErrorAndCloseFDs(const char* log)
 
 bool MemoryPressureHandler::tryEnsureEventFD()
 {
+    if (!s_memCriticalLimit)
+        defaultPollMinimumSystemMemory(s_memCriticalLimit, s_memNonCriticalLimit);
+
     // If the env var to use the poll method based on meminfo is set, this method overrides anything else.
     if (m_eventFD != -1 && defaultPollMaximumProcessMemory(s_pollMaximumProcessMemoryCriticalLimit, s_pollMaximumProcessMemoryNonCriticalLimit)) {
         m_eventFD = -1;

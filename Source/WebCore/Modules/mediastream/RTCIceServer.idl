@@ -28,6 +28,7 @@
     NoInterfaceObject,
 ] interface RTCIceServer {
     readonly attribute sequence<DOMString> urls;
+    [ImplementedAs=urls] readonly attribute sequence<DOMString> url;
     readonly attribute DOMString username;
     readonly attribute DOMString credential;
 };

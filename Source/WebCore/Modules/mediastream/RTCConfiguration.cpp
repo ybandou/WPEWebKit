@@ -58,19 +58,25 @@ static ExceptionOr<Ref<RTCIceServer>> parseIceServer(const Dictionary& iceServer
     iceServer.get("username", username);
 
     // Spec says that "urls" can be either a string or a sequence, so we must check for both.
+    auto urlParameterName = "urls";
     Vector<String> urlsList;
     String urlString;
-    iceServer.get("urls", urlString);
+    iceServer.get(urlParameterName, urlString);
     // This is the only way to check if "urls" is a sequence or a string. If we try to convert
     // to a sequence and it fails (in case it is a string), an exception will be set and the
     // RTCPeerConnection will fail.
     // So we convert to a string always, which converts a sequence to a string in the format: "foo, bar, ..",
     // then checking for a comma in the string assures that a string was a sequence and then we convert
     // it to a sequence safely.
-    if (urlString.isEmpty())
-        return Exception { INVALID_ACCESS_ERR };
-
-    if (urlString.find(',') != notFound && iceServer.get("urls", urlsList) && urlsList.size()) {
+    if (urlString.isEmpty()) {
+        // try with "url" from legacy spec.
+        urlParameterName = "url";
+        iceServer.get(urlParameterName, urlString);
+        if (urlString.isEmpty())
+            return Exception { INVALID_ACCESS_ERR };
+    }
+    WTFLogAlways("parseIceServer: %s is %s\n",urlParameterName, urlString.ascii().data());
+    if (urlString.find(',') != notFound && iceServer.get(urlParameterName, urlsList) && urlsList.size()) {
         for (auto iter = urlsList.begin(); iter != urlsList.end(); ++iter) {
             if (!validateIceServerURL(*iter))
                 return Exception { INVALID_ACCESS_ERR };

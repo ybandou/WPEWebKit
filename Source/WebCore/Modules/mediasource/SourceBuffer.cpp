@@ -523,7 +523,7 @@ void SourceBuffer::appendBufferInternal(unsigned char* data, unsigned size, Exce
 #if USE(GSTREAMER)
     // 5. If the buffer full flag equals true, then throw a QUOTA_EXCEEDED_ERR exception and abort these step.
     if (m_bufferFull) {
-        LOG(MediaSource, "SourceBuffer::appendBufferInternal(%p) -  buffer full, failing with QUOTA_EXCEEDED_ERR error", this);
+        RELEASE_LOG_ERROR("SourceBuffer::appendBufferInternal(%p) -  buffer full, failing with QUOTA_EXCEEDED_ERR error", this);
         ec = QUOTA_EXCEEDED_ERR;
         return;
     }

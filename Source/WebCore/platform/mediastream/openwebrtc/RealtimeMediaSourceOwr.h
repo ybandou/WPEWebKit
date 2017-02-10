@@ -39,6 +39,7 @@
 
 #include "GRefPtrGStreamer.h"
 #include "RealtimeMediaSource.h"
+#include "AudioSourceProviderGStreamer.h"
 #include <owr/owr_media_source.h>
 #include <wtf/HashMap.h>
 #include <wtf/RefPtr.h>
@@ -74,6 +75,7 @@ RealtimeMediaSourceOwr(const String& id, RealtimeMediaSource::Type type, const S
 
     virtual RefPtr<RealtimeMediaSourceCapabilities> capabilities() const { return m_capabilities; }
     virtual const RealtimeMediaSourceSettings& settings() const { return m_currentSettings; }
+    AudioSourceProvider* audioSourceProvider() override { return reinterpret_cast<AudioSourceProvider*>(m_audioSourceProvider.get()); };
 
     OwrMediaSource* mediaSource() const { return m_mediaSource; }
 
@@ -81,6 +83,7 @@ private:
     RefPtr<RealtimeMediaSourceCapabilities> m_capabilities;
     RealtimeMediaSourceSettings m_currentSettings;
     OwrMediaSource* m_mediaSource;
+    std::unique_ptr<AudioSourceProviderGStreamer> m_audioSourceProvider = std::make_unique<AudioSourceProviderGStreamer>();
 };
 
 typedef HashMap<String, RefPtr<RealtimeMediaSourceOwr>> RealtimeMediaSourceOwrMap;

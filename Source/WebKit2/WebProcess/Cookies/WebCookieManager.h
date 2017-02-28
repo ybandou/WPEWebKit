@@ -60,8 +60,6 @@ public:
     void setCookiePersistentStorage(const String& storagePath, uint32_t storageType);
 #endif
 
-    void notifyCookiesDidChange(WebCore::SessionID);
-
 private:
     // IPC::MessageReceiver
     void didReceiveMessage(IPC::Connection&, IPC::Decoder&) override;

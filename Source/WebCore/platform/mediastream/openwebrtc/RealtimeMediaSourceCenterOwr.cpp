@@ -114,8 +114,11 @@ void RealtimeMediaSourceCenterOwr::createMediaStream(NewMediaStreamHandler compl
 
 Vector<CaptureDevice> RealtimeMediaSourceCenterOwr::getMediaStreamDevices()
 {
-    notImplemented();
-    return Vector<CaptureDevice>();
+    static Vector<CaptureDevice> devices = {
+        { "audioin", CaptureDevice::SourceKind::Audio, "Audio Input", "A/V Capture" },
+        { "videoin", CaptureDevice::SourceKind::Video, "Video Camera", "A/V Capture" },
+    };
+    return devices;
 }
 
 void RealtimeMediaSourceCenterOwr::mediaSourcesAvailable(GList* sources)

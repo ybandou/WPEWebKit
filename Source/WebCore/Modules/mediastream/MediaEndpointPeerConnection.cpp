@@ -152,6 +152,7 @@ void MediaEndpointPeerConnection::createOfferTask(const RTCOfferOptions&)
     RefPtr<MediaEndpointSessionConfiguration> configurationSnapshot = localDescription ?
         localDescription->configuration()->clone() : MediaEndpointSessionConfiguration::create();
 
+    configurationSnapshot->setBundlePolicy(m_peerConnection.getConfiguration()->bundlePolicy());
     configurationSnapshot->setSessionVersion(m_sdpOfferSessionVersion++);
 
     auto transceivers = RtpTransceiverVector(m_peerConnection.getTransceivers());
@@ -230,6 +231,7 @@ void MediaEndpointPeerConnection::createAnswerTask(const RTCAnswerOptions&)
     RefPtr<MediaEndpointSessionConfiguration> configurationSnapshot = localDescription ?
         localDescription->configuration()->clone() : MediaEndpointSessionConfiguration::create();
 
+    configurationSnapshot->setBundlePolicy(m_peerConnection.getConfiguration()->bundlePolicy());
     configurationSnapshot->setSessionVersion(m_sdpAnswerSessionVersion++);
 
     auto transceivers = RtpTransceiverVector(m_peerConnection.getTransceivers());

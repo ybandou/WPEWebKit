@@ -56,6 +56,7 @@ namespace WebCore {
 
 STRING_FUNCTION(address)
 STRING_FUNCTION(apt)
+STRING_FUNCTION(bundlePolicy)
 STRING_FUNCTION(candidates)
 STRING_FUNCTION(ccmfir)
 STRING_FUNCTION(channels)
@@ -340,9 +341,33 @@ static Optional<IceCandidate> iceCandidateFromJSON(const String& json)
     return createCandidate(*candidateObject);
 }
 
+
+static String getBundlePolicyName(const PeerConnectionStates::BundlePolicy bundlePolicy)
+{
+    String bundlePolicyName;
+
+    switch (bundlePolicy) {
+    case PeerConnectionStates::BundlePolicy::Balanced:
+        bundlePolicyName = "balanced";
+        break;
+    case PeerConnectionStates::BundlePolicy::MaxCompat:
+        bundlePolicyName = "max-compat";
+        break;
+    case PeerConnectionStates::BundlePolicy::MaxBundle:
+        bundlePolicyName = "max-bundle";
+        break;
+    default:
+        ASSERT_NOT_REACHED();
+    };
+
+    return bundlePolicyName;
+}
+
+
 static String configurationToJSON(const MediaEndpointSessionConfiguration& configuration)
 {
     RefPtr<InspectorObject> object = InspectorObject::create();
+    object->setString(bundlePolicyString(), getBundlePolicyName(configuration.bundlePolicy()));
 
     RefPtr<InspectorObject> originatorObject = InspectorObject::create();
     originatorObject->setDouble(sessionIdString(), configuration.sessionId());

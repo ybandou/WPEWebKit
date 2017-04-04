@@ -73,7 +73,7 @@ public:
     FloatSize naturalSize() const override;
 
     void setVolume(float) override;
-#if PLATFORM(WPE)
+#if PLATFORM(WPE) || PLATFORM(GTK)
     float volume() const override;
 #endif
 

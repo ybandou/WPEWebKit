@@ -586,7 +586,7 @@ void MediaPlayerPrivateGStreamerBase::setVolume(float volume)
     gst_stream_volume_set_volume(m_volumeElement.get(), GST_STREAM_VOLUME_FORMAT_CUBIC, static_cast<double>(volume));
 }
 
-#if PLATFORM(WPE)
+#if PLATFORM(WPE) || PLATFORM(GTK)
 float MediaPlayerPrivateGStreamerBase::volume() const
 {
     if (!m_volumeElement)

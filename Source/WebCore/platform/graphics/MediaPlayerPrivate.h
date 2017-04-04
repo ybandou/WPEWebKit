@@ -119,7 +119,7 @@ public:
 
     virtual void setVolume(float) { }
     virtual void setVolumeDouble(double volume) { return setVolume(volume); }
-#if PLATFORM(IOS) || PLATFORM(WPE)
+#if PLATFORM(IOS) || PLATFORM(WPE) || PLATFORM(GTK)
     virtual float volume() const { return 1; }
 #endif
 

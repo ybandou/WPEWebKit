@@ -29,12 +29,51 @@
 #include "config.h"
 #include "ThreadedCoordinatedLayerTreeHost.h"
 
+// Xlib headers crap.
+#if defined(None)
+# undef None
+# define XXX_REDEFINE_XLIB_NONE 1
+#endif
+#if defined(True) && defined(False)
+# undef False
+# undef True
+# define XXX_REDEFINE_XLIB_BOOLEANS 1
+#endif
+#if defined(Above) && defined(Below)
+# undef Above
+# undef Below
+# define XXX_REDEFINE_XLIB_ABOVEBELOW 1
+#endif
+#if defined(Status)
+# undef Status
+# define XXX_REDEFINE_XLIB_STATUS 1
+#endif
+
 #if USE(COORDINATED_GRAPHICS_THREADED)
 
 #include "AcceleratedSurface.h"
 #include "WebPage.h"
 #include <WebCore/FrameView.h>
 #include <WebCore/MainFrame.h>
+
+#if defined(XXX_REDEFINE_XLIB_NONE) && XXX_REDEFINE_XLIB_NONE
+# define None 0L
+# undef XXX_REDEFINE_XLIB_NONE
+#endif
+#if defined(XXX_REDEFINE_XLIB_BOOLEANS) && XXX_REDEFINE_XLIB_BOOLEANS
+# define False 0
+# define True (!False)
+# undef XXX_REDEFINE_XLIB_BOOLEANS
+#endif
+#if defined(XXX_REDEFINE_XLIB_ABOVEBELOW) && XXX_REDEFINE_XLIB_ABOVEBELOW
+# define Above 0
+# define Below 1
+# undef XXX_REDEFINE_XLIB_ABOVE
+#endif
+#if defined(XXX_REDEFINE_XLIB_STATUS) && XXX_REDEFINE_XLIB_STATUS
+# define Status int
+# undef XXX_REDEFINE_XLIB_STATUS
+#endif
 
 using namespace WebCore;
 

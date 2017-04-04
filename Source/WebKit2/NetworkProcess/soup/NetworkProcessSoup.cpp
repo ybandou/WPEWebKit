@@ -61,7 +61,7 @@ void NetworkProcess::platformInitializeNetworkProcess(const NetworkProcessCreati
     m_diskCacheDirectory = parameters.diskCacheDirectory;
 
 #if ENABLE(NETWORK_CACHE)
-    SoupNetworkSession::defaultSession().clearSoupCache(WebCore::directoryName(m_diskCacheDirectory));
+    SoupNetworkSession::defaultSession().clearCache(WebCore::directoryName(m_diskCacheDirectory));
 
     NetworkCache::Cache::Parameters cacheParameters {
         parameters.shouldEnableNetworkCacheEfficacyLogging

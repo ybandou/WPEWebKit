@@ -20,7 +20,21 @@
 
 #if ENABLE(GRAPHICS_CONTEXT_3D)
 #include "GLContext.h"
+
+// XXX: Workaround Xlib headers madness.
+#if defined(True) && defined(False)
+# undef True
+# undef False
+# define XXX_REDEFINE_XLIB_BOOLEANS 1
+#endif
+
 #include <wtf/ThreadSpecific.h>
+
+#if defined(XXX_REDEFINE_XLIB_BOOLEANS) && XXX_REDEFINE_XLIB_BOOLEANS
+# define False 0
+# define True (!False)
+# undef XXX_REDEFINE_XLIB_BOOLEANS
+#endif
 
 #if PLATFORM(WPE)
 #include "GLContextWPE.h"

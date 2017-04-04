@@ -69,7 +69,9 @@ ThreadedCompositor::ThreadedCompositor(Client& client, WebPage& webPage, uint64_
     m_clientRendersNextFrame.store(false);
     m_coordinateUpdateCompletionWithClient.store(false);
 
+#if PLATFORM(WPE)
     m_compositingManager.establishConnection(webPage);
+#endif
 
     m_compositingRunLoop->performTaskSync([this, protectedThis = makeRef(*this)] {
         m_scene = adoptRef(new CoordinatedGraphicsScene(this));

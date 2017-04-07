@@ -527,7 +527,7 @@ void MediaEndpointOwr::prepareMediaSession(OwrMediaSession* mediaSession, PeerMe
 
         auto* rtxPayload = findRtxPayload(mediaDescription->payloads, payload.type);
 
-        ASSERT(m_codecTypes.find(payload.encodingName) != notFound);
+        ASSERT_WITH_MESSAGE(m_codecTypes.find(payload.encodingName.convertToASCIIUppercase()) != notFound, "Unable to find codec: %s", payload.encodingName.utf8().data());
         OwrCodecType codecType = static_cast<OwrCodecType>(m_codecTypes.find(payload.encodingName.convertToASCIIUppercase()));
 
         OwrPayload* receivePayload;

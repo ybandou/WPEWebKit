@@ -555,7 +555,9 @@
       <dep package="gst-plugins-bad"/>
       <dep package="libnice"/>
      </dependencies>
-    <branch repo="github.com" module="Igalia/openwebrtc.git" checkoutdir="openwebrtc" tag="7f3d23e034818893db198f4b56e41609abd8847b"/>
+     <!-- The commit points to the HEAD of the "clopez/rpi-compressed-rebased"
+          branch from the Metrological repository, which is more up-to-date.  -->
+    <branch repo="github.com" module="Metrological/openwebrtc.git" checkoutdir="openwebrtc" tag="09eda7252ceed89ddfa85e775f0849b5cd9bd44e"/>
   </autotools>
 
   <autotools id="llvm"

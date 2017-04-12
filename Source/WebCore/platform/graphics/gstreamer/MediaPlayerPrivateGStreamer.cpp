@@ -380,7 +380,7 @@ double MediaPlayerPrivateGStreamer::playbackPosition() const
     gint64 position = GST_CLOCK_TIME_NONE;
     GstElement* videoDec = nullptr;
     GstQuery* query = gst_query_new_position(GST_FORMAT_TIME);
-#if USE(FUSION_SINK)
+#if USE(FUSION_SINK) || USE(REALTEKV1_SINK) // TODO: Check for Realtek
     g_object_get(m_pipeline.get(), "video-sink", &videoDec, nullptr);
     if (!GST_IS_ELEMENT(videoDec))
         return 0.0f;
@@ -422,7 +422,7 @@ double MediaPlayerPrivateGStreamer::playbackPosition() const
 
 GstSeekFlags MediaPlayerPrivateGStreamer::hardwareDependantSeekFlags()
 {
-#if USE(FUSION_SINK)
+#if USE(FUSION_SINK) || USE(REALTEKV1_SINK) // TODO: Check for Realtek
     // With Fusion we use a decoder+renderer sink which can't be fed with samples not starting
     // in a key frame.
     return static_cast<GstSeekFlags>(GST_SEEK_FLAG_KEY_UNIT | GST_SEEK_FLAG_SNAP_NEAREST);
@@ -523,7 +523,7 @@ MediaTime MediaPlayerPrivateGStreamer::durationMediaTime() const
     if (m_errorOccured)
         return { };
 
-#if !USE(FUSION_SINK)
+#if !USE(FUSION_SINK) && !USE(REALTEKV1_SINK) // TODO: Check for Realtek
     if (m_durationAtEOS)
         return MediaTime::createWithDouble(m_durationAtEOS);
 #endif
@@ -1100,7 +1100,7 @@ void MediaPlayerPrivateGStreamer::handleMessage(GstMessage* message)
         gst_message_parse_state_changed(message, &currentState, &newState, 0);
         GST_TRACE("State changed %s --> %s", gst_element_state_get_name(currentState), gst_element_state_get_name(newState));
 
-#if USE(FUSION_SINK)
+#if USE(FUSION_SINK) || USE(REALTEKV1_SINK) // TODO: Check for Realtek
         if (g_strstr_len(GST_MESSAGE_SRC_NAME(message), 9, "h264parse")) {
             // Force regular H264 SPS/PPS updates.
             if (currentState == GST_STATE_NULL && newState == GST_STATE_READY)
@@ -2244,7 +2244,7 @@ void MediaPlayerPrivateGStreamer::createGSTPlayBin()
     g_object_set(G_OBJECT(m_videoSink.get()), "zorder",0.0f, nullptr);
 #endif
 
-#if !USE(WESTEROS_SINK) && !USE(FUSION_SINK)
+#if !USE(WESTEROS_SINK) && !USE(FUSION_SINK) && !USE(REALTEKV1_SINK) // TODO: Check for Realtek
     g_object_set(m_pipeline.get(), "audio-sink", createAudioSink(), nullptr);
 #endif
     configurePlaySink();

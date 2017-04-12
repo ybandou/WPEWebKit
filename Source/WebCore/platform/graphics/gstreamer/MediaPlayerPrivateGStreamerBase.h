@@ -271,7 +271,7 @@ protected:
 
 private:
 
-#if USE(WESTEROS_SINK) || USE(FUSION_SINK)
+#if USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK) // TODO: Check for Realtek
     void updateVideoRectangle();
 #endif
 

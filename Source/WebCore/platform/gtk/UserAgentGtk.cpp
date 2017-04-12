@@ -88,6 +88,11 @@ static String buildUserAgentString(const UserAgentQuirks& quirks)
         uaString.append(platformVersionForUAString());
     }
 
+#if ENABLE(WEB_RTC)
+    // TODO: Use a different quirk string when the libwebrtc backend is in use.
+    uaString.append("; OWR");
+#endif
+
     uaString.appendLiteral(") AppleWebKit/");
     uaString.append(versionForUAString());
     uaString.appendLiteral(" (KHTML, like Gecko) ");

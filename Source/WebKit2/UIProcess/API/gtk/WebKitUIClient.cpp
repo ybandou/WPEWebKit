@@ -205,6 +205,14 @@ private:
         webkitWebViewIsPlayingAudioChanged(m_webView);
     }
 
+    bool checkUserMediaPermissionForOrigin(WebPageProxy&, WebFrameProxy&, API::SecurityOrigin&, API::SecurityOrigin&, UserMediaPermissionCheckProxy& permissionRequest) override
+    {
+        // TODO: Check whether an UserMedia request for the same origin has
+        //       been granted and, if not, actually emit a request signal.
+        permissionRequest.setUserMediaAccessInfo("dummySalt", true);
+        return true;
+    }
+
     WebKitWebView* m_webView;
 };
 

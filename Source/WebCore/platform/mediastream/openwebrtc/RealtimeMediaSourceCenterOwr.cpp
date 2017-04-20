@@ -112,11 +112,19 @@ void RealtimeMediaSourceCenterOwr::createMediaStream(NewMediaStreamHandler compl
     owr_get_capture_sources(static_cast<OwrMediaType>(types), mediaSourcesAvailableCallback, this);
 }
 
+
+static const char audioCaptureDeviceId[] = "audio";
+static const char videoCaptureDeviceId[] = "video";
+static const char audioCaptureDeviceLabel[] = "Audio Input";
+static const char videoCaptureDeviceLabel[] = "Video Input";
+static const char captureDevicesGroup[] = "OWR A/V Capture";
+
+
 Vector<CaptureDevice> RealtimeMediaSourceCenterOwr::getMediaStreamDevices()
 {
     static Vector<CaptureDevice> devices = {
-        { "audioin", CaptureDevice::SourceKind::Audio, "Audio Input", "A/V Capture" },
-        { "videoin", CaptureDevice::SourceKind::Video, "Video Camera", "A/V Capture" },
+        { audioCaptureDeviceId, CaptureDevice::SourceKind::Audio, audioCaptureDeviceLabel, captureDevicesGroup },
+        { videoCaptureDeviceId, CaptureDevice::SourceKind::Video, videoCaptureDeviceLabel, captureDevicesGroup },
     };
     return devices;
 }
@@ -132,8 +140,6 @@ void RealtimeMediaSourceCenterOwr::mediaSourcesAvailable(GList* sources)
         GUniqueOutPtr<gchar> name;
         OwrMediaType mediaType;
         g_object_get(source, "media-type", &mediaType, "name", &name.outPtr(), NULL);
-        String sourceName(name.get());
-        String id(createCanonicalUUIDString());
 
         if (g_getenv("OWR_USE_TEST_SOURCES")) {
             OwrSourceType sourceType = OWR_SOURCE_TYPE_UNKNOWN;
@@ -142,12 +148,18 @@ void RealtimeMediaSourceCenterOwr::mediaSourcesAvailable(GList* sources)
                 continue;
         }
 
+        String id;
+        String sourceName;
         RealtimeMediaSource::Type mediaSourceType;
-        if (mediaType & OWR_MEDIA_TYPE_AUDIO)
+        if (mediaType & OWR_MEDIA_TYPE_AUDIO) {
             mediaSourceType = RealtimeMediaSource::Audio;
-        else if (mediaType & OWR_MEDIA_TYPE_VIDEO)
+            sourceName = audioCaptureDeviceLabel;
+            id = audioCaptureDeviceId;
+        } else if (mediaType & OWR_MEDIA_TYPE_VIDEO) {
             mediaSourceType = RealtimeMediaSource::Video;
-        else {
+            sourceName = videoCaptureDeviceLabel;
+            id = videoCaptureDeviceId;
+        } else {
             mediaSourceType = RealtimeMediaSource::None;
             ASSERT_NOT_REACHED();
         }

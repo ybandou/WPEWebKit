@@ -98,10 +98,10 @@ void MediaDevicesRequest::start()
             if (originHasPersistentAccess || document.hasHadActiveMediaStreamTrack())
                 label = deviceInfo.label();
 
-            auto id = hashID(deviceInfo.persistentId());
-            if (id.isEmpty())
-                continue;
-
+            // XXX TODO FIXME: Reinstate hashing of the device identifiers, which must be done also
+            // for tracks as some applications try to match tracks obtained with getUserMedia() against
+            // the devices returned by enumerateDevices().
+            auto id = deviceInfo.persistentId();
             auto groupId = hashID(deviceInfo.groupId());
             auto deviceType = deviceInfo.kind() == CaptureDevice::SourceKind::Audio ? MediaDeviceInfo::Kind::Audioinput : MediaDeviceInfo::Kind::Videoinput;
             devices.append(MediaDeviceInfo::create(scriptExecutionContext(), label, id, groupId, deviceType));

@@ -62,8 +62,12 @@ bool WebInspectorServer::platformResourceForPath(const String& path, Vector<char
     gconstpointer resourceData = g_bytes_get_data(resourceBytes.get(), &resourceDataSize);
     data.append(static_cast<const char*>(resourceData), resourceDataSize);
 
-    GUniquePtr<gchar> mimeType(g_content_type_guess(resourcePath.data(), static_cast<const guchar*>(resourceData), resourceDataSize, nullptr));
-    contentType = mimeType.get();
+    if (path == "/") {
+        contentType = "text/html; charset=utf-8";
+    } else {
+        GUniquePtr<gchar> mimeType(g_content_type_guess(resourcePath.data(), static_cast<const guchar*>(resourceData), resourceDataSize, nullptr));
+        contentType = mimeType.get();
+    }
     return true;
 }
 

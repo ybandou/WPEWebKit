@@ -423,6 +423,10 @@ void MediaEndpointPeerConnection::setLocalDescriptionTask(RefPtr<RTCSessionDescr
         m_peerConnection.scheduleNegotiationNeededEvent();
 
     setLocalDescriptionSucceeded();
+
+    // Fire legacy addstream events.
+    for (auto& event : m_legacyMediaStreamEvents)
+        m_peerConnection.fireEvent(*event);
 }
 
 RefPtr<RTCSessionDescription> MediaEndpointPeerConnection::localDescription() const
@@ -548,9 +552,7 @@ void MediaEndpointPeerConnection::setRemoteDescriptionTask(RefPtr<RTCSessionDesc
         }
     }
 
-    // Fire legacy addstream events.
-    for (auto& event : legacyMediaStreamEvents)
-        m_peerConnection.fireEvent(*event);
+    m_legacyMediaStreamEvents = legacyMediaStreamEvents;
 
     SignalingState newSignalingState;
 

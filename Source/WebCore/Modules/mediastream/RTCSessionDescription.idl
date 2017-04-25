@@ -38,7 +38,7 @@
     PublicIdentifier,
 ] interface RTCSessionDescription {
     [SetterMayThrowException] readonly attribute RTCSdpType type;
-    readonly attribute DOMString sdp;
+    attribute DOMString sdp;
 
     serializer = {type, sdp};
 };

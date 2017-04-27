@@ -62,6 +62,9 @@ public:
     bool ready() const { return m_eKeyState == KEY_READY; }
     int processPayload(const void* iv, uint32_t ivSize, void* payloadData, uint32_t payloadDataSize);
 
+    // Helper for PlayreadySession clients.
+    Lock& mutex() { return m_prSessionMutex; }
+
 protected:
     RefPtr<ArrayBuffer> m_key;
 
@@ -78,6 +81,8 @@ private:
     KeyState m_eKeyState;
     DRM_CHAR m_rgchSessionID[CCH_BASE64_EQUIV(SIZEOF(DRM_ID)) + 1];
     DRM_BOOL m_fCommit;
+
+    Lock m_prSessionMutex;
 };
 
 }

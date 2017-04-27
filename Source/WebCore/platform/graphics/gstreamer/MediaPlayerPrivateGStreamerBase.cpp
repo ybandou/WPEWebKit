@@ -396,6 +396,9 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
                 return false;
             }
             GST_DEBUG("handling drm-preferred-decryption-system-id need context message");
+
+            GST_DEBUG("Element: %s", GST_ELEMENT_NAME(GST_ELEMENT(message->src)));
+
             std::pair<Vector<GRefPtr<GstEvent>>, Vector<String>> streamEncryptionInformation = extractEventsAndSystemsFromMessage(message);
             GST_TRACE("found %" G_GSIZE_FORMAT " protection events", streamEncryptionInformation.first.size());
             Vector<uint8_t> concatenatedInitDataChunks;
@@ -409,21 +412,23 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
 
 #if USE(PLAYREADY)
                 if (webkit_media_playready_decrypt_is_playready_key_system_id(eventKeySystemId)) {
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-                    LockHolder locker(m_prSessionMutex);
-#endif
                     PlayreadySession* session = prSession();
-                    if (session && (session->keyRequested() || session->ready())) {
-                        GST_DEBUG("playready key requested already");
-                        if (session->ready()) {
-                            GST_DEBUG("playready key already negotiated");
-                            emitPlayReadySession();
+                    if (session) {
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
+                        LockHolder locker(session->mutex());
+#endif
+                        if (session->keyRequested() || session->ready()) {
+                            GST_DEBUG("playready key requested already");
+                            if (session->ready()) {
+                                GST_DEBUG("playready key already negotiated");
+                                emitPlayReadySession();
+                            }
+                            if (streamEncryptionInformation.second.contains(eventKeySystemId)) {
+                                GST_TRACE("considering init data handled for %s", eventKeySystemId);
+                                m_handledProtectionEvents.add(GST_EVENT_SEQNUM(event.get()));
+                            }
+                            return false;
                         }
-                        if (streamEncryptionInformation.second.contains(eventKeySystemId)) {
-                            GST_TRACE("considering init data handled for %s", eventKeySystemId);
-                            m_handledProtectionEvents.add(GST_EVENT_SEQNUM(event.get()));
-                        }
-                        return false;
                     }
                 }
 #endif
@@ -1446,9 +1451,10 @@ unsigned MediaPlayerPrivateGStreamerBase::videoDecodedByteCount() const
 #if (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)) && USE(PLAYREADY)
 PlayreadySession* MediaPlayerPrivateGStreamerBase::prSession() const
 {
+    LockHolder locker(m_prSessionsMutex);
     PlayreadySession* session = nullptr;
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-    session = m_prSession.get();
+    session = m_prSessions.get("sessionId");
 #elif ENABLE(LEGACY_ENCRYPTED_MEDIA)
     if (m_cdmSession) {
         CDMPRSessionGStreamer* cdmSession = static_cast<CDMPRSessionGStreamer*>(m_cdmSession);
@@ -1513,7 +1519,10 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::addKey(const Str
         RefPtr<Uint8Array> nextMessage;
         unsigned short errorCode;
         uint32_t systemCode;
-        bool result = m_prSession->playreadyProcessKey(key.get(), nextMessage, errorCode, systemCode);
+        LockHolder prSessionsLocker(m_prSessionsMutex);
+        PlayreadySession* prSession = m_prSessions.get("sessionId");
+        prSessionsLocker.unlockEarly();
+        bool result = prSession->playreadyProcessKey(key.get(), nextMessage, errorCode, systemCode);
 
         if (errorCode || !result) {
             GST_ERROR("Error processing key: errorCode: %u, result: %d", errorCode, result);
@@ -1587,14 +1596,19 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
 #if USE(PLAYREADY)
     if (equalIgnoringASCIICase(keySystem, PLAYREADY_PROTECTION_SYSTEM_ID)
         || equalIgnoringASCIICase(keySystem, PLAYREADY_YT_PROTECTION_SYSTEM_ID)) {
-        LockHolder locker(m_prSessionMutex);
-        if (!m_prSession)
-            m_prSession = std::make_unique<PlayreadySession>();
-        if (m_prSession->ready()) {
+
+        LockHolder prSessionsLocker(m_prSessionsMutex);
+        if (!m_prSessions.contains("sessionId"))
+            m_prSessions.add("sessionId", std::make_unique<PlayreadySession>());
+        PlayreadySession* prSession = m_prSessions.get("sessionId");
+        prSessionsLocker.unlockEarly();
+
+        LockHolder locker(prSession->mutex());
+        if (prSession->ready()) {
             emitPlayReadySession();
             return MediaPlayer::NoError;
         }
-        if (m_prSession->keyRequested()) {
+        if (prSession->keyRequested()) {
             GST_DEBUG("previous key request already ongoing");
             return MediaPlayer::NoError;
         }
@@ -1620,13 +1634,13 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
         uint32_t systemCode;
         RefPtr<Uint8Array> initData = Uint8Array::create(&(initDataPtr[boxLength]), initDataLength-boxLength);
         String destinationURL;
-        RefPtr<Uint8Array> result = m_prSession->playreadyGenerateKeyRequest(initData.get(), customData, destinationURL, errorCode, systemCode);
+        RefPtr<Uint8Array> result = prSession->playreadyGenerateKeyRequest(initData.get(), customData, destinationURL, errorCode, systemCode);
         if (errorCode) {
             GST_ERROR("the key request wasn't properly generated");
             return MediaPlayer::InvalidPlayerState;
         }
 
-        if (m_prSession->ready()) {
+        if (prSession->ready()) {
             emitPlayReadySession();
             return MediaPlayer::NoError;
         }
@@ -1767,14 +1781,16 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
 
 #if USE(PLAYREADY)
     if (webkit_media_playready_decrypt_is_playready_key_system_id(eventKeySystemId)) {
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-        LockHolder locker(m_prSessionMutex);
-#endif
         PlayreadySession* session = prSession();
-        if (session && (session->keyRequested() || session->ready())) {
-            if (session->ready())
-                emitPlayReadySession();
-            return;
+        if (session) {
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
+            LockHolder locker(session->mutex());
+#endif
+            if (session->keyRequested() || session->ready()) {
+                if (session->ready())
+                    emitPlayReadySession();
+                return;
+            }
         }
     }
 #endif

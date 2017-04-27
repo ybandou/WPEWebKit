@@ -276,8 +276,8 @@ private:
 #endif
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(PLAYREADY)
-    std::unique_ptr<PlayreadySession> m_prSession;
-    Lock m_prSessionMutex;
+    HashMap<String, std::unique_ptr<PlayreadySession>> m_prSessions;
+    mutable Lock m_prSessionsMutex;
 #endif
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(OCDM)

@@ -78,6 +78,7 @@ private:
     KeyState m_eKeyState;
     DRM_CHAR m_rgchSessionID[CCH_BASE64_EQUIV(SIZEOF(DRM_ID)) + 1];
     DRM_BOOL m_fCommit;
+    RefPtr<Uint8Array> m_lastKeyRequest;
 };
 
 }

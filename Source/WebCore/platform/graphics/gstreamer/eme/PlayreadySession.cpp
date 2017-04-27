@@ -130,7 +130,6 @@ DRM_RESULT DRM_CALL PlayreadySession::_PolicyCallback(const DRM_VOID *, DRM_POLI
 //
 RefPtr<Uint8Array> PlayreadySession::playreadyGenerateKeyRequest(Uint8Array* initData, const String& customData, String& destinationURL, unsigned short& errorCode, uint32_t& systemCode)
 {
-    RefPtr<Uint8Array> result;
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_BYTE *pbChallenge = NULL;
     DRM_DWORD cbChallenge = 0;
@@ -140,7 +139,13 @@ RefPtr<Uint8Array> PlayreadySession::playreadyGenerateKeyRequest(Uint8Array* ini
     GST_DEBUG("generating key request");
     GST_MEMDUMP("init data", initData->data(), initData->byteLength());
 
+    if (keyRequested()) {
+        GST_DEBUG("A previous key request is ongoing, returning the previous key request");
+        return m_lastKeyRequest;
+    }
+
     // The current state MUST be KEY_INIT otherwise error out.
+
     ChkBOOL(m_eKeyState == KEY_INIT, DRM_E_INVALIDARG);
 
     ChkDR(Drm_Content_SetProperty(m_poAppContext,
@@ -205,7 +210,7 @@ RefPtr<Uint8Array> PlayreadySession::playreadyGenerateKeyRequest(Uint8Array* ini
     GST_TRACE("generated license request of size %d", cbChallenge);
     GST_MEMDUMP("generated license request :", pbChallenge, cbChallenge);
 
-    result = Uint8Array::create(pbChallenge, cbChallenge);
+    m_lastKeyRequest = Uint8Array::create(pbChallenge, cbChallenge);
     destinationURL = static_cast<const char *>(pchSilentURL);
     GST_DEBUG("destination URL : %s", destinationURL.utf8().data());
 
@@ -215,7 +220,7 @@ RefPtr<Uint8Array> PlayreadySession::playreadyGenerateKeyRequest(Uint8Array* ini
     SAFE_OEM_FREE(pbChallenge);
     SAFE_OEM_FREE(pchSilentURL);
 
-    return result;
+    return m_lastKeyRequest;
 
 ErrorExit:
     if (DRM_FAILED(dr)) {
@@ -224,7 +229,7 @@ ErrorExit:
         errorCode = WebKitMediaKeyError::MEDIA_KEYERR_CLIENT;
 #endif
     }
-    return result;
+    return m_lastKeyRequest;
 }
 
 //

@@ -1594,6 +1594,11 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
             emitPlayReadySession();
             return MediaPlayer::NoError;
         }
+        if (m_prSession->keyRequested()) {
+            GST_DEBUG("previous key request already ongoing");
+            return MediaPlayer::NoError;
+        }
+
         // For now we do not know if all protection systems should drop the pssh box, but during
         // testing of PR, we found that it is mandatory (found using the EME certification tests)
         // so for PR we remove the pssh and sice, only ship the actual initdata.

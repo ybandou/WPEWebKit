@@ -713,6 +713,10 @@ void AppendPipeline::appsinkNewSample(GstSample* sample)
     {
         LockHolder locker(m_newSampleLock);
 
+        // If we were in KeyNegotiation but samples are coming, assume we're already OnGoing
+        if (m_appendState == AppendState::KeyNegotiation)
+            setAppendState(AppendState::Ongoing);
+
         // Ignore samples if we're not expecting them. Refuse processing if we're in Invalid state.
         if (m_appendState != AppendState::Ongoing && m_appendState != AppendState::Sampling) {
             GST_WARNING("Unexpected sample, appendState=%s", dumpAppendState(m_appendState));

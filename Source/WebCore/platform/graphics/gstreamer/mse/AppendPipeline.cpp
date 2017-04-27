@@ -435,6 +435,11 @@ void AppendPipeline::setAppendState(AppendState newAppendState)
     if (oldAppendState != newAppendState)
         GST_TRACE("%s --> %s", dumpAppendState(oldAppendState), dumpAppendState(newAppendState));
 
+    if (newAppendState == AppendState::NotStarted) {
+        WTF::String  dotFileName = String::format("append-%p", this);
+        gst_debug_bin_to_dot_file(GST_BIN(m_pipeline.get()), GST_DEBUG_GRAPH_SHOW_ALL, dotFileName.utf8().data());
+    }
+
     bool ok = false;
     bool mustCheckEndOfAppend = false;
 
@@ -566,8 +571,11 @@ void AppendPipeline::setAppendState(AppendState newAppendState)
 
     if (ok)
         m_appendState = newAppendState;
-    else
+    else {
         GST_ERROR("Invalid append state transition %s --> %s", dumpAppendState(oldAppendState), dumpAppendState(newAppendState));
+        WTF::String  dotFileName = String::format("append-%p-error", this);
+        gst_debug_bin_to_dot_file(GST_BIN(m_pipeline.get()), GST_DEBUG_GRAPH_SHOW_ALL, dotFileName.utf8().data());
+    }
 
     ASSERT(ok);
 

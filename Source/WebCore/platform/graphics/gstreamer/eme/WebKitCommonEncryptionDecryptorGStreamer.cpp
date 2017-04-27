@@ -207,7 +207,7 @@ static GstFlowReturn webkitMediaCommonEncryptionDecryptTransformInPlace(GstBaseT
 
     GstProtectionMeta* protectionMeta = reinterpret_cast<GstProtectionMeta*>(gst_buffer_get_protection_meta(buffer));
     if (!protectionMeta) {
-        GST_DEBUG_OBJECT(self, "Failed to get GstProtection metadata from buffer %p, assuming it's not encrypted", buffer);
+        GST_DEBUG_OBJECT(self, "Failed to get GstProtection metadata from buffer %p PTS=%" GST_TIME_FORMAT ", assuming it's not encrypted", buffer, GST_TIME_ARGS(GST_BUFFER_PTS(buffer)));
         return GST_FLOW_OK;
     }
 

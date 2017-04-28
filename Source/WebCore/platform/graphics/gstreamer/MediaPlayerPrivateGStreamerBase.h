@@ -276,7 +276,15 @@ private:
 #endif
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(PLAYREADY)
-    HashMap<String, std::unique_ptr<PlayreadySession>> m_prSessions;
+    PlayreadySession* prSessionByInitData(const Vector<uint8_t>&, bool alreadyLocked = false) const;
+    PlayreadySession* prSessionBySessionId(const String&, bool alreadyLocked = false) const;
+
+    // Maps each pipeline (playback pipeline for normal videos, append pipeline for MSE) to its latest sessionId.
+    HashMap<GstElement*, String> m_prSessionIds;
+
+    Vector<std::unique_ptr<PlayreadySession>> m_prSessions;
+
+    // Protects the previous two HashMaps for concurrent access.
     mutable Lock m_prSessionsMutex;
 #endif
 

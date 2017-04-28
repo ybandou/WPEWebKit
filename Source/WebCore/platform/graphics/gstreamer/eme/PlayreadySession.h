@@ -32,6 +32,7 @@
 #undef __out
 #include <runtime/Uint8Array.h>
 #include <wtf/Forward.h>
+#include <wtf/text/WTFString.h>
 
 namespace WebCore {
 
@@ -52,7 +53,7 @@ private:
     };
 
 public:
-    PlayreadySession();
+    PlayreadySession(const String &sessionId, const Vector<uint8_t> &initData);
     ~PlayreadySession();
 
     RefPtr<Uint8Array> playreadyGenerateKeyRequest(Uint8Array* initData, const String& customData, String& destinationURL, unsigned short& errorCode, uint32_t& systemCode);
@@ -64,6 +65,8 @@ public:
 
     // Helper for PlayreadySession clients.
     Lock& mutex() { return m_prSessionMutex; }
+    const Vector<uint8_t>& initData() { return m_initData; }
+    const String& sessionId() { return m_sessionId; }
 
 protected:
     RefPtr<ArrayBuffer> m_key;
@@ -83,6 +86,8 @@ private:
     DRM_BOOL m_fCommit;
 
     Lock m_prSessionMutex;
+    String m_sessionId;
+    Vector<uint8_t> m_initData;
 };
 
 }

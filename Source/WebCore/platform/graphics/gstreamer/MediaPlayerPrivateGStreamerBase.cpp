@@ -404,24 +404,44 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
             Vector<uint8_t> concatenatedInitDataChunks;
             unsigned concatenatedInitDataChunksNumber = 0;
             String eventKeySystemIdString;
+#if USE(PLAYREADY)
+            PlayreadySession* prSession = nullptr;
+#endif
+
             for (auto& event : streamEncryptionInformation.first) {
                 GST_TRACE("handling protection event %u", GST_EVENT_SEQNUM(event.get()));
                 const char* eventKeySystemId = nullptr;
                 GstBuffer* data = nullptr;
                 gst_event_parse_protection(event.get(), &eventKeySystemId, &data, nullptr);
 
+                // Here we receive the DRM init data from the pipeline: we will emit
+                // the needkey event with that data and the browser might create a
+                // CDMSession from this event handler. If such a session was created
+                // We will emit the message event from the session to provide the
+                // DRM challenge to the browser and wait for an update. If on the
+                // contrary no session was created we won't wait and let the pipeline
+                // error out by itself.
+                GstMapInfo mapInfo;
+                if (!gst_buffer_map(data, &mapInfo, GST_MAP_READ)) {
+                    GST_WARNING("cannot map %s protection data", eventKeySystemId);
+                    break;
+                }
+
 #if USE(PLAYREADY)
                 if (webkit_media_playready_decrypt_is_playready_key_system_id(eventKeySystemId)) {
-                    PlayreadySession* session = prSession();
-                    if (session) {
+                    // ### OK
+                    Vector<uint8_t> initDataVector;
+                    initDataVector.append(reinterpret_cast<uint8_t*>(mapInfo.data), mapInfo.size);
+                    prSession = prSessionByInitData(initDataVector);
+                    if (prSession) {
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-                        LockHolder locker(session->mutex());
+                        LockHolder locker(prSession->mutex());
 #endif
-                        if (session->keyRequested() || session->ready()) {
+                        if (prSession->keyRequested() || prSession->ready()) {
                             GST_DEBUG("playready key requested already");
-                            if (session->ready()) {
+                            if (prSession->ready()) {
                                 GST_DEBUG("playready key already negotiated");
-                                emitPlayReadySession();
+                                emitPlayReadySession(prSession);
                             }
                             if (streamEncryptionInformation.second.contains(eventKeySystemId)) {
                                 GST_TRACE("considering init data handled for %s", eventKeySystemId);
@@ -446,18 +466,6 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
                     return false;
                 }
 #endif
-                // Here we receive the DRM init data from the pipeline: we will emit
-                // the needkey event with that data and the browser might create a
-                // CDMSession from this event handler. If such a session was created
-                // We will emit the message event from the session to provide the
-                // DRM challenge to the browser and wait for an update. If on the
-                // contrary no session was created we won't wait and let the pipeline
-                // error out by itself.
-                GstMapInfo mapInfo;
-                if (!gst_buffer_map(data, &mapInfo, GST_MAP_READ)) {
-                    GST_WARNING("cannot map %s protection data", eventKeySystemId);
-                    break;
-                }
 
                 GST_TRACE("appending init data for %s of size %u", eventKeySystemId, mapInfo.size);
                 GST_MEMDUMP("init data", reinterpret_cast<const unsigned char *>(mapInfo.data), mapInfo.size);
@@ -482,13 +490,20 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
             if (concatenatedInitDataChunksNumber > 1)
                 eventKeySystemIdString = emptyString();
 
-            RunLoop::main().dispatch([this, eventKeySystemIdString, initData = WTFMove(concatenatedInitDataChunks)] {
+            // ### OK
+            String sessionId(createCanonicalUUIDString());
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(PLAYREADY)
+            if (prSession)
+                sessionId = prSession->sessionId();
+#endif
+
+            RunLoop::main().dispatch([this, eventKeySystemIdString, sessionId, initData = WTFMove(concatenatedInitDataChunks)] {
                 GST_DEBUG("scheduling keyNeeded event for %s with concatenated init datas size of %" G_GSIZE_FORMAT, eventKeySystemIdString.utf8().data(), initData.size());
                 GST_MEMDUMP("init datas", initData.data(), initData.size());
 
                 // FIXME: Provide a somehow valid sessionId.
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-                needKey(keySystemUuidToId(eventKeySystemIdString).string(), "sessionId", initData.data(), initData.size());
+                needKey(keySystemUuidToId(eventKeySystemIdString).string(), sessionId, initData.data(), initData.size());
 #elif ENABLE(LEGACY_ENCRYPTED_MEDIA)
                 RefPtr<Uint8Array> initDataArray = Uint8Array::create(initData.data(), initData.size());
                 needKey(initDataArray);
@@ -1473,24 +1488,21 @@ WebCore::PlayreadySession* MediaPlayerPrivateGStreamerBase::prSessionBySessionId
 }
 #endif
 
-#if (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)) && USE(PLAYREADY)
+#if ENABLE(LEGACY_ENCRYPTED_MEDIA)
 PlayreadySession* MediaPlayerPrivateGStreamerBase::prSession() const
 {
     PlayreadySession* session = nullptr;
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-    session = prSessionBySessionId("sessionId");
-#elif ENABLE(LEGACY_ENCRYPTED_MEDIA)
     if (m_cdmSession) {
         CDMPRSessionGStreamer* cdmSession = static_cast<CDMPRSessionGStreamer*>(m_cdmSession);
         session = static_cast<PlayreadySession*>(cdmSession);
     }
-#endif
     return session;
 }
+#endif
 
-void MediaPlayerPrivateGStreamerBase::emitPlayReadySession()
+#if (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)) && USE(PLAYREADY)
+void MediaPlayerPrivateGStreamerBase::emitPlayReadySession(PlayreadySession* session)
 {
-    PlayreadySession* session = prSession();
     if (!session->ready())
         return;
 
@@ -1543,7 +1555,8 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::addKey(const Str
         RefPtr<Uint8Array> nextMessage;
         unsigned short errorCode;
         uint32_t systemCode;
-        PlayreadySession* prSession = prSessionBySessionId("sessionId");
+        // ### OK
+        PlayreadySession* prSession = prSessionBySessionId(sessionID);
         bool result = prSession->playreadyProcessKey(key.get(), nextMessage, errorCode, systemCode);
 
         if (errorCode || !result) {
@@ -1552,7 +1565,7 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::addKey(const Str
         }
 
         // XXX: use nextMessage here and send a new keyMessage is ack is needed?
-        emitPlayReadySession();
+        emitPlayReadySession(prSession);
 
         m_player->keyAdded(keySystem, sessionID);
 
@@ -1627,14 +1640,13 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
         // so it can be used for an initData-sessionId mapping.
         GST_MEMDUMP("trimmed init data", initDataPtr, initDataLength);
 
-
-        // ########
-        String sessionId = "sessionId"; //createCanonicalUUIDString();
+        // ### OK
+        Vector<uint8_t> initDataVector;
+        initDataVector.append(reinterpret_cast<const uint8_t*>(initDataPtr), initDataLength);
         LockHolder prSessionsLocker(m_prSessionsMutex);
-        PlayreadySession* prSession = prSessionBySessionId(sessionId, true);
+        PlayreadySession* prSession = prSessionByInitData(initDataVector, true);
         if (!prSession) {
-            Vector<uint8_t> initData; // ### Use real init data here
-            std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(sessionId, initData);
+            std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(createCanonicalUUIDString(), initDataVector);
             prSession = uniquePrSession.get();
             m_prSessions.append(std::move(uniquePrSession));
         }
@@ -1642,7 +1654,7 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
 
         LockHolder locker(prSession->mutex());
         if (prSession->ready()) {
-            emitPlayReadySession();
+            emitPlayReadySession(prSession);
             return MediaPlayer::NoError;
         }
         if (prSession->keyRequested()) {
@@ -1673,13 +1685,13 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
         }
 
         if (prSession->ready()) {
-            emitPlayReadySession();
+            emitPlayReadySession(prSession);
             return MediaPlayer::NoError;
         }
         URL url(URL(), destinationURL);
         GST_TRACE("playready generateKeyRequest result size %u", result->length());
         GST_MEMDUMP("result", result->data(), result->length());
-        m_player->keyMessage(keySystem, sessionId, result->data(), result->length(), url);
+        m_player->keyMessage(keySystem, prSession->sessionId(), result->data(), result->length(), url);
         return MediaPlayer::NoError;
     }
 #elif USE(OCDM)
@@ -1763,7 +1775,8 @@ void MediaPlayerPrivateGStreamerBase::setCDMSession(CDMSession* session)
 void MediaPlayerPrivateGStreamerBase::keyAdded()
 {
 #if USE(PLAYREADY)
-    emitPlayReadySession();
+    // This won't work properly when using more than one session at the same time.
+    emitPlayReadySession(prSession());
 #endif
 
 #if USE(OCDM)
@@ -1822,17 +1835,25 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
     }
 
 #if USE(PLAYREADY)
+    PlayreadySession* prSession = nullptr;
     if (webkit_media_playready_decrypt_is_playready_key_system_id(eventKeySystemId)) {
-        PlayreadySession* session = prSession();
-        if (session) {
+        // ### OK
+        Vector<uint8_t> initDataVector;
+        initDataVector.append(reinterpret_cast<uint8_t*>(mapInfo.data), mapInfo.size);
+        prSession = prSessionByInitData(initDataVector);
+        if (prSession) {
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-            LockHolder locker(session->mutex());
+            LockHolder locker(prSession->mutex());
 #endif
-            if (session->keyRequested() || session->ready()) {
-                if (session->ready())
-                    emitPlayReadySession();
+            if (prSession->keyRequested() || prSession->ready()) {
+                if (prSession->ready())
+                    emitPlayReadySession(prSession);
                 return;
             }
+        } else {
+            std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(createCanonicalUUIDString(), initDataVector);
+            prSession = uniquePrSession.get();
+            m_prSessions.append(std::move(uniquePrSession));
         }
     }
 #endif
@@ -1853,7 +1874,13 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
 
     GST_DEBUG("scheduling keyNeeded event for %s with init data size of %u", eventKeySystemId, mapInfo.size);
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
-    needKey(keySystemUuidToId(eventKeySystemId).string(), "sessionId", mapInfo.data, mapInfo.size);
+    // ### OK
+#if USE(PLAYREADY)
+    String sessionId = prSession->sessionId();
+#else
+    String sessionId = createCanonicalUUIDString();
+#endif
+    needKey(keySystemUuidToId(eventKeySystemId).string(), sessionId, mapInfo.data, mapInfo.size);
 #elif ENABLE(LEGACY_ENCRYPTED_MEDIA)
     RefPtr<Uint8Array> initDataArray = Uint8Array::create(mapInfo.data, mapInfo.size);
     needKey(initDataArray);

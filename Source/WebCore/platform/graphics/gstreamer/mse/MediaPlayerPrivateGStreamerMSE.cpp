@@ -815,10 +815,9 @@ void MediaPlayerPrivateGStreamerMSE::dispatchDecryptionKey(GstBuffer* buffer)
 }
 
 #if USE(PLAYREADY)
-void MediaPlayerPrivateGStreamerMSE::emitPlayReadySession()
+void MediaPlayerPrivateGStreamerMSE::emitPlayReadySession(PlayreadySession* session)
 {
     GST_TRACE("emitting session");
-    PlayreadySession* session = prSession();
     if (!session->ready())
         return;
 

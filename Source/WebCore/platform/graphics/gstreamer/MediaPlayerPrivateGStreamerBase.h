@@ -150,7 +150,7 @@ public:
 
 #if USE(PLAYREADY)
     PlayreadySession* prSession() const;
-    virtual void emitPlayReadySession();
+    virtual void emitPlayReadySession(PlayreadySession*);
 #endif
 #endif
 

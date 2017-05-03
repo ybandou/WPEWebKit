@@ -32,6 +32,7 @@
 
 #include "AssemblerBuffer.h"
 #include "JITCompilationEffort.h"
+#include <limits.h>
 #include <wtf/Assertions.h>
 #include <wtf/SegmentedVector.h>
 #include <limits.h>
@@ -212,6 +213,9 @@ public:
     
     void sync()
     {
+        // FIXME: https://bugs.webkit.org/show_bug.cgi?id=169984
+        // We might get a performance improvements by using SYNC_MB in some or
+        // all cases.
         emitInst(0x0000000f);
     }
 

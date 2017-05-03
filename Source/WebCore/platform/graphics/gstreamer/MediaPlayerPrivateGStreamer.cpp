@@ -2236,6 +2236,11 @@ void MediaPlayerPrivateGStreamer::createGSTPlayBin()
         g_signal_connect_swapped(videoSinkPad.get(), "notify::caps", G_CALLBACK(videoSinkCapsChangedCallback), this);
 #endif
 
+#if USE(REALTEKV1_SINK) && USE(HOLE_PUNCH_GSTREAMER)
+    m_videoSink = gst_element_factory_make("rtkv1sink", "rtkv1sink_test");
+    g_object_set(m_pipeline.get(), "video-sink", m_videoSink.get(), nullptr);
+#endif
+
 #if USE(WESTEROS_SINK) && USE(HOLE_PUNCH_GSTREAMER)
     GRefPtr<GstElementFactory> westerosfactory = adoptGRef(gst_element_factory_find("westerossink"));
 

@@ -323,7 +323,7 @@ MediaPlayerPrivateGStreamerBase::~MediaPlayerPrivateGStreamerBase()
 void MediaPlayerPrivateGStreamerBase::setPipeline(GstElement* pipeline)
 {
     m_pipeline = pipeline;
-#if USE(HOLE_PUNCH_GSTREAMER) && (USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK)) // TODO: Check for Realtek
+#if USE(HOLE_PUNCH_GSTREAMER) && (USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK))
     updateVideoRectangle();
 #endif
 }
@@ -977,7 +977,7 @@ void MediaPlayerPrivateGStreamerBase::setSize(const IntSize& size)
     GST_INFO("Setting size to %dx%d", size.width(), size.height());
     m_size = size;
 
-#if USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK) // TODO: Check for Realtek
+#if USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK)
     updateVideoRectangle();
 #endif
 }
@@ -989,12 +989,12 @@ void MediaPlayerPrivateGStreamerBase::setPosition(const IntPoint& position)
 
     m_position = position;
 
-#if USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK) // TODO: Check for Realtek
+#if USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK)
     updateVideoRectangle();
 #endif
 }
 
-#if USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK) // TODO: Check for Realtek
+#if USE(WESTEROS_SINK) || USE(FUSION_SINK) || USE(REALTEKV1_SINK)
 void MediaPlayerPrivateGStreamerBase::updateVideoRectangle()
 {
     if (!m_pipeline)

@@ -132,12 +132,26 @@
 #include <runtime/Uint8Array.h>
 #endif
 
+// DEBUG
+#include <wtf/HexNumber.h>
+
 GST_DEBUG_CATEGORY(webkit_media_player_debug);
 #define GST_CAT_DEFAULT webkit_media_player_debug
 
 using namespace std;
 
 namespace WebCore {
+
+// DEBUG: Helper to represent initDatas in a more manageable way.
+static String initDataChecksum(const Vector<uint8_t>& initData)
+{
+    uint64_t checksum = 0;
+    for (const auto& item : initData)
+        checksum += item;
+    StringBuilder builder;
+    appendUnsigned64AsHex(checksum, builder);
+    return builder.toString();
+}
 
 void registerWebKitGStreamerElements()
 {

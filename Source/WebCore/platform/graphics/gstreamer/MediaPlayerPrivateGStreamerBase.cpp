@@ -491,6 +491,7 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
                     Vector<uint8_t> initDataVector;
                     initDataVector.append(reinterpret_cast<uint8_t*>(mapInfo.data), mapInfo.size);
+                    GST_DEBUG("registering initData for key system %s, initData: %s", eventKeySystemId, initDataChecksum(initDataVector).utf8().data());
                     m_initDatas.add(eventKeySystemIdString, WTFMove(initDataVector));
 #endif
                     m_handledProtectionEvents.add(GST_EVENT_SEQNUM(event.get()));
@@ -1495,9 +1496,12 @@ WebCore::PlayreadySession* MediaPlayerPrivateGStreamerBase::prSessionByInitData(
 {
     LockHolder locker(alreadyLocked ? nullptr : &m_prSessionsMutex);
     for (auto& prSession : m_prSessions) {
-        if (prSession->initData() == initData)
+        if (prSession->initData() == initData) {
+            GST_DEBUG("initData: %s, prSession: %p", initDataChecksum(initData).utf8().data(), prSession.get());
             return prSession.get();
+        }
     }
+    GST_DEBUG("initData: %s, prSession: not found", initDataChecksum(initData).utf8().data());
     return nullptr;
 }
 
@@ -1506,11 +1510,11 @@ WebCore::PlayreadySession* MediaPlayerPrivateGStreamerBase::prSessionBySessionId
     LockHolder locker(alreadyLocked ? nullptr : &m_prSessionsMutex);
     for (auto& prSession : m_prSessions) {
         if (prSession->sessionId() == sessionId) {
-            GST_TRACE("sessionId: %s. Found.", sessionId.utf8().data());
+            GST_TRACE("sessionId: %s, prSession: %p", sessionId.utf8().data(), prSession.get());
             return prSession.get();
         }
     }
-    GST_TRACE("sessionId: %s. Not found.", sessionId.utf8().data());
+    GST_TRACE("sessionId: %s, prSession: not found", sessionId.utf8().data());
     return nullptr;
 }
 #endif

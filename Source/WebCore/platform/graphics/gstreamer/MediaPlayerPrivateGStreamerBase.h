@@ -276,6 +276,7 @@ private:
 #endif
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(PLAYREADY)
+    PlayreadySession* createPlayreadySession(const String &, const Vector<uint8_t> &, bool alreadyLocked = false);
     PlayreadySession* prSessionByInitData(const Vector<uint8_t>&, bool alreadyLocked = false) const;
     PlayreadySession* prSessionBySessionId(const String&, bool alreadyLocked = false) const;
 

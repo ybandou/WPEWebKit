@@ -1478,6 +1478,19 @@ unsigned MediaPlayerPrivateGStreamerBase::videoDecodedByteCount() const
 }
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(PLAYREADY)
+WebCore::PlayreadySession* MediaPlayerPrivateGStreamerBase::createPlayreadySession(const String &sessionId, const Vector<uint8_t> &initDataVector, bool alreadyLocked)
+{
+    LockHolder locker(alreadyLocked ? nullptr : &m_prSessionsMutex);
+    PlayreadySession* result;
+    std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(sessionId, initDataVector);
+    result = uniquePrSession.get();
+    m_prSessions.append(std::move(uniquePrSession));
+
+    GST_DEBUG("initData: %s, sessionId: %s, prSession: %p", initDataChecksum(initDataVector).utf8().data(), sessionId.utf8().data(), result);
+
+    return result;
+}
+
 WebCore::PlayreadySession* MediaPlayerPrivateGStreamerBase::prSessionByInitData(const Vector<uint8_t>& initData, bool alreadyLocked) const
 {
     LockHolder locker(alreadyLocked ? nullptr : &m_prSessionsMutex);
@@ -1679,7 +1692,7 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
         trimInitData(keySystemIdToUuid(keySystem).string(), initDataPtr, initDataLength);
 
         // At this point, the initData is comparable to the one reaching handleProtectionEvent(),
-        // so it can be used for an initData-sessionId mapping.
+        // so it can be used to find prSession.
         GST_MEMDUMP("trimmed init data", initDataPtr, initDataLength);
 
         // ### OK
@@ -1687,11 +1700,8 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
         initDataVector.append(reinterpret_cast<const uint8_t*>(initDataPtr), initDataLength);
         LockHolder prSessionsLocker(m_prSessionsMutex);
         PlayreadySession* prSession = prSessionByInitData(initDataVector, true);
-        if (!prSession) {
-            std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(createCanonicalUUIDString(), initDataVector);
-            prSession = uniquePrSession.get();
-            m_prSessions.append(std::move(uniquePrSession));
-        }
+        if (!prSession)
+            prSession = createPlayreadySession(createCanonicalUUIDString(), initDataVector, true);
         prSessionsLocker.unlockEarly();
 
         LockHolder locker(prSession->mutex());
@@ -1892,11 +1902,8 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
                     emitPlayReadySession(prSession);
                 return;
             }
-        } else {
-            std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(createCanonicalUUIDString(), initDataVector);
-            prSession = uniquePrSession.get();
-            m_prSessions.append(std::move(uniquePrSession));
-        }
+        } else
+            prSession = createPlayreadySession(createCanonicalUUIDString(), initDataVector, true);
     }
 #endif
 

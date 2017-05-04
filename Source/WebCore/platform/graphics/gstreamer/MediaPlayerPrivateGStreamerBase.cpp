@@ -1612,29 +1612,57 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::addKey(const Str
 #endif
 }
 
+// Trimming initData by parsing the provided initDatas is more fun :-)
 void MediaPlayerPrivateGStreamerBase::trimInitData(String keySystemUuid, const unsigned char*& initDataPtr, unsigned &initDataLength)
 {
-    if (!m_initDatas.contains(keySystemUuid)) {
-        GST_TRACE("we don't have an initData for %s", keySystemUuid.utf8().data());
+    GST_MEMDUMP("init data", initDataPtr, initDataLength);
+
+    if (initDataLength < 8 || keySystemUuid.length() < 16)
         return;
+
+    // "pssh" box format (simplified) as described by ISO/IEC 14496-12:2012(E) and ISO/IEC 23001-7.
+    // - Atom length (4 bytes).
+    // - Atom name ("pssh", 4 bytes).
+    // - Version (1 byte).
+    // - Flags (3 bytes).
+    // - Encryption system id (16 bytes).
+    // - ...
+
+    const unsigned char* chunkBase = initDataPtr;
+
+    // Big/little-endian independent way to convert 4 bytes into a 32-bit word.
+    uint32_t chunkSize = 0x1000000 * chunkBase[0] + 0x10000 * chunkBase[1] + 0x100 * chunkBase[2] + chunkBase[3];
+
+    int k = 0;
+    while (chunkBase + chunkSize < initDataPtr + initDataLength) {
+        StringBuilder parsedKeySystemBuilder;
+        for (unsigned char i = 0; i < 16; i++) {
+            if (i == 4 || i == 6 || i == 8 || i == 10)
+                parsedKeySystemBuilder.append("-");
+            parsedKeySystemBuilder.append(String::format("%02hhx", chunkBase[12+i]));
+        }
+
+        String parsedKeySystem = parsedKeySystemBuilder.toString();
+        GST_DEBUG("block %d: chunkBase: %p, chunkSize: %zu (0x%x), block keySystem: %s, requested keySystem: %s",
+            ++k, chunkBase, chunkSize, chunkSize, parsedKeySystem.utf8().data(), keySystemUuid.utf8().data());
+
+        if (chunkBase[4] != 'p' || chunkBase[5] != 's' || chunkBase[6] != 's' || chunkBase[7] != 'h') {
+            GST_DEBUG("pssh not found");
+            return;
+        }
+
+        if (parsedKeySystem == keySystemUuid) {
+            initDataPtr = chunkBase;
+            initDataLength = chunkSize;
+            GST_MEMDUMP("trimmed init data", initDataPtr, initDataLength);
+            return;
+        }
+
+        chunkBase += chunkSize;
+        chunkSize = 0x1000000 * chunkBase[0] + 0x10000 * chunkBase[1] + 0x100 * chunkBase[2] + chunkBase[3];
+        GST_DEBUG("new chunkBase: %p, new chunkSize: 0x%x, limit: %p", chunkBase, chunkSize, initDataPtr+initDataLength);
     }
 
-    Vector<uint8_t> storedInitData = m_initDatas.get(keySystemUuid);
-    m_initDatas.clear();
-    if (storedInitData.size() == initDataLength) {
-        GST_TRACE("stored init data for %s has the same size of %u, no need for trimming", keySystemUuid.utf8().data(), initDataLength);
-        return;
-    }
-
-    storedInitData.append('\0');
-    bool found = g_strrstr_len(reinterpret_cast<const char*>(initDataPtr), initDataLength, reinterpret_cast<const char*>(storedInitData.data()));
-    storedInitData.takeLast();
-    GST_TRACE("checked for stored init data for %s, found %s", keySystemUuid.utf8().data(), found ? "yes" : "no");
-    if (!found)
-        return;
-
-    initDataPtr = storedInitData.data();
-    initDataLength = storedInitData.size();
 }
 
 MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyRequest(const String& keySystem, const unsigned char* initDataPtr, unsigned initDataLength, const String& customData)

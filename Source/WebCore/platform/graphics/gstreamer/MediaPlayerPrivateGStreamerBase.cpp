@@ -1994,25 +1994,27 @@ static AtomicString keySystemUuidToId(const AtomicString& uuid)
 
 bool MediaPlayerPrivateGStreamerBase::supportsKeySystem(const String& keySystem, const String& mimeType)
 {
-    GST_INFO("Checking for KeySystem support with %s and type %s: false.", keySystem.utf8().data(), mimeType.utf8().data());
+    bool result = false;
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
     if (equalIgnoringASCIICase(keySystem, "org.w3.clearkey"))
-        return true;
+        result = true;
 #endif
 
 #if USE(PLAYREADY) && (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA))
     if (equalIgnoringASCIICase(keySystem, PLAYREADY_PROTECTION_SYSTEM_ID)
-        || equalIgnoringASCIICase(keySystem, PLAYREADY_YT_PROTECTION_SYSTEM_ID))
-        return true;
+        || equalIgnoringASCIICase(keySystem, PLAYREADY_YT_PROTECTION_SYSTEM_ID)) {
+        result = true;
+    }
 #endif
 
 #if (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)) && USE(OCDM)
     if (CDMPrivateOpenCDM::supportsKeySystemAndMimeType(keySystem, mimeType))
-        return true;
+        result = true;
 #endif
 
-    return false;
+    GST_INFO("Checking for KeySystem support with '%s' and type '%s': %s.", keySystem.utf8().data(), mimeType.utf8().data(), result ? "true" : "false");
+    return result;
 }
 
 MediaPlayer::SupportsType MediaPlayerPrivateGStreamerBase::extendedSupportsType(const MediaEngineSupportParameters& parameters, MediaPlayer::SupportsType result)
@@ -2027,7 +2029,7 @@ MediaPlayer::SupportsType MediaPlayerPrivateGStreamerBase::extendedSupportsType(
         return result;
 
     // If keySystem contains an unrecognized or unsupported Key System, return the empty string
-    if (!supportsKeySystem(parameters.keySystem, emptyString()))
+    if (!supportsKeySystem(parameters.keySystem, String::format("%s; codecs=\"%s\"", parameters.type.utf8().data(), parameters.codecs.utf8().data())))
         result = MediaPlayer::IsNotSupported;
 #else
     UNUSED_PARAM(parameters);

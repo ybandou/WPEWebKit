@@ -1745,7 +1745,7 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
             return MediaPlayer::NoError;
         }
         URL url(URL(), destinationURL);
-        GST_TRACE("playready generateKeyRequest result size %u", result->length());
+        GST_TRACE("playready generateKeyRequest result size %u, sessionId: %s, initData checksum: %s", result->length(), prSession->sessionId().utf8().data(), initDataChecksum(prSession->initData()).utf8().data());
         GST_MEMDUMP("result", result->data(), result->length());
         m_player->keyMessage(keySystem, prSession->sessionId(), result->data(), result->length(), url);
         return MediaPlayer::NoError;

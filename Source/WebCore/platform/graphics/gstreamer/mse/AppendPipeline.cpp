@@ -994,6 +994,7 @@ void AppendPipeline::connectDemuxerSrcPadToAppsinkFromAnyThread(GstPad* demuxerS
         GST_TRACE("demuxer-connect-to-appsink message posted to bus");
 
         m_padAddRemoveCondition.wait(m_padAddRemoveLock);
+        GST_DEBUG("continuing");
     }
 
     // Must be done in the thread we were called from (usually streaming thread).
@@ -1030,8 +1031,10 @@ void AppendPipeline::connectDemuxerSrcPadToAppsinkFromAnyThread(GstPad* demuxerS
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
         }
 #endif
+        GST_DEBUG("Setting append pipeline to paused");
         gst_element_set_state(m_pipeline.get(), GST_STATE_PAUSED);
     }
+    GST_DEBUG("finishing");
 }
 
 void AppendPipeline::connectDemuxerSrcPadToAppsink(GstPad* demuxerSrcPad)

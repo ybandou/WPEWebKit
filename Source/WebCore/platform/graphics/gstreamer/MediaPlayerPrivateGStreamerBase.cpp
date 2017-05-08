@@ -1007,20 +1007,8 @@ void MediaPlayerPrivateGStreamerBase::updateVideoRectangle()
 
     GST_INFO("Setting video sink size and position to x:%d y:%d, width=%d, height=%d", m_position.x(), m_position.y(), m_size.width(), m_size.height());
 
-    #if !USE(REALTEKV1_SINK)
-        GUniquePtr<gchar> rectString(g_strdup_printf("%d,%d,%d,%d", m_position.x(), m_position.y(), m_size.width(),m_size.height()));
-        g_object_set(sinkElement.get(), "rectangle", rectString.get(), nullptr);
-    #else
-        GstStructure *structure;
-        structure = gst_structure_new("rectangle-property",
-                                      "x", G_TYPE_INT, m_position.x(),
-                                      "y", G_TYPE_INT, m_position.y(),
-                                      "width", G_TYPE_INT, m_size.width(),
-                                      "height", G_TYPE_INT, m_size.height(),
-                                      NULL);
-        g_object_set(sinkElement.get(), "rectangle", structure, nullptr);
-        gst_structure_free(structure);
-    #endif
+    GUniquePtr<gchar> rectString(g_strdup_printf("%d,%d,%d,%d", m_position.x(), m_position.y(), m_size.width(),m_size.height()));
+    g_object_set(sinkElement.get(), "rectangle", rectString.get(), nullptr);
 }
 #endif
 

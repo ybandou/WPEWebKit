@@ -155,6 +155,12 @@
 #include <bindings/ScriptObject.h>
 #endif
 
+// ### DEBUG ###
+#undef LOG_DISABLED
+#define LOG_DISABLED 0
+#undef LOG
+#define LOG(channel, msg, ...) do { printf("%s: ", #channel); printf(msg, ## __VA_ARGS__); printf("\n"); fflush(stdout); } while (false)
+
 namespace WebCore {
 
 static const double SeekRepeatDelay = 0.1;
@@ -2406,6 +2412,7 @@ void HTMLMediaElement::setReadyState(MediaPlayer::ReadyState state)
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
 void HTMLMediaElement::mediaPlayerKeyAdded(MediaPlayer*, const String& keySystem, const String& sessionId)
 {
+    printf("### %s\n", __PRETTY_FUNCTION__); fflush(stdout);
     Ref<Event> event = MediaKeyEvent::create(eventNames().webkitkeyaddedEvent, keySystem, sessionId, nullptr, nullptr, emptyString(), nullptr, 0);
     event->setTarget(this);
     m_asyncEventQueue.enqueueEvent(WTFMove(event));
@@ -2413,6 +2420,7 @@ void HTMLMediaElement::mediaPlayerKeyAdded(MediaPlayer*, const String& keySystem
 
 void HTMLMediaElement::mediaPlayerKeyError(MediaPlayer*, const String& keySystem, const String& sessionId, MediaPlayerClient::MediaKeyErrorCode errorCode, unsigned short systemCode)
 {
+    printf("### %s\n", __PRETTY_FUNCTION__); fflush(stdout);
     WebKitMediaKeyError::Code mediaKeyErrorCode = WebKitMediaKeyError::MEDIA_KEYERR_UNKNOWN;
     switch (errorCode) {
     case MediaPlayerClient::UnknownError:
@@ -2442,6 +2450,7 @@ void HTMLMediaElement::mediaPlayerKeyError(MediaPlayer*, const String& keySystem
 
 void HTMLMediaElement::mediaPlayerKeyMessage(MediaPlayer*, const String& keySystem, const String& sessionId, const unsigned char* message, unsigned messageLength, const URL& defaultURL)
 {
+    printf("### %s\n", __PRETTY_FUNCTION__); fflush(stdout);
     Ref<Event> event = MediaKeyEvent::create(eventNames().webkitkeymessageEvent, keySystem, sessionId, nullptr, Uint8Array::create(message, messageLength), defaultURL, nullptr, 0);
     event->setTarget(this);
     m_asyncEventQueue.enqueueEvent(WTFMove(event));
@@ -2449,6 +2458,7 @@ void HTMLMediaElement::mediaPlayerKeyMessage(MediaPlayer*, const String& keySyst
 
 bool HTMLMediaElement::mediaPlayerKeyNeeded(MediaPlayer*, const String& keySystem, const String& sessionId, const unsigned char* initData, unsigned initDataLength)
 {
+    printf("### %s\n", __PRETTY_FUNCTION__); fflush(stdout);
     if (!hasEventListeners(eventNames().webkitneedkeyEvent)) {
         m_error = MediaError::create(MediaError::MEDIA_ERR_ENCRYPTED);
         scheduleEvent(eventNames().errorEvent);
@@ -3306,6 +3316,7 @@ ExceptionOr<void> HTMLMediaElement::webkitGenerateKeyRequest(const String& keySy
     }
 
     MediaPlayer::MediaKeyException result = m_player->generateKeyRequest(keySystem, initDataPointer, initDataLength, customData);
+    printf("### %s\n", __PRETTY_FUNCTION__); fflush(stdout);
     fprintf(stderr, "HTMLMediaElement::webkitGenerateKeyRequest() result %d\n", result);
     auto ec = exceptionCodeForMediaKeyException(result);
     if (ec)
@@ -3315,6 +3326,7 @@ ExceptionOr<void> HTMLMediaElement::webkitGenerateKeyRequest(const String& keySy
 
 ExceptionOr<void> HTMLMediaElement::webkitAddKey(const String& keySystem, Uint8Array& key, const RefPtr<Uint8Array>& initData, const String& sessionId)
 {
+    printf("### %s\n", __PRETTY_FUNCTION__); fflush(stdout);
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA)
     static bool firstTime = true;
     if (firstTime && scriptExecutionContext()) {
@@ -3348,6 +3360,7 @@ ExceptionOr<void> HTMLMediaElement::webkitAddKey(const String& keySystem, Uint8A
 
 ExceptionOr<void> HTMLMediaElement::webkitCancelKeyRequest(const String& keySystem, const String& sessionId)
 {
+    printf("### %s\n", __PRETTY_FUNCTION__); fflush(stdout);
     if (keySystem.isEmpty())
         return Exception { SYNTAX_ERR };
 

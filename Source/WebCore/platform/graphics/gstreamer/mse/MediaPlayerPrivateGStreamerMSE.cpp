@@ -821,11 +821,12 @@ void MediaPlayerPrivateGStreamerMSE::emitPlayReadySession(PlayreadySession* sess
     if (!session->ready())
         return;
 
-    for (auto it : m_appendPipelinesMap) {
-        gst_element_send_event(it.value->pipeline(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB,
-            gst_structure_new("playready-session", "session", G_TYPE_POINTER, session, nullptr)));
-        it.value->setAppendState(AppendPipeline::AppendState::Ongoing);
-    }
+    for (auto it : m_appendPipelinesMap)
+        if (session->hasPipeline(it.value->pipeline())) {
+            gst_element_send_event(it.value->pipeline(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB,
+                gst_structure_new("playready-session", "session", G_TYPE_POINTER, session, nullptr)));
+            it.value->setAppendState(AppendPipeline::AppendState::Ongoing);
+        }
 }
 #endif
 #endif

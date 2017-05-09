@@ -145,7 +145,7 @@ public:
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
     virtual void dispatchDecryptionKey(GstBuffer*);
-    void handleProtectionEvent(GstEvent*);
+    void handleProtectionEvent(GstEvent*, GstElement*);
     void receivedGenerateKeyRequest(const String&);
 
 #if USE(PLAYREADY)
@@ -276,7 +276,7 @@ private:
 #endif
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(PLAYREADY)
-    PlayreadySession* createPlayreadySession(const String &, const Vector<uint8_t> &, bool alreadyLocked = false);
+    PlayreadySession* createPlayreadySession(const String &, const Vector<uint8_t> &, GstElement* pipeline, bool alreadyLocked = false);
     PlayreadySession* prSessionByInitData(const Vector<uint8_t>&, bool alreadyLocked = false) const;
     PlayreadySession* prSessionBySessionId(const String&, bool alreadyLocked = false) const;
 

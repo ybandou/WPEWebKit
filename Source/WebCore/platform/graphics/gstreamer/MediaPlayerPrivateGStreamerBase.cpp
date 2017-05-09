@@ -446,8 +446,19 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
                     // ### OK
                     Vector<uint8_t> initDataVector;
                     initDataVector.append(reinterpret_cast<uint8_t*>(mapInfo.data), mapInfo.size);
-                    prSession = prSessionByInitData(initDataVector);
-                    if (prSession) {
+                    bool prSessionAlreadyExisted = false;
+                    LockHolder prSessionsLocker(m_prSessionsMutex);
+                    prSession = prSessionByInitData(initDataVector, true);
+                    if (prSession)
+                        prSessionAlreadyExisted = true;
+                    else {
+                        // Preventively creating a new session now, when we still knwo what pipeline caused the event
+                        prSession = createPlayreadySession(createCanonicalUUIDString(), initDataVector,
+                            getPipeline(GST_ELEMENT(message->src)), true);
+                    }
+                    prSessionsLocker.unlockEarly();
+
+                    if (!prSessionAlreadyExisted) {
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
                         LockHolder locker(prSession->mutex());
 #endif
@@ -1479,11 +1490,11 @@ unsigned MediaPlayerPrivateGStreamerBase::videoDecodedByteCount() const
 }
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) && USE(PLAYREADY)
-WebCore::PlayreadySession* MediaPlayerPrivateGStreamerBase::createPlayreadySession(const String &sessionId, const Vector<uint8_t> &initDataVector, bool alreadyLocked)
+WebCore::PlayreadySession* MediaPlayerPrivateGStreamerBase::createPlayreadySession(const String &sessionId, const Vector<uint8_t> &initDataVector, GstElement* pipeline, bool alreadyLocked)
 {
     LockHolder locker(alreadyLocked ? nullptr : &m_prSessionsMutex);
     PlayreadySession* result;
-    std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(sessionId, initDataVector);
+    std::unique_ptr<PlayreadySession> uniquePrSession = std::make_unique<PlayreadySession>(sessionId, initDataVector, pipeline);
     result = uniquePrSession.get();
     m_prSessions.append(std::move(uniquePrSession));
 
@@ -1705,7 +1716,7 @@ MediaPlayer::MediaKeyException MediaPlayerPrivateGStreamerBase::generateKeyReque
         LockHolder prSessionsLocker(m_prSessionsMutex);
         PlayreadySession* prSession = prSessionByInitData(initDataVector, true);
         if (!prSession)
-            prSession = createPlayreadySession(createCanonicalUUIDString(), initDataVector, true);
+            GST_ERROR("prSession should already have been created when handling the protection events");
         prSessionsLocker.unlockEarly();
 
         LockHolder locker(prSession->mutex());
@@ -1868,7 +1879,7 @@ void MediaPlayerPrivateGStreamerBase::dispatchDecryptionKey(GstBuffer* buffer)
         gst_structure_new("drm-cipher", "key", GST_TYPE_BUFFER, buffer, nullptr)));
 }
 
-void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
+void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event, GstElement* element)
 {
     GST_DEBUG("handling protection event");
 
@@ -1896,8 +1907,16 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
         // ### OK
         Vector<uint8_t> initDataVector;
         initDataVector.append(reinterpret_cast<uint8_t*>(mapInfo.data), mapInfo.size);
-        prSession = prSessionByInitData(initDataVector);
-        if (prSession) {
+        bool prSessionAlreadyExisted = false;
+        LockHolder prSessionsLocker(m_prSessionsMutex);
+        prSession = prSessionByInitData(initDataVector, true);
+        if (prSession)
+            prSessionAlreadyExisted = true;
+        else
+            prSession = createPlayreadySession(createCanonicalUUIDString(), initDataVector, getPipeline(element), true);
+        prSessionsLocker.unlockEarly();
+
+        if (prSessionAlreadyExisted) {
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1)
             LockHolder locker(prSession->mutex());
 #endif
@@ -1906,8 +1925,7 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
                     emitPlayReadySession(prSession);
                 return;
             }
-        } else
-            prSession = createPlayreadySession(createCanonicalUUIDString(), initDataVector, true);
+        }
     }
 #endif
 

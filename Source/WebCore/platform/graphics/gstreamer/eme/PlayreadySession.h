@@ -53,7 +53,7 @@ private:
     };
 
 public:
-    PlayreadySession(const String &sessionId, const Vector<uint8_t> &initData);
+    PlayreadySession(const String &sessionId, const Vector<uint8_t> &initData, const void* pipeline);
     ~PlayreadySession();
 
     RefPtr<Uint8Array> playreadyGenerateKeyRequest(Uint8Array* initData, const String& customData, String& destinationURL, unsigned short& errorCode, uint32_t& systemCode);
@@ -67,6 +67,7 @@ public:
     Lock& mutex() { return m_prSessionMutex; }
     const Vector<uint8_t>& initData() { return m_initData; }
     const String& sessionId() { return m_sessionId; }
+    bool hasPipeline(const void* pipeline) { return m_pipeline == pipeline; }
 
 protected:
     RefPtr<ArrayBuffer> m_key;
@@ -88,6 +89,7 @@ private:
     Lock m_prSessionMutex;
     String m_sessionId;
     Vector<uint8_t> m_initData;
+    const void* m_pipeline;
 };
 
 }

@@ -52,7 +52,7 @@ const DRM_CONST_STRING g_dstrCDMDrmStoreName = CREATE_DRM_STRING(g_rgwchCDMDrmSt
 
 const DRM_CONST_STRING* g_rgpdstrRights[1] = {&g_dstrWMDRM_RIGHT_PLAYBACK};
 
-PlayreadySession::PlayreadySession(const String &sessionId, const Vector<uint8_t> &initData)
+PlayreadySession::PlayreadySession(const String &sessionId, const Vector<uint8_t> &initData, const void* pipeline)
     : m_key()
     , m_poAppContext(nullptr)
     , m_pbOpaqueBuffer(nullptr)
@@ -61,6 +61,7 @@ PlayreadySession::PlayreadySession(const String &sessionId, const Vector<uint8_t
     , m_fCommit(FALSE)
     , m_sessionId(sessionId)
     , m_initData(initData)
+    , m_pipeline(pipeline)
 {
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_ID oSessionID;

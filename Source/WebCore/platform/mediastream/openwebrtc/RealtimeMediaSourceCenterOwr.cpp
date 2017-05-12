@@ -134,6 +134,9 @@ void RealtimeMediaSourceCenterOwr::mediaSourcesAvailable(GList* sources)
     Vector<Ref<RealtimeMediaSource>> audioSources;
     Vector<Ref<RealtimeMediaSource>> videoSources;
 
+    bool audioDone = false;
+    bool videoDone = false;
+
     for (auto item = sources; item; item = item->next) {
         OwrMediaSource* source = OWR_MEDIA_SOURCE(item->data);
 
@@ -170,10 +173,16 @@ void RealtimeMediaSourceCenterOwr::mediaSourcesAvailable(GList* sources)
         if (sourceIterator == m_sourceMap.end())
             m_sourceMap.add(id, mediaSource.copyRef());
 
-        if (mediaType & OWR_MEDIA_TYPE_AUDIO)
+        if (mediaType & OWR_MEDIA_TYPE_AUDIO) {
             audioSources.append(WTFMove(mediaSource));
-        else if (mediaType & OWR_MEDIA_TYPE_VIDEO)
+            audioDone = true;
+        } else if (mediaType & OWR_MEDIA_TYPE_VIDEO) {
             videoSources.append(WTFMove(mediaSource));
+            videoDone = true;
+        }
+
+        if (audioDone && videoDone)
+            break;
     }
 
     if (videoSources.isEmpty() && audioSources.isEmpty())

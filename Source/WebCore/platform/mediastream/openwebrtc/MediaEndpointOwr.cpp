@@ -444,14 +444,8 @@ void MediaEndpointOwr::processIceTransportStateChange(OwrSession* session)
     g_object_get(session, "ice-connection-state", &owrIceState, nullptr);
 
     OwrTransceiver& transceiver = *m_transceivers[transceiverIndexForSession(session)];
-    if (owrIceState < transceiver.owrIceState())
-        return;
 
     transceiver.setOwrIceState(owrIceState);
-
-    // We cannot go to Completed if there may be more remote candidates.
-    if (owrIceState == OWR_ICE_STATE_READY && !transceiver.gotEndOfRemoteCandidates())
-        return;
 
     MediaEndpoint::IceTransportState transportState;
     switch (owrIceState) {

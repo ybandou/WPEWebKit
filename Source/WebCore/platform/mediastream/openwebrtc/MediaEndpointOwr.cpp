@@ -47,6 +47,7 @@
 #include <owr/owr_transport_agent.h>
 #include <owr/owr_video_payload.h>
 #include <wtf/text/CString.h>
+#include <stdlib.h>
 
 namespace WebCore {
 
@@ -89,7 +90,7 @@ MediaEndpointOwr::MediaEndpointOwr(MediaEndpointClient& client)
         m_codecTypes.append("OPUS");
     if (owr_payload_supported(OWR_CODEC_TYPE_H264))
         m_codecTypes.append("H264");
-    if (owr_payload_supported(OWR_CODEC_TYPE_VP8))
+    if (getenv("WEBKIT_OWR_ENABLE_VP8") && owr_payload_supported(OWR_CODEC_TYPE_VP8))
         m_codecTypes.append("VP8");
 
 }
@@ -169,7 +170,7 @@ MediaPayloadVector MediaEndpointOwr::getDefaultVideoPayloads()
         payloads.append(WTFMove(payload1));
     }
 
-    if (m_codecTypes.find("VP8") != notFound) {
+    if (getenv("WEBKIT_OWR_ENABLE_VP8") && m_codecTypes.find("VP8") != notFound) {
         MediaPayload payload2;
         payload2.type = 100;
         payload2.encodingName = "VP8";

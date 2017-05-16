@@ -363,10 +363,9 @@
     <dependencies>
       <dep package="orc"/>
     </dependencies>
-    <branch module="gstreamer/gstreamer-${version}.tar.xz" version="1.8.0"
+    <branch module="gstreamer/gstreamer-${version}.tar.xz" version="1.8.2"
             repo="gstreamer"
-            hash="sha256:947a314a212b5d94985d89b43440dbe66b696e12bbdf9a2f78967b98d74abedc"
-            md5sum="6846d7289ec323c38c49b818171e955a">
+            hash="sha256:9dbebe079c2ab2004ef7f2649fa317cabea1feb4fb5605c24d40744b90918341">
       <patch file="gstreamer-0001-protection-added-function-to-filter-system-ids.patch" strip="1"/>
     </branch>
   </autotools>
@@ -380,10 +379,10 @@
     <dependencies>
       <dep package="gstreamer"/>
     </dependencies>
-    <branch module="gst-plugins-base/gst-plugins-base-${version}.tar.xz" version="1.8.0"
+    <branch module="gst-plugins-base/gst-plugins-base-${version}.tar.xz" version="1.8.2"
             repo="gstreamer"
-            hash="sha256:abc0acc1d15b4b9c97c65cd9689bd6400081853b9980ea428d3c8572dd791522"
-            md5sum="20cc8231609318310f2a55f64c86cbb4"/>
+            hash="sha256:9d7109c8fb0a5dec8edb17b0053c59a46aba7ddf48dc48ea822ebbbd4339d38d">
+    </branch>
   </autotools>
 
   <autotools id="gst-plugins-good" autogen-sh="configure" autogenargs="--disable-examples --disable-soup --disable-gtk-doc">
@@ -395,12 +394,10 @@
       <dep package="libvpx"/>
     </dependencies>
 
-    <branch module="gst-plugins-good/gst-plugins-good-${version}.tar.xz" version="1.8.0"
+    <branch module="gst-plugins-good/gst-plugins-good-${version}.tar.xz" version="1.8.2"
             repo="gstreamer"
-            hash="sha256:c20c134d47dbc238d921707a3b66da709c2b4dd89f9d267cec13d1ddf16e9f4d"
-            md5sum="91ed4649c7c2e43a61f731d144f6f6d0">
+            hash="sha256:8d7549118a3b7a009ece6bb38a05b66709c551d32d2adfd89eded4d1d7a23944">
       <patch file="gst-plugins-good-use-the-tfdt-decode-time.patch" strip="1"/>
-      <patch file="gst-plugins-good-Revert-qtdemux-expose-streams-with-first-moof-for-fr.patch" strip="1"/>
       <patch file="gst-plugins-good-0001-rtpbin-pipeline-gets-an-EOS-when-any-rtpsources-byes.patch" strip="1"/>
       <patch file="gst-plugins-good-0002-rtpbin-avoid-generating-errors-when-rtcp-messages-ar.patch" strip="1"/>
       <patch file="gst-plugins-good-0003-rtpbin-receive-bundle-support.patch" strip="1"/>
@@ -416,10 +413,9 @@
       <dep package="gst-plugins-base"/>
       <dep package="openh264"/>
     </dependencies>
-    <branch module="gst-plugins-bad/gst-plugins-bad-${version}.tar.xz" version="1.8.0"
+    <branch module="gst-plugins-bad/gst-plugins-bad-${version}.tar.xz" version="1.8.2"
             repo="gstreamer"
-            hash="sha256:116376dd1085082422e0b21b0ecd3d1cb345c469c58e32463167d4675f4ca90e"
-            md5sum="1c2d797bb96a81e9ef570c7a0a37203e">
+            hash="sha256:d7995317530c8773ec088f94d9320909d41da61996b801ebacce9a56af493f97">
       <patch file="gst-plugins-bad-0001-dtls-port-to-OpenSSL-1.1.0.patch" strip="1"/>
       <patch file="gst-plugins-bad-0002-dtlscertificate-Fix-error-checking-in-RSA_generate_k.patch" strip="1"/>
     </branch>
@@ -429,10 +425,9 @@
     <dependencies>
       <dep package="gst-plugins-base"/>
     </dependencies>
-    <branch module="gst-libav/gst-libav-${version}.tar.xz" version="1.8.0"
+    <branch module="gst-libav/gst-libav-${version}.tar.xz" version="1.8.2"
             repo="gstreamer"
-            hash="sha256:5a1ce28876aee93cb4f3d090f0e807915a5d9bc1325e3480dd302b85aeb4291c"
-            md5sum="361638fa45466c5050bcde6bfe10fa46"/>
+            hash="sha256:b5f3c7a27b39b5f5c2f0bfd546b0c655020faf6b38d27b64b346c43e5ebf687a"/>
   </autotools>
 
   <autotools id="xserver" autogenargs="--disable-xinerama --enable-glx --enable-composite --disable-xorg --disable-dmx --disable-xnest --disable-xquartz --disable-xwin --disable-xephyr --disable-xfake --disable-xfbdev --disable-install-setuid --disable-unit-tests --disable-present --enable-unix-transport --enable-tcp-transport --disable-local-transport --with-xkb-path=/usr/share/X11/xkb --with-xkb-output=/var/lib/xkb --with-xkb-bin-directory=/usr/bin --without-dtrace">
@@ -516,7 +511,7 @@
   </autotools>
 
   <autotools id="libusrsctp" supports-non-srcdir-builds="no" autogen-sh="./bootstrap; ./configure --disable-warnings-as-errors">
-    <branch repo="github.com" module="sctplab/usrsctp.git" checkoutdir="usrsctp" tag="078ff3252f73327e0ac11d6fd5eff62011f6646e"/>
+    <branch repo="github.com" module="sctplab/usrsctp.git" checkoutdir="usrsctp" tag="d6c555f1df8f206bebbdbff75912fd88f346f8aa"/>
   </autotools>
 
   <autotools id="openh264" supports-non-srcdir-builds="no" autogen-sh="pseudo-configure">

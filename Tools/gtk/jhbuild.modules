@@ -556,7 +556,7 @@
      </dependencies>
      <!-- The commit points to the HEAD of the "clopez/rpi-compressed-rebased"
           branch from the Metrological repository, which is more up-to-date.  -->
-    <branch repo="github.com" module="Metrological/openwebrtc.git" checkoutdir="openwebrtc" tag="09eda7252ceed89ddfa85e775f0849b5cd9bd44e"/>
+    <branch repo="github.com" module="Metrological/openwebrtc.git" checkoutdir="openwebrtc" tag="c8d6dae59a3fd4e76f8ae77d0cbd7b15c8358238"/>
   </autotools>
 
   <autotools id="llvm"

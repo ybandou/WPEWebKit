@@ -1168,6 +1168,19 @@ GstElement* MediaPlayerPrivateGStreamerBase::createGLAppSink()
     g_signal_connect(appsink, "new-sample", G_CALLBACK(newSampleCallback), this);
     g_signal_connect(appsink, "new-preroll", G_CALLBACK(newPrerollCallback), this);
 
+    GRefPtr<GstPad> pad = adoptGRef(gst_element_get_static_pad(appsink, "sink"));
+    gst_pad_add_probe (pad.get(), GST_PAD_PROBE_TYPE_EVENT_FLUSH, [] (GstPad*, GstPadProbeInfo* info,  gpointer userData) -> GstPadProbeReturn {
+            if (GST_EVENT_TYPE (GST_PAD_PROBE_INFO_EVENT (info)) != GST_EVENT_FLUSH_START)
+                return GST_PAD_PROBE_OK;
+
+            auto* player = static_cast<MediaPlayerPrivateGStreamerBase*>(userData);
+            player->clearCurrentBuffer();
+            return GST_PAD_PROBE_OK;
+        }, this, nullptr);
+
+    g_object_set_data(G_OBJECT(appsink), "player", (gpointer) this);
+    gst_pad_set_query_function(pad.get(), appSinkSinkQuery);
+
     return appsink;
 }
 
@@ -1228,19 +1241,6 @@ GstElement* MediaPlayerPrivateGStreamerBase::createVideoSinkGL()
 
     GRefPtr<GstPad> pad = adoptGRef(gst_element_get_static_pad(upload, "sink"));
     gst_element_add_pad(videoSink, gst_ghost_pad_new("sink", pad.get()));
-
-    pad = adoptGRef(gst_element_get_static_pad(appsink, "sink"));
-    gst_pad_add_probe (pad.get(), GST_PAD_PROBE_TYPE_EVENT_FLUSH, [] (GstPad*, GstPadProbeInfo* info,  gpointer userData) -> GstPadProbeReturn {
-        if (GST_EVENT_TYPE (GST_PAD_PROBE_INFO_EVENT (info)) != GST_EVENT_FLUSH_START)
-           return GST_PAD_PROBE_OK;
-
-        auto* player = static_cast<MediaPlayerPrivateGStreamerBase*>(userData);
-        player->clearCurrentBuffer();
-        return GST_PAD_PROBE_OK;
-     }, this, nullptr);
- 
-     g_object_set_data(G_OBJECT(appsink), "player", (gpointer) this);
-     gst_pad_set_query_function(pad.get(), appSinkSinkQuery);
 
     if (!result) {
         GST_WARNING("Failed to link GstGL elements");

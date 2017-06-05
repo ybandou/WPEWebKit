@@ -814,6 +814,18 @@ MediaPlayer::SupportsType MediaPlayerPrivateGStreamerMSE::supportsType(const Med
         return result;
     }
 
+    // We shouldn't accept media that the player can't actually play. Using AAC audio, 8K and 60 fps limits here.
+    // AAC supports up to 96 channels.
+    if (parameters.channels > 96)
+        return result;
+
+    // 8K is up to 7680*4320
+    if (parameters.dimension.width() > 7680.0 || parameters.dimension.height() > 4320.0)
+        return result;
+
+    if (parameters.framerate > 60.0)
+        return result;
+
     // Spec says we should not return "probably" if the codecs string is empty.
     if (mimeTypeCache().contains(parameters.type)) {
         if (parameters.codecs.isEmpty())
@@ -833,18 +845,18 @@ void MediaPlayerPrivateGStreamerMSE::dispatchDecryptionKey(GstBuffer* buffer)
 }
 
 #if USE(PLAYREADY)
-void MediaPlayerPrivateGStreamerMSE::emitPlayReadySession()
+void MediaPlayerPrivateGStreamerMSE::emitPlayReadySession(PlayreadySession* session)
 {
     GST_TRACE("emitting session");
-    PlayreadySession* session = prSession();
     if (!session->ready())
         return;
 
-    for (auto it : m_appendPipelinesMap) {
-        gst_element_send_event(it.value->pipeline(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB,
-            gst_structure_new("playready-session", "session", G_TYPE_POINTER, session, nullptr)));
-        it.value->setAppendState(AppendPipeline::AppendState::Ongoing);
-    }
+    for (auto it : m_appendPipelinesMap)
+        if (session->hasPipeline(it.value->pipeline())) {
+            gst_element_send_event(it.value->pipeline(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB,
+                gst_structure_new("playready-session", "session", G_TYPE_POINTER, session, nullptr)));
+            it.value->setAppendState(AppendPipeline::AppendState::Ongoing);
+        }
 }
 #endif
 #endif

@@ -144,7 +144,7 @@ MediaTime MediaTime::createWithDouble(double doubleTime, int32_t timeScale)
 
     while (doubleTime * timeScale > std::numeric_limits<int64_t>::max())
         timeScale /= 2;
-    return MediaTime(static_cast<int64_t>(doubleTime * timeScale), timeScale, Valid);
+    return MediaTime(static_cast<int64_t>(std::round(doubleTime * timeScale)), timeScale, Valid);
 }
 
 float MediaTime::toFloat() const
@@ -500,7 +500,10 @@ void MediaTime::setTimeScale(int32_t timeScale)
 
 void MediaTime::dump(PrintStream &out) const
 {
-    out.print("{", m_timeValue, "/", m_timeScale, ", ", toDouble(), "}");
+    out.print("{");
+    if (!hasDoubleValue())
+        out.print(m_timeValue, "/", m_timeScale, " = ");
+    out.print(toDouble(), "}");
 }
 
 MediaTime abs(const MediaTime& rhs)

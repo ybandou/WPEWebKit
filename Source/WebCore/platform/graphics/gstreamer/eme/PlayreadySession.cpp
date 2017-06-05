@@ -24,6 +24,7 @@
 
 #if USE(PLAYREADY)
 #include "MediaPlayerPrivateGStreamer.h"
+#include "UUID.h"
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
 #include "WebKitMediaKeyError.h"
@@ -52,13 +53,16 @@ const DRM_CONST_STRING g_dstrCDMDrmStoreName = CREATE_DRM_STRING(g_rgwchCDMDrmSt
 
 const DRM_CONST_STRING* g_rgpdstrRights[1] = {&g_dstrWMDRM_RIGHT_PLAYBACK};
 
-PlayreadySession::PlayreadySession()
+PlayreadySession::PlayreadySession(const Vector<uint8_t> &initData, const void* pipeline)
     : m_key()
     , m_poAppContext(nullptr)
     , m_pbOpaqueBuffer(nullptr)
     , m_pbRevocationBuffer(nullptr)
     , m_eKeyState(KEY_INIT)
     , m_fCommit(FALSE)
+    , m_sessionId(createCanonicalUUIDString())
+    , m_initData(initData)
+    , m_pipeline(pipeline)
 {
     DRM_RESULT dr = DRM_SUCCESS;
     DRM_ID oSessionID;
@@ -108,6 +112,8 @@ PlayreadySession::PlayreadySession()
 PlayreadySession::~PlayreadySession()
 {
     GST_DEBUG("Releasing resources");
+
+    Drm_Uninitialize (m_poAppContext);
 
     if (DRM_REVOCATION_IsRevocationSupported())
         SAFE_OEM_FREE(m_pbRevocationBuffer);

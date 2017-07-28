@@ -326,11 +326,8 @@ void AppendPipeline::handleElementMessage(GstMessage* message)
 
     const GstStructure* structure = gst_message_get_structure(message);
     GST_TRACE("%s message from %s", gst_structure_get_name(structure), GST_MESSAGE_SRC_NAME(message));
-    if (m_playerPrivate && gst_structure_has_name(structure, "drm-key-needed")) {
-        if (m_appendState != AppendPipeline::AppendState::KeyNegotiation)
-            setAppendState(AppendPipeline::AppendState::KeyNegotiation);
-
-        GST_DEBUG("sending drm-key-needed message from %s to the player", GST_MESSAGE_SRC_NAME(message));
+    if (m_playerPrivate && gst_structure_has_name(structure, "protection_event")) {
+        GST_DEBUG("sending protection_event message from %s to the player", GST_MESSAGE_SRC_NAME(message));
         GRefPtr<GstEvent> event;
         gst_structure_get(structure, "event", GST_TYPE_EVENT, &event.outPtr(), nullptr);
         m_playerPrivate->handleProtectionEvent(event.get());

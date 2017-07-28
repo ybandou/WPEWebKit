@@ -1386,20 +1386,38 @@ void MediaPlayerPrivateGStreamerBase::dispatchDecryptionSession(const String& se
 
 void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
 {
+    const gchar* eventKeySystemId = nullptr;
+    GstBuffer* data = nullptr;
+    Vector<uint8_t> concatenatedInitDataChunks;
+
     if (m_handledProtectionEvents.contains(GST_EVENT_SEQNUM(event))) {
         GST_DEBUG("event %u already handled", GST_EVENT_SEQNUM(event));
-        m_handledProtectionEvents.remove(GST_EVENT_SEQNUM(event));
-        if (m_needToResendCredentials) {
-            GST_DEBUG("resending credentials");
-            attemptToDecryptWithLocalInstance();
-        }
         return;
     }
 
-    const gchar* eventKeySystemId = nullptr;
-    gst_event_parse_protection(event, &eventKeySystemId, nullptr, nullptr);
-    GST_WARNING("FIXME: unhandled protection event for %s", eventKeySystemId);
-    ASSERT_NOT_REACHED();
+    gst_event_parse_protection(event, &eventKeySystemId, &data, nullptr);
+
+    if (m_cdmInstance && strcmp(GStreamerEMEUtilities::keySystemToUuid(m_cdmInstance->keySystem()).string().utf8().data(), eventKeySystemId))
+        return;
+
+    GstMapInfo mapInfo;
+    if (!gst_buffer_map(data, &mapInfo, GST_MAP_READ)) {
+        GST_WARNING("cannot map %s protection data", eventKeySystemId);
+        return;
+    }
+
+    GST_DEBUG("scheduling Protection event for %s with init data size of %u", eventKeySystemId, mapInfo.size);
+    GST_MEMDUMP("init datas", mapInfo.data, mapInfo.size);
+
+    concatenatedInitDataChunks.append(mapInfo.data, mapInfo.size);
+    m_handledProtectionEvents.add(GST_EVENT_SEQNUM(event));
+    gst_buffer_unmap(data, &mapInfo);
+
+    RunLoop::main().dispatch([this, eventKeySystemId, initData = WTFMove(concatenatedInitDataChunks)] {
+        GST_DEBUG("scheduling OnEncrypted event for %s with concatenated init datas size of %" G_GSIZE_FORMAT, eventKeySystemId, initData.size());
+        GST_MEMDUMP("init datas", initData.data(), initData.size());
+        m_player->initializationDataEncountered(ASCIILiteral("cenc"), ArrayBuffer::create(initData.data(), initData.size()));
+    });
 }
 #endif
 

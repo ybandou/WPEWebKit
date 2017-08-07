@@ -124,6 +124,12 @@ void MediaKeys::detachCDMClient(CDMClient& client)
     m_cdmClients.removeFirst(&client);
 }
 
+void MediaKeys::attachInstanceToCDMClients()
+{
+    for (auto* cdmClient : m_cdmClients)
+        cdmClient->cdmClientInstanceAttached(m_instance);
+}
+
 void MediaKeys::attemptToResumePlaybackOnClients()
 {
     for (auto* cdmClient : m_cdmClients)

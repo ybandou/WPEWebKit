@@ -2642,8 +2642,6 @@ void HTMLMediaElement::setMediaKeys(MediaKeys* mediaKeys, Ref<DeferredPromise>&&
         if (mediaKeys) {
             // 5.3.1. Associate the CDM instance represented by mediaKeys with the media element for decrypting media data.
             mediaKeys->attachCDMClient(*this);
-            if (m_player)
-                m_player->cdmInstanceAttached(mediaKeys->cdmInstance());
 
             // 5.3.2. If the preceding step failed, run the following steps:
             //   5.3.2.1. Set the mediaKeys attribute to null.
@@ -2685,6 +2683,12 @@ void HTMLMediaElement::mediaPlayerInitializationDataEncountered(const String& in
     //      initData = initData
     MediaEncryptedEventInit initializer { initDataType, WTFMove(initData) };
     m_asyncEventQueue.enqueueEvent(MediaEncryptedEvent::create(eventNames().encryptedEvent, initializer, Event::IsTrusted::Yes));
+}
+
+void HTMLMediaElement::cdmClientInstanceAttached(const CDMInstance& instance)
+{
+    if (m_player)
+        m_player->cdmInstanceAttached(instance);
 }
 
 void HTMLMediaElement::attemptToDecrypt()

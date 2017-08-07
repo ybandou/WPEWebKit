@@ -652,6 +652,7 @@ private:
     void attemptToResumePlaybackIfNecessary();
 
     // CDMClient
+    void cdmClientInstanceAttached(const CDMInstance&) override;
     void cdmClientAttemptToResumePlaybackIfNecessary() final;
     void cdmClientAttemptToDecryptWithInstance(const CDMInstance&) final;
 #endif

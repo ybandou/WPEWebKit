@@ -113,6 +113,11 @@ void MediaKeySession::generateRequest(const AtomicString& initDataType, const Bu
         return;
     }
 
+    m_taskQueue.enqueueTask([this] () mutable {
+        if (m_keys)
+            m_keys->attachInstanceToCDMClients();
+    });
+
     // 3. Let this object's uninitialized value be false.
     m_uninitialized = false;
 

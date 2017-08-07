@@ -67,6 +67,8 @@ public:
     bool hasOpenSessions() const;
     const CDMInstance& cdmInstance() const { return m_instance; }
 
+    void attachInstanceToCDMClients();
+
 protected:
     MediaKeys(bool useDistinctiveIdentifier, bool persistentStateAllowed, const Vector<MediaKeySessionType>&, Ref<CDM>&&, Ref<CDMInstance>&&);
 

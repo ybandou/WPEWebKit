@@ -278,7 +278,7 @@ static GstFlowReturn webkitMediaCommonEncryptionDecryptTransformInPlace(GstBaseT
         GST_ERROR_OBJECT(self, "Decryption failed");
         klass->releaseCipher(self);
         gst_buffer_remove_meta(buffer, reinterpret_cast<GstMeta*>(protectionMeta));
-        return GST_FLOW_NOT_SUPPORTED;
+        return GST_FLOW_ERROR;
     }
 
     klass->releaseCipher(self);

@@ -61,9 +61,6 @@ public:
 
     GstFlowReturn handleNewAppsinkSample(GstElement*);
     GstFlowReturn pushNewBuffer(GstBuffer*);
-#if ENABLE(ENCRYPTED_MEDIA)
-    void dispatchDecryptionStructure(GUniquePtr<GstStructure>&&);
-#endif
 
     // Takes ownership of caps.
     void parseDemuxerSrcPadCaps(GstCaps*);
@@ -104,9 +101,6 @@ private:
     void handleAppsrcNeedDataReceived();
     void removeAppsrcDataLeavingProbe();
     void setAppsrcDataLeavingProbe();
-#if ENABLE(ENCRYPTED_MEDIA)
-    void dispatchPendingDecryptionStructure();
-#endif
     void notifyReceivedAllPendingSamples();
 
     Ref<MediaSourceClientGStreamerMSE> m_mediaSourceClient;
@@ -125,9 +119,7 @@ private:
     GRefPtr<GstElement> m_appsrc;
     GRefPtr<GstElement> m_demux;
     GRefPtr<GstElement> m_parser; // Optional.
-#if ENABLE(ENCRYPTED_MEDIA)
-    GRefPtr<GstElement> m_decryptor;
-#endif
+
     // The demuxer has one src stream only, so only one appsink is needed and linked to it.
     GRefPtr<GstElement> m_appsink;
 

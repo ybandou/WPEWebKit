@@ -778,7 +778,14 @@ void MediaPlayerPrivateGStreamerMSE::trackDetected(RefPtr<AppendPipeline> append
     GST_DEBUG("track ID: %s, caps: %" GST_PTR_FORMAT, newTrack->id().string().latin1().data(), caps);
 
     GstStructure* structure = gst_caps_get_structure(caps, 0);
-    const gchar* mediaType = gst_structure_get_name(structure);
+
+    const gchar* mediaType;
+
+    if (gst_structure_has_name(structure, "application/x-cenc"))
+        mediaType = gst_structure_get_string(structure, "original-media-type");
+    else
+        mediaType = gst_structure_get_name(structure);
+
     GstVideoInfo info;
 
     if (g_str_has_prefix(mediaType, "video/") && gst_video_info_from_caps(&info, caps)) {
@@ -1054,9 +1061,7 @@ void MediaPlayerPrivateGStreamerMSE::attemptToDecryptWithInstance(const CDMInsta
         GUniquePtr<GstStructure> structure(gst_structure_new_empty("drm-cipher-clearkey"));
         gst_structure_set_value(structure.get(), "key-ids", &keyIDList);
         gst_structure_set_value(structure.get(), "key-values", &keyValueList);
-
-        for (auto it : m_appendPipelinesMap)
-            it.value->dispatchDecryptionStructure(GUniquePtr<GstStructure>(gst_structure_copy(structure.get())));
+        m_playbackPipeline->dispatchDecryptionStructure(WTFMove(structure));
     }
 #if USE(OPENCDM)
     else if (is<CDMInstanceOpenCDM>(instance)) {

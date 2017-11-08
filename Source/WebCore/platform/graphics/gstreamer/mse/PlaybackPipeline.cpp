@@ -176,14 +176,20 @@ void PlaybackPipeline::attachTrack(RefPtr<SourceBufferPrivateGStreamer> sourceBu
     unsigned padId = stream->parent->priv->numberOfPads;
     stream->parent->priv->numberOfPads++;
     GST_OBJECT_UNLOCK(webKitMediaSrc);
-
-    const gchar* mediaType = gst_structure_get_name(structure);
+    const gchar* mediaType;
+    if (gst_structure_has_name(structure, "application/x-cenc"))
+        mediaType = gst_structure_get_string(structure, "original-media-type");
+    else
+        mediaType = gst_structure_get_name(structure);
 
     GST_DEBUG_OBJECT(webKitMediaSrc, "Configured track %s: appsrc=%s, padId=%u, mediaType=%s", trackPrivate->id().string().utf8().data(), GST_ELEMENT_NAME(stream->appsrc), padId, mediaType);
 
     GUniquePtr<gchar> parserBinName(g_strdup_printf("streamparser%u", padId));
 
     if (!g_strcmp0(mediaType, "video/x-h264")) {
+#if ENABLE(ENCRYPTED_MEDIA)
+    if (!gst_structure_has_name(structure, "application/x-cenc")) {
+#endif
         GRefPtr<GstCaps> filterCaps = adoptGRef(gst_caps_new_simple("video/x-h264", "alignment", G_TYPE_STRING, "au", nullptr));
         GstElement* capsfilter = gst_element_factory_make("capsfilter", nullptr);
         g_object_set(capsfilter, "caps", filterCaps.get(), nullptr);
@@ -199,10 +205,18 @@ void PlaybackPipeline::attachTrack(RefPtr<SourceBufferPrivateGStreamer> sourceBu
 
         pad = adoptGRef(gst_element_get_static_pad(capsfilter, "src"));
         gst_element_add_pad(stream->parser, gst_ghost_pad_new("src", pad.get()));
+#if ENABLE(ENCRYPTED_MEDIA)
+        } else
+            GST_DEBUG("playbackpipeline without h264parse and stream parser!");
+#endif
     } else if (!g_strcmp0(mediaType, "video/x-h265")) {
+#if ENABLE(ENCRYPTED_MEDIA)
+    if (!gst_structure_has_name(structure, "application/x-cenc")) {
+#endif
         GRefPtr<GstCaps> filterCaps = adoptGRef(gst_caps_new_simple("video/x-h265", "alignment", G_TYPE_STRING, "au", nullptr));
         GstElement* capsfilter = gst_element_factory_make("capsfilter", nullptr);
         g_object_set(capsfilter, "caps", filterCaps.get(), nullptr);
+
 
         stream->parser = gst_bin_new(parserBinName.get());
 
@@ -215,7 +229,16 @@ void PlaybackPipeline::attachTrack(RefPtr<SourceBufferPrivateGStreamer> sourceBu
 
         pad = adoptGRef(gst_element_get_static_pad(capsfilter, "src"));
         gst_element_add_pad(stream->parser, gst_ghost_pad_new("src", pad.get()));
+#if ENABLE(ENCRYPTED_MEDIA)
+        } else
+            GST_DEBUG("playbackpipeline without h265parse and stream parser!");
+#endif
     } else if (!g_strcmp0(mediaType, "audio/mpeg")) {
+
+#if ENABLE(ENCRYPTED_MEDIA)
+        if (!gst_structure_has_name(structure, "application/x-cenc")) {
+#endif
+
         gint mpegversion = -1;
         gst_structure_get_int(structure, "mpegversion", &mpegversion);
 
@@ -235,6 +258,12 @@ void PlaybackPipeline::attachTrack(RefPtr<SourceBufferPrivateGStreamer> sourceBu
 
         pad = adoptGRef(gst_element_get_static_pad(parser, "src"));
         gst_element_add_pad(stream->parser, gst_ghost_pad_new("src", pad.get()));
+
+#if ENABLE(ENCRYPTED_MEDIA)
+        } else
+            GST_DEBUG("playbackpipeline without audioparse and stream parser!");
+#endif
+
     } else if (!g_strcmp0(mediaType, "video/x-vp9"))
         stream->parser = nullptr;
     else {
@@ -329,6 +358,28 @@ void PlaybackPipeline::reattachTrack(RefPtr<SourceBufferPrivateGStreamer> source
     if (signal != -1)
         g_signal_emit(G_OBJECT(stream->parent), webKitMediaSrcSignals[signal], 0, nullptr);
 }
+
+#if ENABLE(ENCRYPTED_MEDIA)
+
+void PlaybackPipeline::dispatchDecryptionStructure(GUniquePtr<GstStructure>&& structure)
+{
+    WebKitMediaSrcPrivate* priv = m_webKitMediaSrc->priv;
+    Vector<GstAppSrc*> appsrcs;
+
+    GST_OBJECT_LOCK(m_webKitMediaSrc.get());
+    for (Stream* stream : priv->streams) {
+        if (stream->appsrc)
+            appsrcs.append(GST_APP_SRC(stream->appsrc));
+    }
+    GST_OBJECT_UNLOCK(m_webKitMediaSrc.get());
+
+    for (GstAppSrc* appsrc : appsrcs) {
+        GST_TRACE("dispatching key to playback pipeline %p", this);
+        gst_element_send_event((GstElement*)appsrc, gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB, gst_structure_copy(structure.get())));
+    }
+}
+
+#endif
 
 void PlaybackPipeline::notifyDurationChanged()
 {

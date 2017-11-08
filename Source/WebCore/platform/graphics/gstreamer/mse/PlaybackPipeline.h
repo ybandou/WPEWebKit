@@ -60,7 +60,9 @@ public:
     void attachTrack(RefPtr<SourceBufferPrivateGStreamer>, RefPtr<TrackPrivateBase>, GstStructure*, GstCaps*);
     void reattachTrack(RefPtr<SourceBufferPrivateGStreamer>, RefPtr<TrackPrivateBase>, const char*);
     void notifyDurationChanged();
-
+#if ENABLE(ENCRYPTED_MEDIA)
+    void dispatchDecryptionStructure(GUniquePtr<GstStructure>&&);
+#endif
     // From MediaSourceGStreamer.
     void markEndOfStream(MediaSourcePrivate::EndOfStreamStatus);
 

@@ -261,23 +261,6 @@ void AppendPipeline::handleNeedContextSyncMessage(GstMessage* message)
     gst_message_parse_context_type(message, &contextType);
     GST_TRACE("context type: %s", contextType);
 
-    LockHolder locker(m_appendStateTransitionLock);
-    if (m_appendState == AppendState::Invalid)
-        return;
-
-    if (!g_strcmp0(contextType, "drm-preferred-decryption-system-id")) {
-        if (WTF::isMainThread())
-            transitionTo(AppendState::KeyNegotiation);
-        else {
-            GstStructure* structure = gst_structure_new("transition-main-thread", "transition", G_TYPE_INT, AppendState::KeyNegotiation, nullptr);
-            GstMessage* message = gst_message_new_application(GST_OBJECT(m_demux.get()), structure);
-            if (gst_bus_post(m_bus.get(), message)) {
-                GST_TRACE("transition-main-thread KeyNegotiation sent to the bus");
-                m_appendStateTransitionCondition.wait(m_appendStateTransitionLock);
-            }
-        }
-    }
-
     // MediaPlayerPrivateGStreamerBase will take care of setting up encryption.
     if (m_playerPrivate)
         m_playerPrivate->handleSyncMessage(message);
@@ -585,13 +568,6 @@ void AppendPipeline::parseDemuxerSrcPadCaps(GstCaps* demuxerSrcPadCaps)
 #if GST_CHECK_VERSION(1, 5, 3) && ENABLE(ENCRYPTED_MEDIA)
     if (gst_structure_has_name(structure, "application/x-cenc")) {
         // Any previous decryptor should have been removed from the pipeline by disconnectFromAppSinkFromStreamingThread()
-        ASSERT(!m_decryptor);
-
-        m_decryptor = GStreamerEMEUtilities::createDecryptor(gst_structure_get_string(structure, "protection-system"));
-        if (!m_decryptor) {
-            GST_ERROR("decryptor not found for caps: %" GST_PTR_FORMAT, m_demuxerSrcPadCaps.get());
-            return;
-        }
 
         const gchar* originalMediaType = gst_structure_get_string(structure, "original-media-type");
 
@@ -997,33 +973,8 @@ void AppendPipeline::connectDemuxerSrcPadToAppsinkFromAnyThread(GstPad* demuxerS
         if (!parent)
             gst_bin_add(GST_BIN(m_pipeline.get()), m_appsink.get());
 
-#if ENABLE(ENCRYPTED_MEDIA)
-        if (m_decryptor) {
-            GST_TRACE("we have a decryptor");
-            gst_object_ref(m_decryptor.get());
-            gst_bin_add(GST_BIN(m_pipeline.get()), m_decryptor.get());
-
-            GRefPtr<GstPad> decryptorSinkPad = adoptGRef(gst_element_get_static_pad(m_decryptor.get(), "sink"));
-            gst_pad_link(demuxerSrcPad, decryptorSinkPad.get());
-
-            GRefPtr<GstPad> decryptorSrcPad = adoptGRef(gst_element_get_static_pad(m_decryptor.get(), "src"));
-            gst_pad_link(decryptorSrcPad.get(), appsinkSinkPad.get());
-
-            gst_element_sync_state_with_parent(m_appsink.get());
-            gst_element_sync_state_with_parent(m_decryptor.get());
-
-            if (m_pendingDecryptionStructure) {
-                GST_TRACE("dispatching pending decryption structure");
-                dispatchPendingDecryptionStructure();
-            }
-        } else {
-            GST_TRACE("decryptor not linked");
-#endif
-            gst_pad_link(demuxerSrcPad, appsinkSinkPad.get());
-            gst_element_sync_state_with_parent(m_appsink.get());
-#if ENABLE(ENCRYPTED_MEDIA)
-        }
-#endif
+        gst_pad_link(demuxerSrcPad, appsinkSinkPad.get());
+        gst_element_sync_state_with_parent(m_appsink.get());
         gst_element_set_state(m_pipeline.get(), GST_STATE_PAUSED);
     }
 }
@@ -1125,45 +1076,8 @@ void AppendPipeline::disconnectDemuxerSrcPadFromAppsinkFromAnyThread(GstPad* dem
 
     GST_DEBUG("Disconnecting appsink");
 
-#if ENABLE(ENCRYPTED_MEDIA)
-    if (m_decryptor) {
-        gst_element_unlink(m_decryptor.get(), m_appsink.get());
-        gst_element_unlink(m_demux.get(), m_decryptor.get());
-        gst_element_set_state(m_decryptor.get(), GST_STATE_NULL);
-        gst_bin_remove(GST_BIN(m_pipeline.get()), m_decryptor.get());
-    } else
-#endif
-        gst_element_unlink(m_demux.get(), m_appsink.get());
+    gst_element_unlink(m_demux.get(), m_appsink.get());
 }
-
-#if ENABLE(ENCRYPTED_MEDIA)
-void AppendPipeline::dispatchPendingDecryptionStructure()
-{
-    ASSERT(m_decryptor);
-    ASSERT(m_pendingDecryptionStructure);
-    ASSERT(m_appendState == AppendState::KeyNegotiation);
-    GST_TRACE("dispatching key to append pipeline %p", this);
-
-    // Release the m_pendingDecryptionStructure object since
-    // gst_event_new_custom() takes over ownership of it.
-    gst_element_send_event(m_pipeline.get(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB, m_pendingDecryptionStructure.release()));
-
-    setAppendState(AppendState::Ongoing);
-}
-
-void AppendPipeline::dispatchDecryptionStructure(GUniquePtr<GstStructure>&& structure)
-{
-    if (m_appendState == AppendState::KeyNegotiation) {
-        GST_TRACE("append pipeline %p in key negotiation", this);
-        m_pendingDecryptionStructure = WTFMove(structure);
-        if (m_decryptor)
-            dispatchPendingDecryptionStructure();
-        else
-            GST_TRACE("no decryptor yet, waiting for it");
-    } else
-        GST_TRACE("append pipeline %p not in key negotiation", this);
-}
-#endif
 
 static void appendPipelineAppsinkCapsChanged(GObject* appsinkPad, GParamSpec*, AppendPipeline* appendPipeline)
 {

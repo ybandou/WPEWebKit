@@ -22,7 +22,9 @@
 #pragma once
 
 #if ENABLE(ENCRYPTED_MEDIA) && USE(GSTREAMER)
-
+#if USE(OPENCDM)
+#include <array>
+#endif
 #include <gst/gst.h>
 #include <wtf/text/WTFString.h>
 

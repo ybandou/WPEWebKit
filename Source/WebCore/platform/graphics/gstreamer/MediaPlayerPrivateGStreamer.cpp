@@ -1169,6 +1169,9 @@ void MediaPlayerPrivateGStreamer::handleMessage(GstMessage* message)
                 GRefPtr<GstEvent> event;
                 gst_structure_get(structure, "event", GST_TYPE_EVENT, &event.outPtr(), nullptr);
                 handleProtectionEvent(event.get());
+            } else if (gst_structure_has_name(structure, "key-not-available")) {
+                GST_DEBUG("key-not-available message from %s", GST_MESSAGE_SRC_NAME(message));
+                MediaPlayerPrivateGStreamerBase::dispatchCDMInstance();
             }
 #endif
         }

@@ -678,6 +678,13 @@ float MediaPlayerPrivateGStreamerBase::volume() const
 }
 
 
+void MediaPlayerPrivateGStreamerBase::dispatchCDMInstance()
+{
+    if (m_cdmInstance)
+        m_player->attemptToDecryptWithInstance(*m_cdmInstance.get());
+}
+
+
 void MediaPlayerPrivateGStreamerBase::notifyPlayerOfVolumeChange()
 {
     if (!m_player || !m_volumeElement)

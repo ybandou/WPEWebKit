@@ -698,7 +698,7 @@ void AppendPipeline::parseDemuxerSrcPadCaps(GstCaps* demuxerSrcPadCaps)
     bool sizeConfigured = false;
 
 #if GST_CHECK_VERSION(1, 5, 3) && ENABLE(ENCRYPTED_MEDIA)
-    if (gst_structure_has_name(structure, "application/x-cenc")) {
+    if (gst_structure_has_name(structure, "application/x-cenc") || gst_structure_has_name(structure, "application/x-matroska-enc")) {
         // Any previous decryptor should have been removed from the pipeline by disconnectFromAppSinkFromStreamingThread()
 
         const gchar* originalMediaType = gst_structure_get_string(structure, "original-media-type");

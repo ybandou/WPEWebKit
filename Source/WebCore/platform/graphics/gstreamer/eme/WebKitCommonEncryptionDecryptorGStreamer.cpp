@@ -150,11 +150,14 @@ static GstCaps* webkitMediaCommonEncryptionDecryptTransformCaps(GstBaseTransform
                     GST_TRACE("Removing field %s", fieldName);
                 }
             }
-
-            gst_structure_set(outgoingStructure.get(), "protection-system", G_TYPE_STRING, klass->protectionSystemId,
-                "original-media-type", G_TYPE_STRING, gst_structure_get_name(incomingStructure), nullptr);
-
-            gst_structure_set_name(outgoingStructure.get(), "application/x-cenc");
+            if (gst_structure_has_name(incomingStructure, "video/x-vp9")) {
+                gst_structure_set(outgoingStructure.get(), "original-media-type", G_TYPE_STRING, gst_structure_get_name(incomingStructure), nullptr);
+                gst_structure_set_name(outgoingStructure.get(), "application/x-matroska-enc");
+            } else {
+                gst_structure_set(outgoingStructure.get(), "protection-system", G_TYPE_STRING, klass->protectionSystemId,
+                    "original-media-type", G_TYPE_STRING, gst_structure_get_name(incomingStructure), nullptr);
+                gst_structure_set_name(outgoingStructure.get(), "application/x-cenc");
+            }
         }
 
         bool duplicate = false;
@@ -304,7 +307,7 @@ static gboolean webkitMediaCommonEncryptionDecryptSinkEventHandler(GstBaseTransf
         gst_event_parse_protection(event, &systemId, nullptr, nullptr);
         GST_TRACE_OBJECT(self, "received protection event for %s", systemId);
 
-        if (!g_strcmp0(systemId, klass->protectionSystemId)) {
+        if (!systemId || !g_strcmp0(systemId, klass->protectionSystemId)) {
             GST_DEBUG_OBJECT(self, "sending protection event to the pipeline");
             gst_element_post_message(GST_ELEMENT(self),
                 gst_message_new_element(GST_OBJECT(self),

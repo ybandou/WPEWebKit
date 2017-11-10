@@ -177,7 +177,7 @@ void PlaybackPipeline::attachTrack(RefPtr<SourceBufferPrivateGStreamer> sourceBu
     stream->parent->priv->numberOfPads++;
     GST_OBJECT_UNLOCK(webKitMediaSrc);
     const gchar* mediaType;
-    if (gst_structure_has_name(structure, "application/x-cenc"))
+    if (gst_structure_has_name(structure, "application/x-cenc") || gst_structure_has_name(structure, "application/x-matroska-enc"))
         mediaType = gst_structure_get_string(structure, "original-media-type");
     else
         mediaType = gst_structure_get_name(structure);
@@ -235,7 +235,7 @@ void PlaybackPipeline::attachTrack(RefPtr<SourceBufferPrivateGStreamer> sourceBu
     } else if (!g_strcmp0(mediaType, "audio/mpeg")) {
 
 #if ENABLE(ENCRYPTED_MEDIA)
-        if (!gst_structure_has_name(structure, "application/x-cenc")) {
+        if (!gst_structure_has_name(structure, "application/x-cenc") && !gst_structure_has_name(structure, "application/x-matroska-enc")) {
 #endif
 
         gint mpegversion = -1;

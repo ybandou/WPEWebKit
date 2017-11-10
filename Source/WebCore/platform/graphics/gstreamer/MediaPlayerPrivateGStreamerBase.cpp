@@ -473,9 +473,13 @@ bool MediaPlayerPrivateGStreamerBase::handleSyncMessage(GstMessage* message)
         });
 
         GST_INFO("waiting for a CDM instance");
-        m_protectionCondition.waitFor(m_protectionMutex, Seconds(4), [this] {
-            return this->m_cdmInstance;
-        });
+
+        if (!m_cdmInstance) {
+            m_protectionCondition.waitFor(m_protectionMutex, Seconds(4), [this] {
+                return this->m_cdmInstance;
+            });
+        }
+
         if (m_cdmInstance && !m_cdmInstance->keySystem().isEmpty()) {
             const char* preferredKeySystemUuid = GStreamerEMEUtilities::keySystemToUuid(m_cdmInstance->keySystem());
             GST_INFO("working with %s, continuing with %s on %s", m_cdmInstance->keySystem().utf8().data(), preferredKeySystemUuid, GST_MESSAGE_SRC_NAME(message));
@@ -1425,11 +1429,12 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
 
     GstMapInfo mapInfo;
     if (!gst_buffer_map(data, &mapInfo, GST_MAP_READ)) {
-        GST_WARNING("cannot map %s protection data", eventKeySystemId);
+        GST_WARNING("cannot map protection data");
         return;
     }
 
-    GST_DEBUG("scheduling Protection event for %s with init data size of %u", eventKeySystemId, mapInfo.size);
+
+    GST_DEBUG("scheduling Protection event with init data size of %u", mapInfo.size);
     GST_MEMDUMP("init datas", mapInfo.data, mapInfo.size);
 
     concatenatedInitDataChunks.append(mapInfo.data, mapInfo.size);
@@ -1439,7 +1444,10 @@ void MediaPlayerPrivateGStreamerBase::handleProtectionEvent(GstEvent* event)
     RunLoop::main().dispatch([this, eventKeySystemId, initData = WTFMove(concatenatedInitDataChunks)] {
         GST_DEBUG("scheduling OnEncrypted event for %s with concatenated init datas size of %" G_GSIZE_FORMAT, eventKeySystemId, initData.size());
         GST_MEMDUMP("init datas", initData.data(), initData.size());
-        m_player->initializationDataEncountered(ASCIILiteral("cenc"), ArrayBuffer::create(initData.data(), initData.size()));
+        if (!eventKeySystemId) // TODO test correctly if the origin event is qtdemux or matroskademux
+            m_player->initializationDataEncountered(ASCIILiteral("webm"), ArrayBuffer::create(initData.data(), initData.size()));
+        else
+            m_player->initializationDataEncountered(ASCIILiteral("cenc"), ArrayBuffer::create(initData.data(), initData.size()));
     });
 }
 #endif

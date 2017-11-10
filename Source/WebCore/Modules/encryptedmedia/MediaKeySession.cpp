@@ -366,6 +366,10 @@ void MediaKeySession::update(const BufferSource& response, Ref<DeferredPromise>&
     // 4. Let response copy be a copy of the contents of the response parameter.
     // 5. Let promise be a new promise.
     // 6. Run the following steps in parallel:
+
+    if (!m_sessionId.isEmpty())
+        m_instance->setMediaKeySession(m_sessionId, this);
+
     m_taskQueue.enqueueTask([this, response = SharedBuffer::create(response.data(), response.length()), promise = WTFMove(promise)] () mutable {
         // 6.1. Let sanitized response be a validated and/or sanitized version of response copy.
         RefPtr<SharedBuffer> sanitizedResponse = m_implementation->sanitizeResponse(response);
@@ -574,6 +578,13 @@ void MediaKeySession::remove(Ref<DeferredPromise>&& promise)
     });
 
     // 5. Return promise.
+}
+
+void MediaKeySession::sendMessage(MediaKeyMessageType messageType,  Ref<SharedBuffer> && message)
+{
+    m_taskQueue.enqueueTask([this, message = WTFMove(message), messageType] () mutable {
+        enqueueMessage(messageType, message);
+    });
 }
 
 void MediaKeySession::enqueueMessage(MediaKeyMessageType messageType, const SharedBuffer& message)

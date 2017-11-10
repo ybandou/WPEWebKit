@@ -140,6 +140,9 @@ private:
     void removeSessionData(const String&, LicenseType, RemoveSessionDataCallback) final;
     void storeRecordOfKeyUsage(const String&) final;
 
+    void setMediaKeySession(const String&, MediaKeySession *) final { };
+    void sendMessageEvent(const String&, MediaKeyMessageType, Ref<SharedBuffer> &&) final { };
+
     const String& keySystem() const final;
 
     WeakPtr<MockCDM> m_cdm;

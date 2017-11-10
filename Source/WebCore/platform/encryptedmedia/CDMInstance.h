@@ -30,6 +30,7 @@
 #include "CDMKeyStatus.h"
 #include "CDMMessageType.h"
 #include "CDMSessionType.h"
+#include "MediaKeyMessageType.h"
 #include <utility>
 #include <wtf/Forward.h>
 #include <wtf/Optional.h>
@@ -40,6 +41,7 @@
 namespace WebCore {
 
 class SharedBuffer;
+class MediaKeySession;
 
 struct CDMKeySystemConfiguration;
 
@@ -97,6 +99,9 @@ public:
     virtual void removeSessionData(const String& sessionId, LicenseType, RemoveSessionDataCallback) = 0;
 
     virtual void storeRecordOfKeyUsage(const String& sessionId) = 0;
+
+    virtual void setMediaKeySession(const String&, MediaKeySession *) = 0;
+    virtual void sendMessageEvent(const String&, MediaKeyMessageType, Ref<SharedBuffer> &&) = 0;
 
     virtual const String& keySystem() const = 0;
 };

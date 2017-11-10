@@ -92,6 +92,9 @@ public:
     void removeSessionData(const String&, LicenseType, RemoveSessionDataCallback) override;
     void storeRecordOfKeyUsage(const String&) override;
 
+    void setMediaKeySession(const String&, MediaKeySession *) override { };
+    void sendMessageEvent(const String&, MediaKeyMessageType, Ref<SharedBuffer>&&) override { };
+
     const String& keySystem() const final;
 
     struct Key {

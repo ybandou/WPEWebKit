@@ -48,7 +48,8 @@ enum TestConfidence { "high", "kinda-low" };
 [
     ConstructorCallWith=Document,
     Constructor(TestCallbackInterface testCallback, TestCallbackFunction testCallbackFunction),
-    InterfaceName=TestObject
+    InterfaceName=TestObject,
+    Exposed=(Window,Worker)
 ] interface TestObj {
     // Attributes
     readonly attribute long            readOnlyLongAttr;
@@ -57,7 +58,6 @@ enum TestConfidence { "high", "kinda-low" };
     static readonly attribute long     staticReadOnlyLongAttr;
     static attribute DOMString         staticStringAttr;
     static readonly attribute TestSubObjConstructor TestSubObj;
-    [EnabledBySetting=TestSetting] attribute TestSubObjConstructor TestSubObjEnabledBySetting;
     attribute TestEnumType enumAttr;
     attribute byte byteAttr;
     attribute octet octetAttr;
@@ -111,11 +111,14 @@ enum TestConfidence { "high", "kinda-low" };
     [Conditional=TEST_FEATURE, EnabledAtRuntime=TestFeature] void enabledAtRuntimeOperation(DOMString testParam);
     [Conditional=TEST_FEATURE, EnabledAtRuntime=TestFeature] void enabledAtRuntimeOperation(long testParam);
 
+    [EnabledForWorld=someWorld, EnabledAtRuntime=TestFeature] void enabledInSpecificWorldWhenRuntimeFeatureEnabled(long testParam);
     [EnabledForWorld=someWorld] void worldSpecificMethod(long testParam);
 
-    // [EnabledBySetting] attributes and operations.
-    [Conditional=TEST_FEATURE, EnabledBySetting=TestSetting] attribute DOMString enabledBySettingAttribute;
-    [Conditional=TEST_FEATURE, EnabledBySetting=TestSetting] void enabledBySettingOperation(DOMString testParam);
+    // [SecureContext] attributes and operations; will not be exposed to a non-secure context.
+    // From <https://w3c.github.io/webappsec-secure-contexts/#integration-idl> (Editor's Draft, 17 November 2016)
+    [SecureContext] Promise<double> calculateSecretResult();
+    [SecureContext] boolean getSecretBoolean();
+    [Conditional=TEST_FEATURE, SecureContext, EnabledAtRuntime=TestFeature] boolean testFeatureGetSecretBoolean();
 
     // TypedArray attribute
     attribute Float32Array typedArrayAttr;
@@ -164,10 +167,6 @@ enum TestConfidence { "high", "kinda-low" };
     [MayThrowException] void methodWithException();
     [MayThrowException] long methodWithExceptionReturningLong();
     [MayThrowException] TestObj methodWithExceptionReturningObject();
-    [GetterMayThrowException] attribute long attributeWithGetterException;
-    [SetterMayThrowException] attribute long attributeWithSetterException;
-    [GetterMayThrowException] attribute DOMString stringAttrWithGetterException;
-    [SetterMayThrowException] attribute DOMString stringAttrWithSetterException;
 
     // 'Custom' extended attribute
     [Custom] attribute long            customAttr;
@@ -198,7 +197,6 @@ enum TestConfidence { "high", "kinda-low" };
     [CallWith=ScriptExecutionContext&ScriptState] void withScriptExecutionContextAndScriptState();
     [CallWith=ScriptExecutionContext&ScriptState, MayThrowException] TestObj withScriptExecutionContextAndScriptStateObjException();
     [CallWith=  ScriptExecutionContext  &  ScriptState  ] TestObj withScriptExecutionContextAndScriptStateWithSpaces();
-    [CallWith=ScriptArguments&CallStack] void withScriptArgumentsAndCallStack();
     [CallWith=Document] void withDocumentArgument();
     [CallWith=IncumbentDocument] void withCallerDocumentArgument();
     [CallWith=IncumbentWindow] void withCallerWindowArgument();
@@ -206,12 +204,8 @@ enum TestConfidence { "high", "kinda-low" };
     [CallWith=ScriptState] attribute long withScriptStateAttribute;
     [CallWith=ScriptState, SetterCallWith=ActiveWindow&FirstWindow] attribute long withCallWithAndSetterCallWithAttribute;
     [CallWith=ScriptExecutionContext] attribute TestObj withScriptExecutionContextAttribute;
-    [CallWith=ScriptState, GetterMayThrowException] attribute TestObj withScriptStateAttributeRaises;
-    [CallWith=ScriptExecutionContext, GetterMayThrowException] attribute TestObj withScriptExecutionContextAttributeRaises;
     [CallWith=ScriptExecutionContext&ScriptState] attribute TestObj withScriptExecutionContextAndScriptStateAttribute;
-    [CallWith=ScriptExecutionContext&ScriptState,GetterMayThrowException] attribute TestObj withScriptExecutionContextAndScriptStateAttributeRaises;
     [CallWith=  ScriptExecutionContext  &  ScriptState  ] attribute TestObj withScriptExecutionContextAndScriptStateWithSpacesAttribute;
-    [CallWith=ScriptArguments&CallStack] attribute TestObj withScriptArgumentsAndCallStackAttribute;
 
     // Optional parameters.
     void    methodWithOptionalArg(optional long opt);
@@ -394,16 +388,14 @@ enum TestConfidence { "high", "kinda-low" };
     attribute USVString? nullableUSVStringSettableAttribute;
     attribute ByteString? nullableByteStringSettableAttribute;
 
-    [GetterMayThrowException] attribute long? nullableStringValue;
-
     // Identifiers with a leading underscore, which should be removed.
     const unsigned short               _readonly = 0;
     readonly attribute DOMString       _attribute;
     attribute _optional                attributeWithReservedEnumType;
     void _any(unrestricted float a, long b);
 
-    // FIXME: Add support for Promise attributes.
-    // readonly attribute Promise<void> testReadOnlyPromiseAttribute;
+    readonly attribute Promise<void> testReadOnlyVoidPromiseAttribute;
+    readonly attribute Promise<TestNode> testReadOnlyPromiseAttribute;
     
     // Promise function
     Promise<void> testPromiseFunction();
@@ -415,6 +407,9 @@ enum TestConfidence { "high", "kinda-low" };
     static Promise<void> testStaticPromiseFunction();
     [MayThrowException] static Promise<void> testStaticPromiseFunctionWithException();
     [Custom] Promise<void> testCustomPromiseFunction();
+    [Custom] static Promise<void> testStaticCustomPromiseFunction();
+    [Custom, ReturnsOwnPromise] Promise<void> testCustomReturnsOwnPromiseFunction();
+    [ReturnsOwnPromise, PromiseProxy] Promise<void> testReturnsOwnPromiseAndPromiseProxyFunction();
 
     // PutForwards
     [PutForwards=name] readonly attribute TestNode putForwardsAttribute;
@@ -439,6 +434,19 @@ enum TestConfidence { "high", "kinda-low" };
     legacycaller void legacyCallerNamed(long param);
     legacycaller long (DOMString param);
     legacycaller void ();
+
+    Node testReturnValueOptimization([ReturnValue] Node a, Node b);
+    [MayThrowException] Node testReturnValueOptimizationWithException([ReturnValue] Node a, Node b);
+
+    [ConditionallyReadWrite=CONDITION] attribute Node conditionallyReadWriteAttribute;
+    [Conditional=CONDITION2, ConditionallyReadWrite=CONDITION] attribute Node conditionalAndConditionallyReadWriteAttribute;
+
+    [Exposed=Window] attribute long conditionallyExposedToWindowAttribute;
+    [Exposed=Worker] attribute long conditionallyExposedToWorkerAttribute;
+    [Exposed=(Worker, Window)] attribute long conditionallyExposedToWindowAndWorkerAttribute;
+    [Exposed=Window] void conditionallyExposedToWindowFunction();
+    [Exposed=Worker] void conditionallyExposedToWorkerFunction();
+    [Exposed=(Window, Worker)] void conditionallyExposedToWindowAndWorkerFunction();
 };
 
 // The following comment should not generate any code.
@@ -490,6 +498,7 @@ typedef any AnyTypedef;
     (long or Node) unionMember;
     (long or Node)? nullableUnionMember = null;
     BufferSource bufferSourceValue;
+    required BufferSource requiredBufferSourceValue;
     (DOMString or [Clamp] long) annotatedTypeInUnionMember;
     sequence<[Clamp] long> annotatedTypeInSequenceMember;
 };

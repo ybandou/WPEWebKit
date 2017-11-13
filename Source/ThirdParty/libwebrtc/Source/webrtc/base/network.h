@@ -19,7 +19,6 @@
 #include <string>
 #include <vector>
 
-#include "webrtc/base/export.h"
 #include "webrtc/base/ipaddress.h"
 #include "webrtc/base/networkmonitor.h"
 #include "webrtc/base/messagehandler.h"
@@ -119,6 +118,10 @@ class NetworkManager : public DefaultLocalAddressProvider {
   // IP address.  (i.e. INADDR_ANY for IPv4 or in6addr_any for IPv6). This is
   // useful as binding to such interfaces allow default routing behavior like
   // http traffic.
+  //
+  // This method appends the "any address" networks to the list, such that this
+  // can optionally be called after GetNetworks.
+  //
   // TODO(guoweis): remove this body when chromium implements this.
   virtual void GetAnyAddressNetworks(NetworkList*) {}
 
@@ -137,7 +140,7 @@ class NetworkManager : public DefaultLocalAddressProvider {
 };
 
 // Base class for NetworkManager implementations.
-class WEBRTC_DYLIB_EXPORT NetworkManagerBase : public NetworkManager {
+class NetworkManagerBase : public NetworkManager {
  public:
   NetworkManagerBase();
   ~NetworkManagerBase() override;
@@ -207,7 +210,7 @@ class BasicNetworkManager : public NetworkManagerBase,
                             public MessageHandler,
                             public sigslot::has_slots<> {
  public:
-  WEBRTC_DYLIB_EXPORT BasicNetworkManager();
+  BasicNetworkManager();
   ~BasicNetworkManager() override;
 
   void StartUpdating() override;
@@ -279,7 +282,7 @@ class BasicNetworkManager : public NetworkManagerBase,
 };
 
 // Represents a Unix-type network interface, with a name and single address.
-class WEBRTC_DYLIB_EXPORT Network {
+class Network {
  public:
   Network(const std::string& name,
           const std::string& description,

@@ -1,8 +1,12 @@
+import json
 import urlparse
 
 import error
 import transport
 
+from mozlog import get_default_logger
+
+logger = get_default_logger()
 
 element_key = "element-6066-11e4-a52e-4f735466cecf"
 
@@ -121,6 +125,10 @@ class ActionSequence(object):
     def _pointer_action(self, subtype, button):
         self._actions.append({"type": subtype, "button": button})
 
+    def pause(self, duration):
+        self._actions.append({"type": "pause", "duration": duration})
+        return self
+
     def pointer_move(self, x, y, duration=None, origin=None):
         """Queue a pointerMove action.
 
@@ -143,21 +151,37 @@ class ActionSequence(object):
         self._actions.append(action)
         return self
 
-    def pointer_up(self, button):
+    def pointer_up(self, button=0):
         """Queue a pointerUp action for `button`.
 
         :param button: Pointer button to perform action with.
+                       Default: 0, which represents main device button.
         """
         self._pointer_action("pointerUp", button)
         return self
 
-    def pointer_down(self, button):
+    def pointer_down(self, button=0):
         """Queue a pointerDown action for `button`.
 
         :param button: Pointer button to perform action with.
+                       Default: 0, which represents main device button.
         """
         self._pointer_action("pointerDown", button)
         return self
+
+    def click(self, element=None, button=0):
+        """Queue a click with the specified button.
+
+        If an element is given, move the pointer to that element first,
+        otherwise click current pointer coordinates.
+
+        :param element: Optional element to click.
+        :param button: Integer representing pointer button to perform action
+                       with. Default: 0, which represents main device button.
+        """
+        if element:
+            self.pointer_move(0, 0, origin=element)
+        return self.pointer_down(button).pointer_up(button)
 
     def key_up(self, value):
         """Queue a keyUp action for `value`.
@@ -219,34 +243,55 @@ class Window(object):
 
     @property
     @command
+    def rect(self):
+        return self.session.send_session_command("GET", "window/rect")
+
+    @property
+    @command
     def size(self):
-        resp = self.session.send_session_command("GET", "window/rect")
-        return (resp["width"], resp["height"])
+        """Gets the window size as a tuple of `(width, height)`."""
+        rect = self.rect
+        return (rect["width"], rect["height"])
 
     @size.setter
     @command
-    def size(self, data):
-        width, height = data
+    def size(self, new_size):
+        """Set window size by passing a tuple of `(width, height)`."""
+        width, height = new_size
         body = {"width": width, "height": height}
         self.session.send_session_command("POST", "window/rect", body)
 
     @property
     @command
     def position(self):
-        resp = self.session.send_session_command("GET", "window/rect")
-        return (resp["x"], resp["y"])
+        """Gets the window position as a tuple of `(x, y)`."""
+        rect = self.rect
+        return (rect["x"], rect["y"])
 
     @position.setter
     @command
-    def position(self, data):
-        data = x, y
+    def position(self, new_position):
+        """Set window position by passing a tuple of `(x, y)`."""
+        x, y = new_position
         body = {"x": x, "y": y}
         self.session.send_session_command("POST", "window/rect", body)
 
     @property
     @command
+    def state(self):
+        return self.rect["state"]
+
+    @command
     def maximize(self):
         return self.session.send_session_command("POST", "window/maximize")
+
+    @command
+    def minimize(self):
+        return self.session.send_session_command("POST", "window/minimize")
+
+    @command
+    def fullscreen(self):
+        return self.session.send_session_command("POST", "window/fullscreen")
 
 
 class Find(object):
@@ -356,6 +401,7 @@ class Session(object):
 
         value = self.send_command("POST", "session", body=body)
         self.session_id = value["sessionId"]
+        self.capabilities = value["capabilities"]
 
         if self.extension_cls:
             self.extension = self.extension_cls(self)
@@ -370,10 +416,6 @@ class Session(object):
         self.send_command("DELETE", url)
 
         self.session_id = None
-        self.timeouts = None
-        self.window = None
-        self.find = None
-        self.extension = None
 
     def send_command(self, method, url, body=None):
         """
@@ -391,7 +433,12 @@ class Session(object):
             an error.
         """
         response = self.transport.send(method, url, body)
-        value = response.body["value"]
+
+        if "value" in response.body:
+            value = response.body["value"]
+        else:
+            raise error.UnknownErrorException("No 'value' key in response body:\n%s" %
+                                              json.dumps(response.body))
 
         if response.status != 200:
             cls = error.get(value.get("error"))
@@ -580,7 +627,7 @@ class Element(object):
                 "value": selector}
 
         elem = self.send_element_command("POST", "element", body)
-        return self.session.element(elem)
+        return self.session._element(elem)
 
     @command
     def click(self):
@@ -595,12 +642,8 @@ class Element(object):
         self.send_element_command("POST", self.url("clear"), {})
 
     @command
-    def send_keys(self, keys):
-        if isinstance(keys, (str, unicode)):
-            keys = [char for char in keys]
-
-        body = {"value": keys}
-        return self.send_element_command("POST", "value", body)
+    def send_keys(self, text):
+        return self.send_element_command("POST", "value", {"text": text})
 
     @property
     @command
@@ -621,10 +664,17 @@ class Element(object):
     def rect(self):
         return self.send_element_command("GET", "rect")
 
+    @property
     @command
-    def property(self, name):
-        return self.send_element_command("GET", "property/%s" % name)
+    def selected(self):
+        return self.send_element_command("GET", "selected")
 
     @command
     def attribute(self, name):
         return self.send_element_command("GET", "attribute/%s" % name)
+
+    # This MUST come last because otherwise @property decorators above
+    # will be overridden by this.
+    @command
+    def property(self, name):
+        return self.send_element_command("GET", "property/%s" % name)

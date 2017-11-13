@@ -23,12 +23,10 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.ResourceTimingData = class ResourceTimingData extends WebInspector.Object
+WI.ResourceTimingData = class ResourceTimingData
 {
     constructor(resource, data)
     {
-        super();
-
         data = data || {};
 
         console.assert(isNaN(data.domainLookupStart) === isNaN(data.domainLookupEnd));
@@ -84,7 +82,7 @@ WebInspector.ResourceTimingData = class ResourceTimingData extends WebInspector.
         if (isNaN(data.connectStart) && !isNaN(data.secureConnectionStart))
             data.connectStart = data.secureConnectionStart;
 
-        return new WebInspector.ResourceTimingData(resource, data);
+        return new WI.ResourceTimingData(resource, data);
     }
 
     // Public

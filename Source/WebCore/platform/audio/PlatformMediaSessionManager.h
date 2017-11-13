@@ -29,8 +29,8 @@
 #include "AudioHardwareListener.h"
 #include "PlatformMediaSession.h"
 #include "RemoteCommandListener.h"
-#include "SystemSleepListener.h"
 #include <map>
+#include <pal/system/SystemSleepListener.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
@@ -40,7 +40,7 @@ class HTMLMediaElement;
 class PlatformMediaSession;
 class RemoteCommandListener;
 
-class PlatformMediaSessionManager : private RemoteCommandListenerClient, private SystemSleepListener::Client, private AudioHardwareListener::Client {
+class PlatformMediaSessionManager : private RemoteCommandListenerClient, private PAL::SystemSleepListener::Client, private AudioHardwareListener::Client {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     WEBCORE_EXPORT static PlatformMediaSessionManager* sharedManagerIfExists();
@@ -67,8 +67,10 @@ public:
     WEBCORE_EXPORT void beginInterruption(PlatformMediaSession::InterruptionType);
     WEBCORE_EXPORT void endInterruption(PlatformMediaSession::EndInterruptionFlags);
 
-    WEBCORE_EXPORT void applicationDidEnterForeground() const;
-    WEBCORE_EXPORT void applicationWillEnterBackground() const;
+    WEBCORE_EXPORT void applicationWillBecomeInactive() const;
+    WEBCORE_EXPORT void applicationDidBecomeActive() const;
+    WEBCORE_EXPORT void applicationWillEnterForeground(bool suspendedUnderLock) const;
+    WEBCORE_EXPORT void applicationDidEnterBackground(bool suspendedUnderLock) const;
 
     void stopAllMediaPlaybackForDocument(const Document*);
     WEBCORE_EXPORT void stopAllMediaPlaybackForProcess();
@@ -79,6 +81,8 @@ public:
         BackgroundProcessPlaybackRestricted = 1 << 1,
         BackgroundTabPlaybackRestricted = 1 << 2,
         InterruptedPlaybackNotPermitted = 1 << 3,
+        InactiveProcessPlaybackRestricted = 1 << 4,
+        SuspendedUnderLockPlaybackRestricted = 1 << 5,
     };
     typedef unsigned SessionRestrictions;
 
@@ -101,7 +105,7 @@ public:
     void setCurrentSession(PlatformMediaSession&);
     PlatformMediaSession* currentSession() const;
 
-    Vector<PlatformMediaSession*> currentSessionsMatching(std::function<bool(const PlatformMediaSession&)>);
+    Vector<PlatformMediaSession*> currentSessionsMatching(const WTF::Function<bool(const PlatformMediaSession&)>&);
 
     void sessionIsPlayingToWirelessPlaybackTargetChanged(PlatformMediaSession&);
     void sessionCanProduceAudioChanged(PlatformMediaSession&);
@@ -131,14 +135,14 @@ private:
     void audioHardwareDidBecomeInactive() override { }
     void audioOutputDeviceChanged() override;
 
-    // SystemSleepListener
+    // PAL::SystemSleepListener
     void systemWillSleep() override;
     void systemDidWake() override;
 
     SessionRestrictions m_restrictions[PlatformMediaSession::MediaStreamCapturingAudio + 1];
     mutable Vector<PlatformMediaSession*> m_sessions;
     std::unique_ptr<RemoteCommandListener> m_remoteCommandListener;
-    std::unique_ptr<SystemSleepListener> m_systemSleepListener;
+    std::unique_ptr<PAL::SystemSleepListener> m_systemSleepListener;
     RefPtr<AudioHardwareListener> m_audioHardwareListener;
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET) && !PLATFORM(IOS)

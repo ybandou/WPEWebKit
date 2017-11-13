@@ -31,6 +31,7 @@
 #include "CSSValueKeywords.h"
 #include "CSSValueList.h"
 #include "CSSValuePool.h"
+#include "Color.h"
 #include "Document.h"
 #include "PropertySetCSSStyleDeclaration.h"
 #include "StylePropertyShorthand.h"
@@ -41,7 +42,6 @@
 
 #ifndef NDEBUG
 #include <stdio.h>
-#include <wtf/ASCIICType.h>
 #include <wtf/text/CString.h>
 #endif
 
@@ -238,6 +238,22 @@ String StyleProperties::getPropertyValue(CSSPropertyID propertyID) const
     default:
         return String();
     }
+}
+
+std::optional<Color> StyleProperties::propertyAsColor(CSSPropertyID property) const
+{
+    auto colorValue = getPropertyCSSValue(property);
+    if (!is<CSSPrimitiveValue>(colorValue.get()))
+        return std::nullopt;
+
+    auto& primitiveColor = downcast<CSSPrimitiveValue>(*colorValue);
+    return primitiveColor.isRGBColor() ? primitiveColor.color() : CSSParser::parseColor(colorValue->cssText());
+}
+
+CSSValueID StyleProperties::propertyAsValueID(CSSPropertyID property) const
+{
+    auto cssValue = getPropertyCSSValue(property);
+    return is<CSSPrimitiveValue>(cssValue.get()) ? downcast<CSSPrimitiveValue>(*cssValue).valueID() : CSSValueInvalid;
 }
 
 String StyleProperties::getCustomPropertyValue(const String& propertyName) const
@@ -1147,7 +1163,7 @@ void MutableStyleProperties::mergeAndOverrideOnConflict(const StyleProperties& o
         addParsedProperty(other.propertyAt(i).toCSSProperty());
 }
 
-bool StyleProperties::traverseSubresources(const std::function<bool (const CachedResource&)>& handler) const
+bool StyleProperties::traverseSubresources(const WTF::Function<bool (const CachedResource&)>& handler) const
 {
     unsigned size = propertyCount();
     for (unsigned i = 0; i < size; ++i) {
@@ -1175,11 +1191,6 @@ static const CSSPropertyID blockProperties[] = {
     CSSPropertyPageBreakAfter,
     CSSPropertyPageBreakBefore,
     CSSPropertyPageBreakInside,
-#if ENABLE(CSS_REGIONS)
-    CSSPropertyWebkitRegionBreakAfter,
-    CSSPropertyWebkitRegionBreakBefore,
-    CSSPropertyWebkitRegionBreakInside,
-#endif
     CSSPropertyTextAlign,
 #if ENABLE(CSS3_TEXT)
     CSSPropertyWebkitTextAlignLast,

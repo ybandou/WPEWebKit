@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Apple, Inc.  All rights reserved.
+ * Copyright (C) 2015-2017 Apple Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,9 +26,10 @@
 #import "config.h"
 #import "NetworkStorageSession.h"
 
-#import "CFNetworkSPI.h"
 #import "Cookie.h"
+#import "CookieStorageObserver.h"
 #import "URL.h"
+#import <pal/spi/cf/CFNetworkSPI.h>
 #import <wtf/BlockObjCExceptions.h>
 
 namespace WebCore {
@@ -88,6 +89,48 @@ NSHTTPCookieStorage *NetworkStorageSession::nsCookieStorage() const
         return [NSHTTPCookieStorage sharedHTTPCookieStorage];
 
     return [[[NSHTTPCookieStorage alloc] _initWithCFHTTPCookieStorage:cfCookieStorage.get()] autorelease];
+}
+
+CookieStorageObserver& NetworkStorageSession::cookieStorageObserver() const
+{
+    if (!m_cookieStorageObserver)
+        m_cookieStorageObserver = CookieStorageObserver::create(nsCookieStorage());
+
+    return *m_cookieStorageObserver;
+}
+
+CFURLStorageSessionRef createPrivateStorageSession(CFStringRef identifier)
+{
+    const void* sessionPropertyKeys[] = { _kCFURLStorageSessionIsPrivate };
+    const void* sessionPropertyValues[] = { kCFBooleanTrue };
+    auto sessionProperties = adoptCF(CFDictionaryCreate(kCFAllocatorDefault, sessionPropertyKeys, sessionPropertyValues, sizeof(sessionPropertyKeys) / sizeof(*sessionPropertyKeys), &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+    auto storageSession = adoptCF(_CFURLStorageSessionCreate(kCFAllocatorDefault, identifier, sessionProperties.get()));
+
+    if (!storageSession)
+        return nullptr;
+
+    // The private storage session should have the same properties as the default storage session,
+    // with the exception that it should be in-memory only storage.
+
+    // FIXME 9199649: If any of the storages do not exist, do no use the storage session.
+    // This could occur if there is an issue figuring out where to place a storage on disk (e.g. the
+    // sandbox does not allow CFNetwork access).
+
+    auto cache = adoptCF(_CFURLStorageSessionCopyCache(kCFAllocatorDefault, storageSession.get()));
+    if (!cache)
+        return nullptr;
+
+    CFURLCacheSetDiskCapacity(cache.get(), 0); // Setting disk cache size should not be necessary once <rdar://problem/12656814> is fixed.
+    CFURLCacheSetMemoryCapacity(cache.get(), [[NSURLCache sharedURLCache] memoryCapacity]);
+
+    auto cookieStorage = adoptCF(_CFURLStorageSessionCopyCookieStorage(kCFAllocatorDefault, storageSession.get()));
+    if (!cookieStorage)
+        return nullptr;
+
+    // FIXME: Use _CFHTTPCookieStorageGetDefault when USE(CFNETWORK) is defined in WebKit for consistency.
+    CFHTTPCookieStorageSetCookieAcceptPolicy(cookieStorage.get(), [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookieAcceptPolicy]);
+
+    return storageSession.leakRef();
 }
 
 } // namespace WebCore

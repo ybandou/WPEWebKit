@@ -34,14 +34,15 @@
 
 #if ENABLE(VIDEO_TRACK)
 
+#include "Document.h"
 #include "Event.h"
-#include "ExceptionCode.h"
 #include "HTMLMediaElement.h"
 #include "SourceBuffer.h"
 #include "TextTrackCueList.h"
 #include "TextTrackList.h"
 #include "VTTRegion.h"
 #include "VTTRegionList.h"
+#include <wtf/NeverDestroyed.h>
 
 namespace WebCore {
 
@@ -83,13 +84,13 @@ static const AtomicString& forcedKeyword()
 
 TextTrack* TextTrack::captionMenuOffItem()
 {
-    static TextTrack& off = TextTrack::create(nullptr, nullptr, "off menu item", emptyAtom, emptyAtom, emptyAtom).leakRef();
+    static TextTrack& off = TextTrack::create(nullptr, nullptr, "off menu item", emptyAtom(), emptyAtom(), emptyAtom()).leakRef();
     return &off;
 }
 
 TextTrack* TextTrack::captionMenuAutomaticItem()
 {
-    static TextTrack& automatic = TextTrack::create(nullptr, nullptr, "automatic menu item", emptyAtom, emptyAtom, emptyAtom).leakRef();
+    static TextTrack& automatic = TextTrack::create(nullptr, nullptr, "automatic menu item", emptyAtom(), emptyAtom(), emptyAtom()).leakRef();
     return &automatic;
 }
 
@@ -269,7 +270,7 @@ void TextTrack::removeAllCues()
     for (size_t i = 0; i < m_cues->length(); ++i)
         m_cues->item(i)->setTrack(nullptr);
     
-    m_cues = nullptr;
+    m_cues->clear();
 }
 
 TextTrackCueList* TextTrack::activeCues() const
@@ -294,7 +295,7 @@ ExceptionOr<void> TextTrack::addCue(Ref<TextTrackCue>&& cue)
     // track kind set to metadata, throw a InvalidNodeTypeError exception and don't add the cue to the TextTrackList
     // of the TextTrack.
     if (cue->cueType() == TextTrackCue::Data && m_kind != Kind::Metadata)
-        return Exception { INVALID_NODE_TYPE_ERR };
+        return Exception { InvalidNodeTypeError };
 
     // TODO(93143): Add spec-compliant behavior for negative time values.
     if (!cue->startMediaTime().isValid() || !cue->endMediaTime().isValid() || cue->startMediaTime() < MediaTime::zeroTime() || cue->endMediaTime() < MediaTime::zeroTime())
@@ -316,7 +317,7 @@ ExceptionOr<void> TextTrack::addCue(Ref<TextTrackCue>&& cue)
     // 2. Add cue to the method's TextTrack object's text track's text track list of cues.
     cue->setTrack(this);
     ensureTextTrackCueList().add(cue.copyRef());
-    
+
     if (m_client)
         m_client->textTrackAddCue(*this, cue);
 
@@ -332,9 +333,11 @@ ExceptionOr<void> TextTrack::removeCue(TextTrackCue& cue)
     // 1. If the given cue is not currently listed in the method's TextTrack 
     // object's text track's text track list of cues, then throw a NotFoundError exception.
     if (cue.track() != this)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
     if (!m_cues)
-        return Exception { INVALID_STATE_ERR };
+        return Exception { InvalidStateError };
+
+    DEBUG_LOG(LOGIDENTIFIER, cue);
 
     // 2. Remove cue from the method's TextTrack object's text track's text track list of cues.
     m_cues->remove(cue);
@@ -403,7 +406,7 @@ ExceptionOr<void> TextTrack::removeRegion(VTTRegion* region)
     // 1. If the given region is not currently listed in the method's TextTrack
     // object's text track list of regions, then throw a NotFoundError exception.
     if (region->track() != this)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     ASSERT(m_regions);
     m_regions->remove(*region);
@@ -542,7 +545,6 @@ bool TextTrack::containsOnlyForcedSubtitles() const
 }
 
 #if ENABLE(MEDIA_SOURCE)
-
 void TextTrack::setLanguage(const AtomicString& language)
 {
     // 11.1 language, on setting:
@@ -564,7 +566,6 @@ void TextTrack::setLanguage(const AtomicString& language)
     if (mediaElement())
         mediaElement()->textTracks().scheduleChangeEvent();
 }
-
 #endif
 
 } // namespace WebCore

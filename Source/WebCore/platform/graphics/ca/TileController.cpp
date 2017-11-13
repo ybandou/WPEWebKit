@@ -32,11 +32,11 @@
 #include "Logging.h"
 #include "PlatformCALayer.h"
 #include "Region.h"
-#include "TextStream.h"
 #include "TileCoverageMap.h"
 #include "TileGrid.h"
 #include <utility>
 #include <wtf/MainThread.h>
+#include <wtf/text/TextStream.h>
 
 #if USE(IOSURFACE)
 #include "IOSurface.h"
@@ -667,7 +667,7 @@ void TileController::setScrollingModeIndication(ScrollingModeIndication scrollin
 
 void TileController::setHasMargins(bool marginTop, bool marginBottom, bool marginLeft, bool marginRight)
 {
-    BoxExtent<bool> marginEdges(marginTop, marginRight, marginBottom, marginLeft);
+    RectEdges<bool> marginEdges(marginTop, marginRight, marginBottom, marginLeft);
     if (marginEdges == m_marginEdges)
         return;
     
@@ -776,6 +776,11 @@ void TileController::removeUnparentedTilesNow()
     updateTileCoverageMap();
 }
 #endif
+
+void TileController::logFilledVisibleFreshTile(unsigned blankPixelCount)
+{
+    owningGraphicsLayer()->platformCALayerLogFilledVisibleFreshTile(blankPixelCount);
+}
 
 } // namespace WebCore
 

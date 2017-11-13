@@ -23,7 +23,6 @@
 
 #include "QualifiedName.h"
 #include "RenderStyleConstants.h"
-#include <wtf/Noncopyable.h>
 
 namespace WebCore {
     class CSSSelectorList;
@@ -86,9 +85,6 @@ namespace WebCore {
             Child,
             DirectAdjacent,
             IndirectAdjacent,
-#if ENABLE(CSS_SELECTORS_LEVEL4)
-            DescendantDoubleChild,
-#endif
             ShadowDescendant
         };
 
@@ -175,6 +171,7 @@ namespace WebCore {
 #endif
             PseudoElementFirstLetter,
             PseudoElementFirstLine,
+            PseudoElementMarker,
             PseudoElementResizer,
             PseudoElementScrollbar,
             PseudoElementScrollbarButton,
@@ -236,7 +233,7 @@ namespace WebCore {
         const AtomicString& serializingValue() const;
         const QualifiedName& attribute() const;
         const AtomicString& attributeCanonicalLocalName() const;
-        const AtomicString& argument() const { return m_hasRareData ? m_data.m_rareData->m_argument : nullAtom; }
+        const AtomicString& argument() const { return m_hasRareData ? m_data.m_rareData->m_argument : nullAtom(); }
         bool attributeValueMatchingIsCaseInsensitive() const;
         const Vector<AtomicString>* langArgumentList() const { return m_hasRareData ? m_data.m_rareData->m_langArgumentList.get() : nullptr; }
         const CSSSelectorList* selectorList() const { return m_hasRareData ? m_data.m_rareData->m_selectorList.get() : nullptr; }
@@ -257,11 +254,7 @@ namespace WebCore {
         int nthA() const;
         int nthB() const;
 
-#if ENABLE(CSS_SELECTORS_LEVEL4)
-        bool hasDescendantRelation() const { return relation() == DescendantSpace || relation() == DescendantDoubleChild; }
-#else
         bool hasDescendantRelation() const { return relation() == DescendantSpace; }
-#endif
 
         bool hasDescendantOrChildRelation() const { return relation() == Child || hasDescendantRelation(); }
 

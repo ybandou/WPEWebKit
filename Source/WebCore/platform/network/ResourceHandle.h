@@ -26,10 +26,11 @@
 #pragma once
 
 #include "AuthenticationClient.h"
-#include "HTTPHeaderMap.h"
-#include "ResourceHandleTypes.h"
-#include "ResourceLoadPriority.h"
+#include "StoredCredentialsPolicy.h"
+#include <wtf/MonotonicTime.h>
 #include <wtf/RefCounted.h>
+#include <wtf/RefPtr.h>
+#include <wtf/text/AtomicString.h>
 
 #if PLATFORM(COCOA) || USE(CFURLCONNECTION)
 #include <wtf/RetainPtr.h>
@@ -92,7 +93,7 @@ class Timer;
 class ResourceHandle : public RefCounted<ResourceHandle>, public AuthenticationClient {
 public:
     WEBCORE_EXPORT static RefPtr<ResourceHandle> create(NetworkingContext*, const ResourceRequest&, ResourceHandleClient*, bool defersLoading, bool shouldContentSniff);
-    WEBCORE_EXPORT static void loadResourceSynchronously(NetworkingContext*, const ResourceRequest&, StoredCredentials, ResourceError&, ResourceResponse&, Vector<char>& data);
+    WEBCORE_EXPORT static void loadResourceSynchronously(NetworkingContext*, const ResourceRequest&, StoredCredentialsPolicy, ResourceError&, ResourceResponse&, Vector<char>& data);
 
 #if USE(SOUP)
     static RefPtr<ResourceHandle> create(SoupNetworkSession&, const ResourceRequest&, ResourceHandleClient*, bool defersLoading, bool shouldContentSniff);
@@ -128,15 +129,15 @@ public:
     id delegate();
     void releaseDelegate();
 #endif
-        
-#if PLATFORM(COCOA) && ENABLE(WEB_TIMING)
+
+#if PLATFORM(COCOA)
 #if USE(CFURLCONNECTION)
     static void getConnectionTimingData(CFURLConnectionRef, NetworkLoadMetrics&);
 #else
     static void getConnectionTimingData(NSURLConnection *, NetworkLoadMetrics&);
 #endif
 #endif
-        
+
 #if PLATFORM(COCOA)
     void schedule(WTF::SchedulePair&);
     void unschedule(WTF::SchedulePair&);
@@ -151,12 +152,12 @@ public:
     static void setClientCertificate(const String& host, CFDataRef);
 #endif
 
-#if PLATFORM(WIN) && USE(CURL)
+#if OS(WINDOWS) && USE(CURL)
     static void setHostAllowsAnyHTTPSCertificate(const String&);
     static void setClientCertificateInfo(const String&, const String&, const String&);
 #endif
 
-#if PLATFORM(WIN) && USE(CURL) && USE(CF)
+#if OS(WINDOWS) && USE(CURL) && USE(CF)
     static void setClientCertificate(const String& host, CFDataRef);
 #endif
 
@@ -230,7 +231,7 @@ public:
     typedef Ref<ResourceHandle> (*BuiltinConstructor)(const ResourceRequest& request, ResourceHandleClient* client);
     static void registerBuiltinConstructor(const AtomicString& protocol, BuiltinConstructor);
 
-    typedef void (*BuiltinSynchronousLoader)(NetworkingContext*, const ResourceRequest&, StoredCredentials, ResourceError&, ResourceResponse&, Vector<char>& data);
+    typedef void (*BuiltinSynchronousLoader)(NetworkingContext*, const ResourceRequest&, StoredCredentialsPolicy, ResourceError&, ResourceResponse&, Vector<char>& data);
     static void registerBuiltinSynchronousLoader(const AtomicString& protocol, BuiltinSynchronousLoader);
 
 protected:
@@ -256,7 +257,7 @@ private:
     void scheduleFailure(FailureType);
 
     bool start();
-    static void platformLoadResourceSynchronously(NetworkingContext*, const ResourceRequest&, StoredCredentials, ResourceError&, ResourceResponse&, Vector<char>& data);
+    static void platformLoadResourceSynchronously(NetworkingContext*, const ResourceRequest&, StoredCredentialsPolicy, ResourceError&, ResourceResponse&, Vector<char>& data);
 
     void refAuthenticationClient() override { ref(); }
     void derefAuthenticationClient() override { deref(); }

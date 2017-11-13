@@ -30,7 +30,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.DOMNode = class DOMNode extends WebInspector.Object
+WI.DOMNode = class DOMNode extends WI.Object
 {
     constructor(domTreeManager, doc, isInShadowTree, payload)
     {
@@ -73,42 +73,45 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
         this._enabledPseudoClasses = [];
 
         // FIXME: The logic around this._shadowRoots and this._children is very confusing.
+        // We eventually include shadow roots at the start of _children. However we might
+        // not have our actual children yet. So we try to defer initializing _children until
+        // we have both shadowRoots and child nodes.
         this._shadowRoots = [];
         if (payload.shadowRoots) {
             for (var i = 0; i < payload.shadowRoots.length; ++i) {
                 var root = payload.shadowRoots[i];
-                var node = new WebInspector.DOMNode(this._domTreeManager, this.ownerDocument, true, root);
+                var node = new WI.DOMNode(this._domTreeManager, this.ownerDocument, true, root);
                 node.parentNode = this;
                 this._shadowRoots.push(node);
             }
         }
 
+        if (payload.children)
+            this._setChildrenPayload(payload.children);
+        else if (this._shadowRoots.length && !this._childNodeCount)
+            this._children = this._shadowRoots.slice();
+
         if (this._nodeType === Node.ELEMENT_NODE)
-            this._customElementState = payload.customElementState || WebInspector.DOMNode.CustomElementState.Builtin;
+            this._customElementState = payload.customElementState || WI.DOMNode.CustomElementState.Builtin;
         else
             this._customElementState = null;
 
         if (payload.templateContent) {
-            this._templateContent = new WebInspector.DOMNode(this._domTreeManager, this.ownerDocument, false, payload.templateContent);
+            this._templateContent = new WI.DOMNode(this._domTreeManager, this.ownerDocument, false, payload.templateContent);
             this._templateContent.parentNode = this;
         }
-
-        if (payload.children)
-            this._setChildrenPayload(payload.children);
-        else if (!this._children && this._shadowRoots.length)
-            this._children = this._shadowRoots.slice();
 
         this._pseudoElements = new Map;
         if (payload.pseudoElements) {
             for (var i = 0; i < payload.pseudoElements.length; ++i) {
-                var node = new WebInspector.DOMNode(this._domTreeManager, this.ownerDocument, this._isInShadowTree, payload.pseudoElements[i]);
+                var node = new WI.DOMNode(this._domTreeManager, this.ownerDocument, this._isInShadowTree, payload.pseudoElements[i]);
                 node.parentNode = this;
                 this._pseudoElements.set(node.pseudoType(), node);
             }
         }
 
         if (payload.contentDocument) {
-            this._contentDocument = new WebInspector.DOMNode(this._domTreeManager, null, false, payload.contentDocument);
+            this._contentDocument = new WI.DOMNode(this._domTreeManager, null, false, payload.contentDocument);
             this._children = [this._contentDocument];
             this._renumber();
         }
@@ -146,7 +149,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
     get frame()
     {
         if (!this._frame)
-            this._frame = WebInspector.frameResourceManager.frameForIdentifier(this.frameIdentifier);
+            this._frame = WI.frameResourceManager.frameForIdentifier(this.frameIdentifier);
         return this._frame;
     }
 
@@ -155,7 +158,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
         if (!this._children)
             return null;
 
-        if (WebInspector.showShadowDOMSetting.value)
+        if (WI.showShadowDOMSetting.value)
             return this._children;
 
         if (this._filteredChildrenNeedsUpdating) {
@@ -190,7 +193,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
 
     get nextSibling()
     {
-        if (WebInspector.showShadowDOMSetting.value)
+        if (WI.showShadowDOMSetting.value)
             return this._nextSibling;
 
         var node = this._nextSibling;
@@ -204,7 +207,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
 
     get previousSibling()
     {
-        if (WebInspector.showShadowDOMSetting.value)
+        if (WI.showShadowDOMSetting.value)
             return this._previousSibling;
 
         var node = this._previousSibling;
@@ -222,7 +225,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
         if (children)
             return children.length;
 
-        if (WebInspector.showShadowDOMSetting.value)
+        if (WI.showShadowDOMSetting.value)
             return this._childNodeCount + this._shadowRoots.length;
 
         return this._childNodeCount;
@@ -270,7 +273,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
 
     isCustomElement()
     {
-        return this._customElementState === WebInspector.DOMNode.CustomElementState.Custom;
+        return this._customElementState === WI.DOMNode.CustomElementState.Custom;
     }
 
     customElementState()
@@ -285,7 +288,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
 
     isUserAgentShadowRoot()
     {
-        return this._shadowRootType === WebInspector.DOMNode.ShadowRootType.UserAgent;
+        return this._shadowRootType === WI.DOMNode.ShadowRootType.UserAgent;
     }
 
     ancestorShadowRoot()
@@ -357,12 +360,12 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
 
     beforePseudoElement()
     {
-        return this._pseudoElements.get(WebInspector.DOMNode.PseudoElementType.Before) || null;
+        return this._pseudoElements.get(WI.DOMNode.PseudoElementType.Before) || null;
     }
 
     afterPseudoElement()
     {
-        return this._pseudoElements.get(WebInspector.DOMNode.PseudoElementType.After) || null;
+        return this._pseudoElements.get(WI.DOMNode.PseudoElementType.After) || null;
     }
 
     shadowRoots()
@@ -438,21 +441,26 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
         if (this.nodeType() !== Node.ELEMENT_NODE)
             return;
 
-        function resolvedNode(object)
-        {
-            if (!object)
-                return;
-
-            function inspectedPage_node_toggleClass(className, flag)
-            {
+        WI.RemoteObject.resolveNode(this).then((object) => {
+            function inspectedPage_node_toggleClass(className, flag) {
                 this.classList.toggle(className, flag);
             }
 
             object.callFunction(inspectedPage_node_toggleClass, [className, flag]);
             object.release();
-        }
+        });
+    }
 
-        WebInspector.RemoteObject.resolveNode(this, "", resolvedNode);
+    scrollIntoView()
+    {
+        WI.RemoteObject.resolveNode(this).then((object) => {
+            function inspectedPage_node_scrollIntoView() {
+                this.scrollIntoViewIfNeeded(true);
+            }
+
+            object.callFunction(inspectedPage_node_scrollIntoView);
+            object.release();
+        });
     }
 
     getChildNodes(callback)
@@ -676,7 +684,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
 
     _insertChild(prev, payload)
     {
-        var node = new WebInspector.DOMNode(this._domTreeManager, this.ownerDocument, this._isInShadowTree, payload);
+        var node = new WI.DOMNode(this._domTreeManager, this.ownerDocument, this._isInShadowTree, payload);
         if (!prev) {
             if (!this._children) {
                 // First node
@@ -710,7 +718,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
 
         this._children = this._shadowRoots.slice();
         for (var i = 0; i < payloads.length; ++i) {
-            var node = new WebInspector.DOMNode(this._domTreeManager, this.ownerDocument, this._isInShadowTree, payloads[i]);
+            var node = new WI.DOMNode(this._domTreeManager, this.ownerDocument, this._isInShadowTree, payloads[i]);
             this._children.push(node);
         }
         this._renumber();
@@ -789,7 +797,7 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
         function changed(error)
         {
             if (!error)
-                this.dispatchEventToListeners(WebInspector.DOMNode.Event.EnabledPseudoClassesChanged);
+                this.dispatchEventToListeners(WI.DOMNode.Event.EnabledPseudoClassesChanged);
         }
 
         CSSAgent.forcePseudoState(this.id, pseudoClasses, changed.bind(this));
@@ -808,24 +816,25 @@ WebInspector.DOMNode = class DOMNode extends WebInspector.Object
     }
 };
 
-WebInspector.DOMNode.Event = {
+WI.DOMNode.Event = {
     EnabledPseudoClassesChanged: "dom-node-enabled-pseudo-classes-did-change",
     AttributeModified: "dom-node-attribute-modified",
-    AttributeRemoved: "dom-node-attribute-removed"
+    AttributeRemoved: "dom-node-attribute-removed",
+    EventListenersChanged: "dom-node-event-listeners-changed",
 };
 
-WebInspector.DOMNode.PseudoElementType = {
+WI.DOMNode.PseudoElementType = {
     Before: "before",
     After: "after",
 };
 
-WebInspector.DOMNode.ShadowRootType = {
+WI.DOMNode.ShadowRootType = {
     UserAgent: "user-agent",
     Closed: "closed",
     Open: "open",
 };
 
-WebInspector.DOMNode.CustomElementState = {
+WI.DOMNode.CustomElementState = {
     Builtin: "builtin",
     Custom: "custom",
     Waiting: "waiting",

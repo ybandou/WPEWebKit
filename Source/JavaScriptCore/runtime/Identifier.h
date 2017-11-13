@@ -20,10 +20,9 @@
 
 #pragma once
 
+#include "PrivateName.h"
 #include "VM.h"
 #include <wtf/Optional.h>
-#include <wtf/ThreadSpecific.h>
-#include <wtf/WTFThreadData.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/UniquedStringImpl.h>
 #include <wtf/text/WTFString.h>
@@ -140,6 +139,7 @@ public:
     bool isNull() const { return m_string.isNull(); }
     bool isEmpty() const { return m_string.isEmpty(); }
     bool isSymbol() const { return !isNull() && impl()->isSymbol(); }
+    bool isPrivateName() const { return isSymbol() && static_cast<const SymbolImpl*>(impl())->isPrivate(); }
 
     friend bool operator==(const Identifier&, const Identifier&);
     friend bool operator!=(const Identifier&, const Identifier&);

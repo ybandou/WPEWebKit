@@ -99,8 +99,8 @@ void CachedResourceRequest::setAsPotentiallyCrossOrigin(const String& mode, Docu
         ? FetchOptions::Credentials::Omit : equalLettersIgnoringASCIICase(mode, "use-credentials")
         ? FetchOptions::Credentials::Include : FetchOptions::Credentials::SameOrigin;
     m_options.credentials = credentials;
-    m_options.allowCredentials = credentials == FetchOptions::Credentials::Include ? AllowStoredCredentials : DoNotAllowStoredCredentials;
-    WebCore::updateRequestForAccessControl(m_resourceRequest, document.securityOrigin(), m_options.allowCredentials);
+    m_options.storedCredentialsPolicy = credentials == FetchOptions::Credentials::Include ? StoredCredentialsPolicy::Use : StoredCredentialsPolicy::DoNotUse;
+    WebCore::updateRequestForAccessControl(m_resourceRequest, document.securityOrigin(), m_options.storedCredentialsPolicy);
 }
 
 void CachedResourceRequest::updateForAccessControl(Document& document)
@@ -108,7 +108,7 @@ void CachedResourceRequest::updateForAccessControl(Document& document)
     ASSERT(m_options.mode == FetchOptions::Mode::Cors);
 
     m_origin = &document.securityOrigin();
-    WebCore::updateRequestForAccessControl(m_resourceRequest, *m_origin, m_options.allowCredentials);
+    WebCore::updateRequestForAccessControl(m_resourceRequest, *m_origin, m_options.storedCredentialsPolicy);
 }
 
 void upgradeInsecureResourceRequestIfNeeded(ResourceRequest& request, Document& document)
@@ -232,25 +232,12 @@ void CachedResourceRequest::updateReferrerOriginAndUserAgentHeaders(FrameLoader&
         outgoingOrigin = frameLoader.outgoingOrigin();
     }
 
-    // FIXME: Refactor SecurityPolicy::generateReferrerHeader to align with new terminology used in https://w3c.github.io/webappsec-referrer-policy.
     switch (m_options.referrerPolicy) {
-    case FetchOptions::ReferrerPolicy::EmptyString: {
+    case ReferrerPolicy::EmptyString:
         outgoingReferrer = SecurityPolicy::generateReferrerHeader(defaultPolicy, m_resourceRequest.url(), outgoingReferrer);
-        break; }
-    case FetchOptions::ReferrerPolicy::NoReferrerWhenDowngrade:
-        outgoingReferrer = SecurityPolicy::generateReferrerHeader(ReferrerPolicy::Default, m_resourceRequest.url(), outgoingReferrer);
         break;
-    case FetchOptions::ReferrerPolicy::NoReferrer:
-        outgoingReferrer = String();
-        break;
-    case FetchOptions::ReferrerPolicy::Origin:
-        outgoingReferrer = SecurityPolicy::generateReferrerHeader(ReferrerPolicy::Origin, m_resourceRequest.url(), outgoingReferrer);
-        break;
-    case FetchOptions::ReferrerPolicy::OriginWhenCrossOrigin:
-        if (isRequestCrossOrigin(m_origin.get(), m_resourceRequest.url(), m_options))
-            outgoingReferrer = SecurityPolicy::generateReferrerHeader(ReferrerPolicy::Origin, m_resourceRequest.url(), outgoingReferrer);
-        break;
-    case FetchOptions::ReferrerPolicy::UnsafeUrl:
+    default:
+        outgoingReferrer = SecurityPolicy::generateReferrerHeader(m_options.referrerPolicy, m_resourceRequest.url(), outgoingReferrer);
         break;
     };
 

@@ -34,20 +34,9 @@
 #import "ResourceRequestCFNet.h"
 #import "RuntimeApplicationChecks.h"
 #import "WebCoreSystemInterface.h"
-
 #import <Foundation/Foundation.h>
+#import <pal/spi/cf/CFNetworkSPI.h>
 #import <wtf/text/CString.h>
-
-@interface NSURLRequest (WebNSURLRequestDetails)
-- (NSArray *)contentDispositionEncodingFallbackArray;
-+ (void)setDefaultTimeoutInterval:(NSTimeInterval)seconds;
-- (CFURLRequestRef)_CFURLRequest;
-- (id)_initWithCFURLRequest:(CFURLRequestRef)request;
-@end
-
-@interface NSMutableURLRequest (WebMutableNSURLRequestDetails)
-- (void)setContentDispositionEncodingFallbackArray:(NSArray *)theEncodingFallbackArray;
-@end
 
 namespace WebCore {
 
@@ -149,7 +138,7 @@ void ResourceRequest::doUpdateResourceRequest()
     }
 
     if (m_nsRequest) {
-        NSString* cachePartition = [NSURLProtocol propertyForKey:(NSString *)wkCachePartitionKey() inRequest:m_nsRequest.get()];
+        NSString* cachePartition = [NSURLProtocol propertyForKey:(NSString *)_kCFURLCachePartitionKey inRequest:m_nsRequest.get()];
         if (cachePartition)
             m_cachePartition = cachePartition;
     }
@@ -219,7 +208,7 @@ void ResourceRequest::doUpdatePlatformRequest()
     String partition = cachePartition();
     if (!partition.isNull() && !partition.isEmpty()) {
         NSString *partitionValue = [NSString stringWithUTF8String:partition.utf8().data()];
-        [NSURLProtocol setProperty:partitionValue forKey:(NSString *)wkCachePartitionKey() inRequest:nsRequest];
+        [NSURLProtocol setProperty:partitionValue forKey:(NSString *)_kCFURLCachePartitionKey inRequest:nsRequest];
     }
 
 #if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200)
@@ -271,10 +260,33 @@ void ResourceRequest::doUpdatePlatformHTTPBody()
 void ResourceRequest::setStorageSession(CFURLStorageSessionRef storageSession)
 {
     updatePlatformRequest();
-    m_nsRequest = adoptNS(wkCopyRequestWithStorageSession(storageSession, m_nsRequest.get()));
+    m_nsRequest = adoptNS(copyRequestWithStorageSession(storageSession, m_nsRequest.get()));
 }
 
 #endif // USE(CFURLCONNECTION)
+
+NSURLRequest *copyRequestWithStorageSession(CFURLStorageSessionRef storageSession, NSURLRequest *request)
+{
+    if (!storageSession || !request)
+        return [request copy];
+
+    auto cfRequest = adoptCF(CFURLRequestCreateMutableCopy(kCFAllocatorDefault, [request _CFURLRequest]));
+    _CFURLRequestSetStorageSession(cfRequest.get(), storageSession);
+    return [[NSURLRequest alloc] _initWithCFURLRequest:cfRequest.get()];
+}
+
+NSCachedURLResponse *cachedResponseForRequest(CFURLStorageSessionRef storageSession, NSURLRequest *request)
+{
+    if (!storageSession)
+        return [[NSURLCache sharedURLCache] cachedResponseForRequest:request];
+
+    auto cache = adoptCF(_CFURLStorageSessionCopyCache(kCFAllocatorDefault, storageSession));
+    auto cachedResponse = adoptCF(CFURLCacheCopyResponseForRequest(cache.get(), [request _CFURLRequest]));
+    if (!cachedResponse)
+        return nil;
+
+    return [[[NSCachedURLResponse alloc] _initWithCFCachedURLResponse:cachedResponse.get()] autorelease];
+}
 
 } // namespace WebCore
 

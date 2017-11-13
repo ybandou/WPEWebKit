@@ -240,8 +240,19 @@ void InjectedBundle::didReceiveMessageToPage(WKBundlePageRef page, WKStringRef m
         return;
     }
 
+    if (WKStringIsEqualToUTF8CString(messageName, "CallDidClearStatisticsThroughWebsiteDataRemoval")) {
+        m_testRunner->statisticsCallClearThroughWebsiteDataRemovalCallback();
+        return;
+    }
+
+    if (WKStringIsEqualToUTF8CString(messageName, "CallDidRemoveAllSessionCredentialsCallback")) {
+        m_testRunner->callDidRemoveAllSessionCredentialsCallback();
+        return;
+    }
+
     if (WKStringIsEqualToUTF8CString(messageName, "NotifyDownloadDone")) {
-        m_testRunner->notifyDone();
+        if (m_testRunner->shouldFinishAfterDownload())
+            m_testRunner->notifyDone();
         return;
     }
 
@@ -271,6 +282,22 @@ void InjectedBundle::didReceiveMessageToPage(WKBundlePageRef page, WKStringRef m
         return;
     }
 
+    if (WKStringIsEqualToUTF8CString(messageName, "WebsiteDataScanForTopPrivatelyControlledDomainsFinished")) {
+        m_testRunner->statisticsDidScanDataRecordsCallback();
+        return;
+    }
+
+    if (WKStringIsEqualToUTF8CString(messageName, "ResourceLoadStatisticsTelemetryFinished")) {
+        WKDictionaryRef messageBodyDictionary = static_cast<WKDictionaryRef>(messageBody);
+        
+        unsigned totalPrevalentResources = (unsigned)WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, WKStringCreateWithUTF8CString("TotalPrevalentResources"))));
+        unsigned totalPrevalentResourcesWithUserInteraction = (unsigned)WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, WKStringCreateWithUTF8CString("TotalPrevalentResourcesWithUserInteraction"))));
+        unsigned top3SubframeUnderTopFrameOrigins = (unsigned)WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, WKStringCreateWithUTF8CString("Top3SubframeUnderTopFrameOrigins"))));
+        
+        m_testRunner->statisticsDidRunTelemetryCallback(totalPrevalentResources, totalPrevalentResourcesWithUserInteraction, top3SubframeUnderTopFrameOrigins);
+        return;
+    }
+    
     WKRetainPtr<WKStringRef> errorMessageName(AdoptWK, WKStringCreateWithUTF8CString("Error"));
     WKRetainPtr<WKStringRef> errorMessageBody(AdoptWK, WKStringCreateWithUTF8CString("Unknown"));
     WKBundlePagePostMessage(page, errorMessageName.get(), errorMessageBody.get());
@@ -308,6 +335,7 @@ void InjectedBundle::beginTesting(WKDictionaryRef settings)
     WKBundleSetUseDashboardCompatibilityMode(m_bundle, m_pageGroup, false);
     WKBundleSetAuthorAndUserStylesEnabled(m_bundle, m_pageGroup, true);
     WKBundleSetFrameFlatteningEnabled(m_bundle, m_pageGroup, false);
+    WKBundleSetAsyncFrameScrollingEnabled(m_bundle, m_pageGroup, false);
     WKBundleSetMinimumLogicalFontSize(m_bundle, m_pageGroup, 9);
     WKBundleSetSpatialNavigationEnabled(m_bundle, m_pageGroup, false);
     WKBundleSetAllowFileAccessFromFileURLs(m_bundle, m_pageGroup, true);
@@ -327,6 +355,8 @@ void InjectedBundle::beginTesting(WKDictionaryRef settings)
     m_testRunner->setWebGL2Enabled(true);
     m_testRunner->setWebGPUEnabled(true);
 
+    m_testRunner->setCacheAPIEnabled(true);
+
     m_testRunner->setWritableStreamAPIEnabled(true);
     m_testRunner->setReadableByteStreamAPIEnabled(true);
 
@@ -337,8 +367,6 @@ void InjectedBundle::beginTesting(WKDictionaryRef settings)
     m_testRunner->setTabKeyCyclesThroughElements(true);
     m_testRunner->clearTestRunnerCallbacks();
 
-    m_testRunner->setSubtleCryptoEnabled(true);
-
     if (m_timeout > 0)
         m_testRunner->setCustomTimeout(m_timeout);
 
@@ -347,6 +375,7 @@ void InjectedBundle::beginTesting(WKDictionaryRef settings)
     WKBundleClearAllDatabases(m_bundle);
     WKBundlePageClearApplicationCache(page()->page());
     WKBundleResetOriginAccessWhitelists(m_bundle);
+    WKBundleClearResourceLoadStatistics(m_bundle);
 
     // [WK2] REGRESSION(r128623): It made layout tests extremely slow
     // https://bugs.webkit.org/show_bug.cgi?id=96862
@@ -593,6 +622,12 @@ void InjectedBundle::setUserMediaPermission(bool enabled)
     auto messageName = adoptWK(WKStringCreateWithUTF8CString("SetUserMediaPermission"));
     auto messageBody = adoptWK(WKBooleanCreate(enabled));
     WKBundlePagePostMessage(page()->page(), messageName.get(), messageBody.get());
+}
+
+void InjectedBundle::resetUserMediaPermission()
+{
+    auto messageName = adoptWK(WKStringCreateWithUTF8CString("ResetUserMediaPermission"));
+    WKBundlePagePostMessage(page()->page(), messageName.get(), 0);
 }
 
 void InjectedBundle::setUserMediaPersistentPermissionForOrigin(bool permission, WKStringRef origin, WKStringRef parentOrigin)

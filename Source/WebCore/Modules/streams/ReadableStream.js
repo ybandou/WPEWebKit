@@ -33,7 +33,7 @@ function initializeReadableStream(underlyingSource, strategy)
      if (underlyingSource === @undefined)
          underlyingSource = { };
      if (strategy === @undefined)
-         strategy = { highWaterMark: 1, size: function() { return 1; } };
+         strategy = { };
 
     if (!@isObject(underlyingSource))
         @throwTypeError("ReadableStream constructor takes an object as first argument");
@@ -216,6 +216,7 @@ function tee()
     return @readableStreamTee(this, false);
 }
 
+@getter
 function locked()
 {
     "use strict";

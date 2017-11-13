@@ -44,11 +44,12 @@
 #include <wtf/MonotonicTime.h>
 #include <wtf/StdLibExtras.h>
 #include <wtf/SystemTracing.h>
-#include <wtf/text/StringBuilder.h>
 
 namespace JSC { namespace Wasm {
 
+namespace WasmPlanInternal {
 static const bool verbose = false;
+}
 
 Plan::Plan(VM* vm, Ref<ModuleInformation> info, CompletionTask&& task)
     : m_moduleInformation(WTFMove(info))
@@ -59,7 +60,7 @@ Plan::Plan(VM* vm, Ref<ModuleInformation> info, CompletionTask&& task)
 }
 
 Plan::Plan(VM* vm, const uint8_t* source, size_t sourceLength, CompletionTask&& task)
-    : m_moduleInformation(makeRef(*new ModuleInformation(Vector<uint8_t>())))
+    : m_moduleInformation(adoptRef(*new ModuleInformation(Vector<uint8_t>())))
     , m_source(source)
     , m_sourceLength(sourceLength)
 {
@@ -129,7 +130,7 @@ bool Plan::tryRemoveVMAndCancelIfLast(VM& vm)
 
 void Plan::fail(const AbstractLocker& locker, String&& errorMessage)
 {
-    dataLogLnIf(verbose, "failing with message: ", errorMessage);
+    dataLogLnIf(WasmPlanInternal::verbose, "failing with message: ", errorMessage);
     m_errorMessage = WTFMove(errorMessage);
     complete(locker);
 }

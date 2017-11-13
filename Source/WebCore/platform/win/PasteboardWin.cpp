@@ -99,12 +99,6 @@ std::unique_ptr<Pasteboard> Pasteboard::createForCopyAndPaste()
     return pasteboard;
 }
 
-std::unique_ptr<Pasteboard> Pasteboard::createPrivate()
-{
-    // Windows has no "Private pasteboard" concept.
-    return createForCopyAndPaste();
-}
-
 #if ENABLE(DRAG_SUPPORT)
 std::unique_ptr<Pasteboard> Pasteboard::createForDragAndDrop()
 {
@@ -181,14 +175,12 @@ enum ClipboardDataType { ClipboardDataTypeNone, ClipboardDataTypeURL, ClipboardD
 
 static ClipboardDataType clipboardTypeFromMIMEType(const String& type)
 {
-    String strippedType = type.stripWhiteSpace();
-
     // two special cases for IE compatibility
-    if (equalLettersIgnoringASCIICase(strippedType, "text") || equalLettersIgnoringASCIICase(strippedType, "text/plain") || strippedType.startsWith("text/plain;", false))
+    if (equalLettersIgnoringASCIICase(type, "text/plain"))
         return ClipboardDataTypeText;
-    if (equalLettersIgnoringASCIICase(strippedType, "url") || equalLettersIgnoringASCIICase(strippedType, "text/uri-list"))
+    if (equalLettersIgnoringASCIICase(type, "text/uri-list"))
         return ClipboardDataTypeURL;
-    if (equalLettersIgnoringASCIICase(strippedType, "text/html"))
+    if (equalLettersIgnoringASCIICase(type, "text/html"))
         return ClipboardDataTypeTextHTML;
 
     return ClipboardDataTypeNone;
@@ -760,11 +752,6 @@ void Pasteboard::writeImage(Element& element, const URL&, const String&)
         ::SetClipboardData(CF_BITMAP, resultBitmap.leak());
         ::CloseClipboard();
     }
-}
-
-void Pasteboard::writePasteboard(const Pasteboard& sourcePasteboard)
-{
-    notImplemented();
 }
 
 bool Pasteboard::canSmartReplace()

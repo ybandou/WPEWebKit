@@ -9,6 +9,13 @@ class CommitLogViewer extends ComponentBase {
         this._fetchingPromise = null;
         this._commits = null;
         this._renderCommitListLazily = new LazilyEvaluatedFunction(this._renderCommitList.bind(this));
+        this._showRepositoryName = true;
+    }
+
+    setShowRepositoryName(shouldShow)
+    {
+        this._showRepositoryName = shouldShow;
+        this.enqueueToRender();
     }
 
     view(repository, precedingRevision, lastRevision)
@@ -55,7 +62,7 @@ class CommitLogViewer extends ComponentBase {
 
     render()
     {
-        const shouldShowRepositoryName = this._repository && (this._commits || this._fetchingPromise);
+        const shouldShowRepositoryName = this._repository && (this._commits || this._fetchingPromise) && this._showRepositoryName;
         this.content('repository-name').textContent = shouldShowRepositoryName ? this._repository.name() : '';
         this.content('spinner-container').style.display = this._fetchingPromise ? null : 'none';
         this._renderCommitListLazily.evaluate(this._commits);
@@ -70,10 +77,10 @@ class CommitLogViewer extends ComponentBase {
         this.renderReplace(this.content('commits-list'), (commits || []).map((commit) => {
             const label = commit.label();
             const url = commit.url();
-            const ownsSubCommits = previousCommit && previousCommit.ownsSubCommits() && commit.ownsSubCommits();
-            const subCommitDifferenceRow = ownsSubCommits ? element('tr', element('td', {colspan: 2}, new SubCommitViewer(previousCommit, commit))) : [];
+            const ownsCommits = previousCommit && previousCommit.ownsCommits() && commit.ownsCommits();
+            const ownedCommitDifferenceRow = ownsCommits ? element('tr', element('td', {colspan: 2}, new OwnedCommitViewer(previousCommit, commit))) : [];
             previousCommit = commit;
-            return [subCommitDifferenceRow,
+            return [ownedCommitDifferenceRow,
                 element('tr', [
                     element('th', [element('h4', {class: 'revision'}, url ? link(label, commit.title(), url) : label), commit.author() || '']),
                     element('td', commit.message() ? commit.message().substring(0, 80) : '')])];

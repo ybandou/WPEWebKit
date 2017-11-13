@@ -49,12 +49,14 @@ bool doesGC(Graph& graph, Node* node)
     case Int52Constant:
     case LazyJSConstant:
     case Identity:
+    case IdentityWithProfile:
     case GetCallee:
     case GetArgumentCountIncludingThis:
     case GetRestLength:
     case GetLocal:
     case SetLocal:
     case MovHint:
+    case InitializeEntrypointArguments:
     case ZombieHint:
     case ExitOK:
     case Phantom:
@@ -113,13 +115,17 @@ bool doesGC(Graph& graph, Node* node)
     case DeleteById:
     case DeleteByVal:
     case CheckStructure:
+    case CheckStructureOrEmpty:
+    case CheckStructureImmediate:
     case GetExecutable:
     case GetButterfly:
+    case GetButterflyWithoutCaging:
     case CheckSubClass:
     case CheckArray:
     case GetScope:
     case SkipScope:
     case GetGlobalObject:
+    case GetGlobalThis:
     case GetClosureVar:
     case PutClosureVar:
     case GetRegExpObjectLastIndex:
@@ -176,11 +182,13 @@ bool doesGC(Graph& graph, Node* node)
     case ToString:
     case CallStringConstructor:
     case NumberToStringWithRadix:
+    case NumberToStringWithValidRadixConstant:
     case In:
     case HasOwnProperty:
     case Jump:
     case Branch:
     case Switch:
+    case EntrySwitch:
     case Return:
     case TailCall:
     case DirectTailCall:
@@ -192,9 +200,13 @@ bool doesGC(Graph& graph, Node* node)
     case StringFromCharCode:
     case MapHash:
     case GetMapBucket:
-    case LoadFromJSMapBucket:
-    case IsNonEmptyMapBucket:
+    case GetMapBucketHead:
+    case GetMapBucketNext:
+    case LoadKeyFromMapBucket:
+    case LoadValueFromMapBucket:
+    case WeakMapGet:
     case Unreachable:
+    case ExtractCatchLocal:
     case ExtractOSREntryLocal:
     case CheckTierUpInLoop:
     case CheckTierUpAtReturn:
@@ -218,6 +230,7 @@ bool doesGC(Graph& graph, Node* node)
     case GetByValWithThis:
     case GetIndexedPropertyStorage:
     case GetArrayLength:
+    case GetVectorLength:
     case ArrayPush:
     case ArrayPop:
     case StringCharAt:
@@ -243,6 +256,7 @@ bool doesGC(Graph& graph, Node* node)
     case PhantomNewFunction:
     case PhantomNewGeneratorFunction:
     case PhantomNewAsyncFunction:
+    case PhantomNewAsyncGeneratorFunction:
     case PhantomCreateActivation:
     case PhantomDirectArguments:
     case PhantomCreateRest:
@@ -253,7 +267,6 @@ bool doesGC(Graph& graph, Node* node)
     case GetMyArgumentByValOutOfBounds:
     case ForwardVarargs:
     case PutHint:
-    case CheckStructureImmediate:
     case PutStack:
     case KillStack:
     case GetStack:
@@ -279,6 +292,7 @@ bool doesGC(Graph& graph, Node* node)
     case AtomicsIsLockFree:
         return false;
 
+    case PushWithScope:
     case CreateActivation:
     case CreateDirectArguments:
     case CreateScopedArguments:
@@ -301,6 +315,7 @@ bool doesGC(Graph& graph, Node* node)
     case MakeRope:
     case NewFunction:
     case NewGeneratorFunction:
+    case NewAsyncGeneratorFunction:
     case NewAsyncFunction:
     case NewTypedArray:
     case ThrowStaticError:
@@ -319,6 +334,7 @@ bool doesGC(Graph& graph, Node* node)
     case CallDOMGetter:
     case CallDOM:
     case ArraySlice:
+    case ArrayIndexOf:
     case ParseInt: // We might resolve a rope even though we don't clobber anything.
         return true;
         

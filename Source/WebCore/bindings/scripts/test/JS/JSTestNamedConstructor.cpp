@@ -22,14 +22,14 @@
 #include "JSTestNamedConstructor.h"
 
 #include "JSDOMBinding.h"
-#include "JSDOMBindingCaller.h"
 #include "JSDOMConstructorNotConstructable.h"
-#include "JSDOMConvert.h"
+#include "JSDOMConvertInterface.h"
+#include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMNamedConstructor.h"
 #include "JSDOMWrapperCache.h"
-#include <runtime/Error.h>
 #include <runtime/FunctionPrototype.h>
+#include <runtime/JSCInlines.h>
 #include <wtf/GetPtr.h>
 
 using namespace JSC;
@@ -77,9 +77,9 @@ template<> JSValue JSTestNamedConstructorConstructor::prototypeForStructure(JSC:
 
 template<> void JSTestNamedConstructorConstructor::initializeProperties(VM& vm, JSDOMGlobalObject& globalObject)
 {
-    putDirect(vm, vm.propertyNames->prototype, JSTestNamedConstructor::prototype(vm, globalObject), DontDelete | ReadOnly | DontEnum);
-    putDirect(vm, vm.propertyNames->name, jsNontrivialString(&vm, String(ASCIILiteral("TestNamedConstructor"))), ReadOnly | DontEnum);
-    putDirect(vm, vm.propertyNames->length, jsNumber(0), ReadOnly | DontEnum);
+    putDirect(vm, vm.propertyNames->prototype, JSTestNamedConstructor::prototype(vm, globalObject), JSC::PropertyAttribute::DontDelete | JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
+    putDirect(vm, vm.propertyNames->name, jsNontrivialString(&vm, String(ASCIILiteral("TestNamedConstructor"))), JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
+    putDirect(vm, vm.propertyNames->length, jsNumber(0), JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
 }
 
 template<> const ClassInfo JSTestNamedConstructorConstructor::s_info = { "TestNamedConstructor", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSTestNamedConstructorConstructor) };
@@ -111,9 +111,9 @@ template<> JSValue JSTestNamedConstructorNamedConstructor::prototypeForStructure
 
 template<> void JSTestNamedConstructorNamedConstructor::initializeProperties(VM& vm, JSDOMGlobalObject& globalObject)
 {
-    putDirect(vm, vm.propertyNames->prototype, JSTestNamedConstructor::prototype(vm, globalObject), DontDelete | ReadOnly | DontEnum);
-    putDirect(vm, vm.propertyNames->name, jsNontrivialString(&vm, String(ASCIILiteral("Audio"))), ReadOnly | DontEnum);
-    putDirect(vm, vm.propertyNames->length, jsNumber(0), ReadOnly | DontEnum);
+    putDirect(vm, vm.propertyNames->prototype, JSTestNamedConstructor::prototype(vm, globalObject), JSC::PropertyAttribute::DontDelete | JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
+    putDirect(vm, vm.propertyNames->name, jsNontrivialString(&vm, String(ASCIILiteral("Audio"))), JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
+    putDirect(vm, vm.propertyNames->length, jsNumber(0), JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
 }
 
 template<> const ClassInfo JSTestNamedConstructorNamedConstructor::s_info = { "Audio", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSTestNamedConstructorNamedConstructor) };
@@ -122,7 +122,7 @@ template<> const ClassInfo JSTestNamedConstructorNamedConstructor::s_info = { "A
 
 static const HashTableValue JSTestNamedConstructorPrototypeTableValues[] =
 {
-    { "constructor", DontEnum, NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestNamedConstructorConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(setJSTestNamedConstructorConstructor) } },
+    { "constructor", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestNamedConstructorConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(setJSTestNamedConstructorConstructor) } },
 };
 
 const ClassInfo JSTestNamedConstructorPrototype::s_info = { "TestNamedConstructorPrototype", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSTestNamedConstructorPrototype) };
@@ -130,7 +130,7 @@ const ClassInfo JSTestNamedConstructorPrototype::s_info = { "TestNamedConstructo
 void JSTestNamedConstructorPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
-    reifyStaticProperties(vm, JSTestNamedConstructorPrototypeTableValues, *this);
+    reifyStaticProperties(vm, JSTestNamedConstructor::info(), JSTestNamedConstructorPrototypeTableValues, *this);
 }
 
 const ClassInfo JSTestNamedConstructor::s_info = { "TestNamedConstructor", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSTestNamedConstructor) };
@@ -157,6 +157,16 @@ JSObject* JSTestNamedConstructor::prototype(VM& vm, JSDOMGlobalObject& globalObj
     return getDOMPrototype<JSTestNamedConstructor>(vm, globalObject);
 }
 
+JSValue JSTestNamedConstructor::getConstructor(VM& vm, const JSGlobalObject* globalObject)
+{
+    return getDOMConstructor<JSTestNamedConstructorConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+}
+
+JSValue JSTestNamedConstructor::getNamedConstructor(VM& vm, JSGlobalObject* globalObject)
+{
+    return getDOMConstructor<JSTestNamedConstructorNamedConstructor>(vm, *jsCast<JSDOMGlobalObject*>(globalObject));
+}
+
 void JSTestNamedConstructor::destroy(JSC::JSCell* cell)
 {
     JSTestNamedConstructor* thisObject = static_cast<JSTestNamedConstructor*>(cell);
@@ -167,34 +177,23 @@ EncodedJSValue jsTestNamedConstructorConstructor(ExecState* state, EncodedJSValu
 {
     VM& vm = state->vm();
     auto throwScope = DECLARE_THROW_SCOPE(vm);
-    JSTestNamedConstructorPrototype* domObject = jsDynamicDowncast<JSTestNamedConstructorPrototype*>(vm, JSValue::decode(thisValue));
-    if (UNLIKELY(!domObject))
+    auto* prototype = jsDynamicDowncast<JSTestNamedConstructorPrototype*>(vm, JSValue::decode(thisValue));
+    if (UNLIKELY(!prototype))
         return throwVMTypeError(state, throwScope);
-    return JSValue::encode(JSTestNamedConstructor::getConstructor(state->vm(), domObject->globalObject()));
+    return JSValue::encode(JSTestNamedConstructor::getConstructor(state->vm(), prototype->globalObject()));
 }
 
 bool setJSTestNamedConstructorConstructor(ExecState* state, EncodedJSValue thisValue, EncodedJSValue encodedValue)
 {
     VM& vm = state->vm();
     auto throwScope = DECLARE_THROW_SCOPE(vm);
-    JSValue value = JSValue::decode(encodedValue);
-    JSTestNamedConstructorPrototype* domObject = jsDynamicDowncast<JSTestNamedConstructorPrototype*>(vm, JSValue::decode(thisValue));
-    if (UNLIKELY(!domObject)) {
+    auto* prototype = jsDynamicDowncast<JSTestNamedConstructorPrototype*>(vm, JSValue::decode(thisValue));
+    if (UNLIKELY(!prototype)) {
         throwVMTypeError(state, throwScope);
         return false;
     }
     // Shadowing a built-in constructor
-    return domObject->putDirect(state->vm(), state->propertyNames().constructor, value);
-}
-
-JSValue JSTestNamedConstructor::getConstructor(VM& vm, const JSGlobalObject* globalObject)
-{
-    return getDOMConstructor<JSTestNamedConstructorConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
-}
-
-JSValue JSTestNamedConstructor::getNamedConstructor(VM& vm, JSGlobalObject* globalObject)
-{
-    return getDOMConstructor<JSTestNamedConstructorNamedConstructor>(vm, *jsCast<JSDOMGlobalObject*>(globalObject));
+    return prototype->putDirect(vm, vm.propertyNames->constructor, JSValue::decode(encodedValue));
 }
 
 bool JSTestNamedConstructorOwner::isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown> handle, void*, SlotVisitor& visitor)
@@ -231,12 +230,12 @@ JSC::JSValue toJSNewlyCreated(JSC::ExecState*, JSDOMGlobalObject* globalObject, 
     void* expectedVTablePointer = reinterpret_cast<void*>(__identifier("??_7TestNamedConstructor@WebCore@@6B@"));
 #else
     void* expectedVTablePointer = &_ZTVN7WebCore20TestNamedConstructorE[2];
-#if COMPILER(CLANG)
+#endif
+
     // If this fails TestNamedConstructor does not have a vtable, so you need to add the
     // ImplementationLacksVTable attribute to the interface definition
-    static_assert(__is_polymorphic(TestNamedConstructor), "TestNamedConstructor is not polymorphic");
-#endif
-#endif
+    static_assert(std::is_polymorphic<TestNamedConstructor>::value, "TestNamedConstructor is not polymorphic");
+
     // If you hit this assertion you either have a use after free bug, or
     // TestNamedConstructor has subclasses. If TestNamedConstructor has subclasses that get passed
     // to toJS() we currently require TestNamedConstructor you to opt out of binding hardening

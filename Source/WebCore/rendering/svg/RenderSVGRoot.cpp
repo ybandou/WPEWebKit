@@ -31,7 +31,6 @@
 #include "Page.h"
 #include "RenderIterator.h"
 #include "RenderLayer.h"
-#include "RenderNamedFlowFragment.h"
 #include "RenderSVGResource.h"
 #include "RenderSVGResourceContainer.h"
 #include "RenderSVGResourceFilter.h"
@@ -109,11 +108,6 @@ bool RenderSVGRoot::isEmbeddedThroughFrameContainingSVGDocument() const
     if (!frame().ownerRenderer())
         return false;
     return frame().document()->isSVGDocument();
-}
-
-static inline LayoutUnit resolveLengthAttributeForSVG(const Length& length, float scale, float maxSize)
-{
-    return valueForLength(length, maxSize) * (length.isFixed() ? scale : 1);
 }
 
 LayoutUnit RenderSVGRoot::computeReplacedLogicalWidth(ShouldComputePreferred shouldComputePreferred) const
@@ -246,7 +240,7 @@ void RenderSVGRoot::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paint
 
     // Apply initial viewport clip
     if (shouldApplyViewportClip())
-        childPaintInfo.context().clip(snappedIntRect(overflowClipRect(paintOffset, currentRenderNamedFlowFragment())));
+        childPaintInfo.context().clip(snappedIntRect(overflowClipRect(paintOffset)));
 
     // Convert from container offsets (html renderers) to a relative transform (svg renderers).
     // Transform from our paint container's coordinate system to our local coords.
@@ -420,7 +414,7 @@ bool RenderSVGRoot::nodeAtPoint(const HitTestRequest& request, HitTestResult& re
             // FIXME: nodeAtFloatPoint() doesn't handle rect-based hit tests yet.
             if (child->nodeAtFloatPoint(request, result, localPoint, hitTestAction)) {
                 updateHitTestResult(result, pointInBorderBox);
-                if (!result.addNodeToRectBasedTestResult(child->node(), request, locationInContainer))
+                if (result.addNodeToListBasedTestResult(child->node(), request, locationInContainer) == HitTestProgress::Stop)
                     return true;
             }
         }
@@ -435,7 +429,7 @@ bool RenderSVGRoot::nodeAtPoint(const HitTestRequest& request, HitTestResult& re
         LayoutRect boundsRect(accumulatedOffset + location(), size());
         if (locationInContainer.intersects(boundsRect)) {
             updateHitTestResult(result, pointInBorderBox);
-            if (!result.addNodeToRectBasedTestResult(&svgSVGElement(), request, locationInContainer, boundsRect))
+            if (result.addNodeToListBasedTestResult(&svgSVGElement(), request, locationInContainer, boundsRect) == HitTestProgress::Stop)
                 return true;
         }
     }

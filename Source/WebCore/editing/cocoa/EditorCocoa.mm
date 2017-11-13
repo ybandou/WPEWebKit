@@ -36,30 +36,22 @@
 #import "Editing.h"
 #import "EditingStyle.h"
 #import "EditorClient.h"
+#import "FontCascade.h"
 #import "Frame.h"
+#import "FrameLoader.h"
 #import "FrameSelection.h"
 #import "HTMLConverter.h"
 #import "HTMLImageElement.h"
 #import "HTMLSpanElement.h"
 #import "LegacyWebArchive.h"
-#import "NSAttributedStringSPI.h"
 #import "Pasteboard.h"
 #import "RenderElement.h"
 #import "RenderStyle.h"
-#import "SoftLinking.h"
 #import "Text.h"
+#import "WebContentReader.h"
+#import "WebCoreNSURLExtras.h"
+#import <pal/spi/cocoa/NSAttributedStringSPI.h>
 #import <wtf/BlockObjCExceptions.h>
-
-#if PLATFORM(IOS)
-SOFT_LINK_PRIVATE_FRAMEWORK(WebKitLegacy)
-#endif
-
-#if PLATFORM(MAC)
-SOFT_LINK_FRAMEWORK_IN_UMBRELLA(WebKit, WebKitLegacy)
-#endif
-
-// FIXME: Get rid of this and change NSAttributedString conversion so it doesn't use WebKitLegacy (cf. rdar://problem/30597352).
-SOFT_LINK(WebKitLegacy, _WebCreateFragment, void, (WebCore::Document& document, NSAttributedString *string, WebCore::FragmentAndResources& result), (document, string, result))
 
 namespace WebCore {
 
@@ -141,15 +133,6 @@ RetainPtr<NSDictionary> Editor::fontAttributesForSelectionStart() const
         nodeToRemove->remove();
 
     return attributes;
-}
-
-FragmentAndResources Editor::createFragment(NSAttributedString *string)
-{
-    // FIXME: The algorithm to convert an attributed string into HTML should be implemented here in WebCore.
-    // For now, though, we call into WebKitLegacy, which in turn calls into AppKit/TextKit.
-    FragmentAndResources result;
-    _WebCreateFragment(*m_frame.document(), string, result);
-    return result;
 }
 
 static RefPtr<SharedBuffer> archivedDataForAttributedString(NSAttributedString *attributedString)
@@ -234,7 +217,7 @@ void Editor::replaceSelectionWithAttributedString(NSAttributedString *attributed
         return;
 
     if (m_frame.selection().selection().isContentRichlyEditable()) {
-        RefPtr<DocumentFragment> fragment = createFragmentAndAddResources(attributedString);
+        RefPtr<DocumentFragment> fragment = createFragmentAndAddResources(m_frame, attributedString);
         if (fragment && shouldInsertFragment(*fragment, selectedRange().get(), EditorInsertAction::Pasted))
             pasteAsFragment(fragment.releaseNonNull(), false, false, mailBlockquoteHandling);
     } else {
@@ -244,29 +227,9 @@ void Editor::replaceSelectionWithAttributedString(NSAttributedString *attributed
     }
 }
 
-RefPtr<DocumentFragment> Editor::createFragmentForImageResourceAndAddResource(RefPtr<ArchiveResource>&& resource)
+String Editor::userVisibleString(const URL& url)
 {
-    if (!resource)
-        return nullptr;
-
-    // FIXME: Why is this different?
-#if PLATFORM(MAC)
-    String resourceURL = resource->url().string();
-#else
-    NSURL *URL = resource->url();
-    String resourceURL = URL.isFileURL ? URL.absoluteString : resource->url();
-#endif
-
-    if (DocumentLoader* loader = m_frame.loader().documentLoader())
-        loader->addArchiveResource(resource.releaseNonNull());
-
-    auto imageElement = HTMLImageElement::create(*m_frame.document());
-    imageElement->setAttributeWithoutSynchronization(HTMLNames::srcAttr, resourceURL);
-
-    auto fragment = m_frame.document()->createDocumentFragment();
-    fragment->appendChild(imageElement);
-    
-    return WTFMove(fragment);
+    return WebCore::userVisibleString(url);
 }
 
 RefPtr<SharedBuffer> Editor::dataInRTFDFormat(NSAttributedString *string)
@@ -293,39 +256,6 @@ RefPtr<SharedBuffer> Editor::dataInRTFFormat(NSAttributedString *string)
     END_BLOCK_OBJC_EXCEPTIONS;
 
     return nullptr;
-}
-
-RefPtr<DocumentFragment> Editor::createFragmentAndAddResources(NSAttributedString *string)
-{
-    if (!m_frame.page() || !m_frame.document())
-        return nullptr;
-
-    auto& document = *m_frame.document();
-    if (!document.isHTMLDocument() || !string)
-        return nullptr;
-
-    bool wasDeferringCallbacks = m_frame.page()->defersLoading();
-    if (!wasDeferringCallbacks)
-        m_frame.page()->setDefersLoading(true);
-
-    auto& cachedResourceLoader = document.cachedResourceLoader();
-    bool wasImagesEnabled = cachedResourceLoader.imagesEnabled();
-    if (wasImagesEnabled)
-        cachedResourceLoader.setImagesEnabled(false);
-
-    auto fragmentAndResources = createFragment(string);
-
-    if (auto* loader = m_frame.loader().documentLoader()) {
-        for (auto& resource : fragmentAndResources.resources)
-            loader->addArchiveResource(WTFMove(resource));
-    }
-
-    if (wasImagesEnabled)
-        cachedResourceLoader.setImagesEnabled(true);
-    if (!wasDeferringCallbacks)
-        m_frame.page()->setDefersLoading(false);
-    
-    return WTFMove(fragmentAndResources.fragment);
 }
 
 }

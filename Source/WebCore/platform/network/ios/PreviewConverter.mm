@@ -28,10 +28,10 @@
 
 #if USE(QUICK_LOOK)
 
-#import "QuickLookSPI.h"
 #import "ResourceRequest.h"
 #import "ResourceResponse.h"
-#import "SoftLinking.h"
+#import <pal/spi/ios/QuickLookSPI.h>
+#import <wtf/SoftLinking.h>
 
 SOFT_LINK_FRAMEWORK(QuickLook);
 SOFT_LINK_CLASS(QuickLook, QLPreviewConverter);

@@ -38,12 +38,15 @@
 #include "LinkBuffer.h"
 #include "StructureStubClearingWatchpoint.h"
 #include "StructureStubInfo.h"
+#include "SuperSampler.h"
 #include <wtf/CommaPrinter.h>
 #include <wtf/ListDump.h>
 
 namespace JSC {
 
+namespace PolymorphicAccessInternal {
 static const bool verbose = false;
+}
 
 void AccessGenerationResult::dump(PrintStream& out) const
 {
@@ -210,8 +213,8 @@ PolymorphicAccess::PolymorphicAccess() { }
 PolymorphicAccess::~PolymorphicAccess() { }
 
 AccessGenerationResult PolymorphicAccess::addCases(
-    VM& vm, CodeBlock* codeBlock, StructureStubInfo& stubInfo, const Identifier& ident,
-    Vector<std::unique_ptr<AccessCase>, 2> originalCasesToAdd)
+    const GCSafeConcurrentJSLocker& locker, VM& vm, CodeBlock* codeBlock, StructureStubInfo& stubInfo,
+    const Identifier& ident, Vector<std::unique_ptr<AccessCase>, 2> originalCasesToAdd)
 {
     SuperSamplerScope superSamplerScope(false);
     
@@ -246,7 +249,7 @@ AccessGenerationResult PolymorphicAccess::addCases(
         casesToAdd.append(WTFMove(myCase));
     }
 
-    if (verbose)
+    if (PolymorphicAccessInternal::verbose)
         dataLog("casesToAdd: ", listDump(casesToAdd), "\n");
 
     // If there aren't any cases to add, then fail on the grounds that there's no point to generating a
@@ -258,23 +261,23 @@ AccessGenerationResult PolymorphicAccess::addCases(
     // Now add things to the new list. Note that at this point, we will still have old cases that
     // may be replaced by the new ones. That's fine. We will sort that out when we regenerate.
     for (auto& caseToAdd : casesToAdd) {
-        commit(vm, m_watchpoints, codeBlock, stubInfo, ident, *caseToAdd);
+        commit(locker, vm, m_watchpoints, codeBlock, stubInfo, ident, *caseToAdd);
         m_list.append(WTFMove(caseToAdd));
     }
     
-    if (verbose)
+    if (PolymorphicAccessInternal::verbose)
         dataLog("After addCases: m_list: ", listDump(m_list), "\n");
 
     return AccessGenerationResult::Buffered;
 }
 
 AccessGenerationResult PolymorphicAccess::addCase(
-    VM& vm, CodeBlock* codeBlock, StructureStubInfo& stubInfo, const Identifier& ident,
-    std::unique_ptr<AccessCase> newAccess)
+    const GCSafeConcurrentJSLocker& locker, VM& vm, CodeBlock* codeBlock, StructureStubInfo& stubInfo,
+    const Identifier& ident, std::unique_ptr<AccessCase> newAccess)
 {
     Vector<std::unique_ptr<AccessCase>, 2> newAccesses;
     newAccesses.append(WTFMove(newAccess));
-    return addCases(vm, codeBlock, stubInfo, ident, WTFMove(newAccesses));
+    return addCases(locker, vm, codeBlock, stubInfo, ident, WTFMove(newAccesses));
 }
 
 bool PolymorphicAccess::visitWeak(VM& vm) const
@@ -310,7 +313,7 @@ void PolymorphicAccess::dump(PrintStream& out) const
 }
 
 void PolymorphicAccess::commit(
-    VM& vm, std::unique_ptr<WatchpointsOnStructureStubInfo>& watchpoints, CodeBlock* codeBlock,
+    const GCSafeConcurrentJSLocker&, VM& vm, std::unique_ptr<WatchpointsOnStructureStubInfo>& watchpoints, CodeBlock* codeBlock,
     StructureStubInfo& stubInfo, const Identifier& ident, AccessCase& accessCase)
 {
     // NOTE: We currently assume that this is relatively rare. It mainly arises for accesses to
@@ -329,11 +332,11 @@ void PolymorphicAccess::commit(
 }
 
 AccessGenerationResult PolymorphicAccess::regenerate(
-    VM& vm, CodeBlock* codeBlock, StructureStubInfo& stubInfo, const Identifier& ident)
+    const GCSafeConcurrentJSLocker& locker, VM& vm, CodeBlock* codeBlock, StructureStubInfo& stubInfo, const Identifier& ident)
 {
     SuperSamplerScope superSamplerScope(false);
     
-    if (verbose)
+    if (PolymorphicAccessInternal::verbose)
         dataLog("Regenerate with m_list: ", listDump(m_list), "\n");
     
     AccessGenerationState state(vm);
@@ -401,7 +404,7 @@ AccessGenerationResult PolymorphicAccess::regenerate(
     }
     m_list.resize(dstIndex);
     
-    if (verbose)
+    if (PolymorphicAccessInternal::verbose)
         dataLog("Optimized cases: ", listDump(cases), "\n");
     
     // At this point we're convinced that 'cases' contains the cases that we want to JIT now and we
@@ -410,7 +413,7 @@ AccessGenerationResult PolymorphicAccess::regenerate(
     bool allGuardedByStructureCheck = true;
     bool hasJSGetterSetterCall = false;
     for (auto& newCase : cases) {
-        commit(vm, state.watchpoints, codeBlock, stubInfo, ident, *newCase);
+        commit(locker, vm, state.watchpoints, codeBlock, stubInfo, ident, *newCase);
         allGuardedByStructureCheck &= newCase->guardedByStructureCheck();
         if (newCase->type() == AccessCase::Getter || newCase->type() == AccessCase::Setter)
             hasJSGetterSetterCall = true;
@@ -516,7 +519,7 @@ AccessGenerationResult PolymorphicAccess::regenerate(
 
     LinkBuffer linkBuffer(jit, codeBlock, JITCompilationCanFail);
     if (linkBuffer.didFailToAllocate()) {
-        if (verbose)
+        if (PolymorphicAccessInternal::verbose)
             dataLog("Did fail to allocate.\n");
         return AccessGenerationResult::GaveUp;
     }
@@ -527,7 +530,7 @@ AccessGenerationResult PolymorphicAccess::regenerate(
 
     linkBuffer.link(failure, stubInfo.slowPathStartLocation());
     
-    if (verbose)
+    if (PolymorphicAccessInternal::verbose)
         dataLog(FullCodeOrigin(codeBlock, stubInfo.codeOrigin), ": Generating polymorphic access stub for ", listDump(cases), "\n");
 
     MacroAssemblerCodeRef code = FINALIZE_CODE_FOR(
@@ -543,7 +546,7 @@ AccessGenerationResult PolymorphicAccess::regenerate(
     m_watchpoints = WTFMove(state.watchpoints);
     if (!state.weakReferences.isEmpty())
         m_weakReferences = std::make_unique<Vector<WriteBarrier<JSCell>>>(WTFMove(state.weakReferences));
-    if (verbose)
+    if (PolymorphicAccessInternal::verbose)
         dataLog("Returning: ", code.code(), "\n");
     
     m_list = WTFMove(cases);

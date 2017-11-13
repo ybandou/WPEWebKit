@@ -114,11 +114,11 @@ void DirectArguments::overrideThings(VM& vm)
 {
     RELEASE_ASSERT(!m_mappedArguments);
     
-    putDirect(vm, vm.propertyNames->length, jsNumber(m_length), DontEnum);
-    putDirect(vm, vm.propertyNames->callee, m_callee.get(), DontEnum);
-    putDirect(vm, vm.propertyNames->iteratorSymbol, globalObject()->arrayProtoValuesFunction(), DontEnum);
+    putDirect(vm, vm.propertyNames->length, jsNumber(m_length), static_cast<unsigned>(PropertyAttribute::DontEnum));
+    putDirect(vm, vm.propertyNames->callee, m_callee.get(), static_cast<unsigned>(PropertyAttribute::DontEnum));
+    putDirect(vm, vm.propertyNames->iteratorSymbol, globalObject()->arrayProtoValuesFunction(), static_cast<unsigned>(PropertyAttribute::DontEnum));
     
-    void* backingStore = vm.auxiliarySpace.tryAllocate(mappedArgumentsSize());
+    void* backingStore = vm.gigacageAuxiliarySpace(m_mappedArguments.kind).tryAllocate(mappedArgumentsSize());
     RELEASE_ASSERT(backingStore);
     bool* overrides = static_cast<bool*>(backingStore);
     m_mappedArguments.set(vm, this, overrides);
@@ -135,7 +135,7 @@ void DirectArguments::overrideThingsIfNecessary(VM& vm)
 void DirectArguments::unmapArgument(VM& vm, unsigned index)
 {
     overrideThingsIfNecessary(vm);
-    m_mappedArguments.get()[index] = true;
+    m_mappedArguments[index] = true;
 }
 
 void DirectArguments::copyToArguments(ExecState* exec, VirtualRegister firstElementDest, unsigned offset, unsigned length)

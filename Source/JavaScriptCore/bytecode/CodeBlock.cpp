@@ -58,6 +58,8 @@
 #include "JSFunction.h"
 #include "JSLexicalEnvironment.h"
 #include "JSModuleEnvironment.h"
+#include "JSSet.h"
+#include "JSString.h"
 #include "JSTemplateRegistryKey.h"
 #include "LLIntData.h"
 #include "LLIntEntrypoint.h"
@@ -357,7 +359,7 @@ void CodeBlock::finishCreation(VM& vm, CopyParsedBlockTag, CodeBlock& other)
 CodeBlock::CodeBlock(VM* vm, Structure* structure, ScriptExecutable* ownerExecutable, UnlinkedCodeBlock* unlinkedCodeBlock,
     JSScope* scope, RefPtr<SourceProvider>&& sourceProvider, unsigned sourceOffset, unsigned firstLineColumnOffset)
     : JSCell(*vm, structure)
-    , m_globalObject(scope->globalObject()->vm(), this, scope->globalObject())
+    , m_globalObject(*vm, this, scope->globalObject())
     , m_numCalleeLocals(unlinkedCodeBlock->m_numCalleeLocals)
     , m_numVars(unlinkedCodeBlock->m_numVars)
     , m_shouldAlwaysBeInlined(true)
@@ -370,12 +372,12 @@ CodeBlock::CodeBlock(VM* vm, Structure* structure, ScriptExecutable* ownerExecut
     , m_isConstructor(unlinkedCodeBlock->isConstructor())
     , m_isStrictMode(unlinkedCodeBlock->isStrictMode())
     , m_codeType(unlinkedCodeBlock->codeType())
-    , m_unlinkedCode(m_globalObject->vm(), this, unlinkedCodeBlock)
+    , m_unlinkedCode(*vm, this, unlinkedCodeBlock)
     , m_hasDebuggerStatement(false)
     , m_steppingMode(SteppingModeDisabled)
     , m_numBreakpoints(0)
-    , m_ownerExecutable(m_globalObject->vm(), this, ownerExecutable)
-    , m_vm(unlinkedCodeBlock->vm())
+    , m_ownerExecutable(*vm, this, ownerExecutable)
+    , m_vm(vm)
     , m_thisRegister(unlinkedCodeBlock->thisRegister())
     , m_scopeRegister(unlinkedCodeBlock->scopeRegister())
     , m_source(WTFMove(sourceProvider))
@@ -399,12 +401,17 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
     JSScope* scope)
 {
     Base::finishCreation(vm);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
 
     if (vm.typeProfiler() || vm.controlFlowProfiler())
         vm.functionHasExecutedCache()->removeUnexecutedRange(ownerExecutable->sourceID(), ownerExecutable->typeProfilingStartOffset(), ownerExecutable->typeProfilingEndOffset());
 
-    if (!setConstantRegisters(unlinkedCodeBlock->constantRegisters(), unlinkedCodeBlock->constantsSourceCodeRepresentation()))
-        return false;
+    setConstantRegisters(unlinkedCodeBlock->constantRegisters(), unlinkedCodeBlock->constantsSourceCodeRepresentation());
+    RETURN_IF_EXCEPTION(throwScope, false);
+
+    setConstantIdentifierSetRegisters(vm, unlinkedCodeBlock->constantIdentifierSets());
+    RETURN_IF_EXCEPTION(throwScope, false);
+
     if (unlinkedCodeBlock->usesGlobalObject())
         m_constantRegisters[unlinkedCodeBlock->globalObjectRegister().toConstantIndex()].set(*m_vm, this, m_globalObject.get());
 
@@ -527,7 +534,7 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
 
         unsigned opLength = opcodeLength(pc[0].u.opcode);
 
-        instructions[i] = vm.interpreter->getOpcode(pc[0].u.opcode);
+        instructions[i] = Interpreter::getOpcode(pc[0].u.opcode);
         for (size_t j = 1; j < opLength; ++j) {
             if (sizeof(int32_t) != sizeof(intptr_t))
                 instructions[i + j].u.pointer = 0;
@@ -616,6 +623,8 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
             int localScopeDepth = pc[5].u.operand;
 
             ResolveOp op = JSScope::abstractResolve(m_globalObject->globalExec(), localScopeDepth, scope, ident, Get, type, InitializationMode::NotInitialization);
+            RETURN_IF_EXCEPTION(throwScope, false);
+
             instructions[i + 4].u.operand = op.type;
             instructions[i + 5].u.operand = op.depth;
             if (op.lexicalEnvironment) {
@@ -650,6 +659,7 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
 
             const Identifier& ident = identifier(pc[3].u.operand);
             ResolveOp op = JSScope::abstractResolve(m_globalObject->globalExec(), localScopeDepth, scope, ident, Get, getPutInfo.resolveType(), InitializationMode::NotInitialization);
+            RETURN_IF_EXCEPTION(throwScope, false);
 
             instructions[i + 4].u.operand = GetPutInfo(getPutInfo.resolveMode(), op.type, getPutInfo.initializationMode()).operand();
             if (op.type == ModuleVar)
@@ -685,6 +695,7 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
             int localScopeDepth = pc[5].u.operand;
             instructions[i + 5].u.pointer = nullptr;
             ResolveOp op = JSScope::abstractResolve(m_globalObject->globalExec(), localScopeDepth, scope, ident, Put, getPutInfo.resolveType(), getPutInfo.initializationMode());
+            RETURN_IF_EXCEPTION(throwScope, false);
 
             instructions[i + 4].u.operand = GetPutInfo(getPutInfo.resolveMode(), op.type, getPutInfo.initializationMode()).operand();
             if (op.type == GlobalVar || op.type == GlobalVarWithVarInjectionChecks || op.type == GlobalLexicalVar || op.type == GlobalLexicalVarWithVarInjectionChecks)
@@ -719,6 +730,7 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
                 // Even though type profiling may be profiling either a Get or a Put, we can always claim a Get because
                 // we're abstractly "read"ing from a JSScope.
                 ResolveOp op = JSScope::abstractResolve(m_globalObject->globalExec(), localScopeDepth, scope, ident, Get, type, InitializationMode::NotInitialization);
+                RETURN_IF_EXCEPTION(throwScope, false);
 
                 if (op.type == ClosureVar || op.type == ModuleVar)
                     symbolTable = op.lexicalEnvironment->symbolTable();
@@ -798,10 +810,11 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
             m_numberOfArgumentsToSkip = numberOfArgumentsToSkip;
             break;
         }
-
+        
         default:
             break;
         }
+
         i += opLength;
     }
 
@@ -823,16 +836,16 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
 
     if (Options::dumpGeneratedBytecodes())
         dumpBytecode();
-    
+
     heap()->m_codeBlocks->add(this);
     heap()->reportExtraMemoryAllocated(m_instructions.size() * sizeof(Instruction));
-    
+
     return true;
 }
 
 CodeBlock::~CodeBlock()
 {
-    if (m_vm->m_perBytecodeProfiler)
+    if (UNLIKELY(m_vm->m_perBytecodeProfiler))
         m_vm->m_perBytecodeProfiler->notifyDestruction(this);
 
     if (unlinkedCodeBlock()->didOptimize() == MixedTriState)
@@ -863,7 +876,30 @@ CodeBlock::~CodeBlock()
 #endif // ENABLE(JIT)
 }
 
-bool CodeBlock::setConstantRegisters(const Vector<WriteBarrier<Unknown>>& constants, const Vector<SourceCodeRepresentation>& constantsSourceCodeRepresentation)
+void CodeBlock::setConstantIdentifierSetRegisters(VM& vm, const Vector<ConstantIndentifierSetEntry>& constants)
+{
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    JSGlobalObject* globalObject = m_globalObject.get();
+    ExecState* exec = globalObject->globalExec();
+
+    for (const auto& entry : constants) {
+        const IdentifierSet& set = entry.first;
+
+        Structure* setStructure = globalObject->setStructure();
+        RETURN_IF_EXCEPTION(scope, void());
+        JSSet* jsSet = JSSet::create(exec, vm, setStructure, set.size());
+        RETURN_IF_EXCEPTION(scope, void());
+
+        for (auto setEntry : set) {
+            JSString* jsString = jsOwnedString(&vm, setEntry.get()); 
+            jsSet->add(exec, jsString);
+            RETURN_IF_EXCEPTION(scope, void());
+        }
+        m_constantRegisters[entry.second].set(vm, this, jsSet);
+    }
+}
+
+void CodeBlock::setConstantRegisters(const Vector<WriteBarrier<Unknown>>& constants, const Vector<SourceCodeRepresentation>& constantsSourceCodeRepresentation)
 {
     auto scope = DECLARE_THROW_SCOPE(*m_vm);
     JSGlobalObject* globalObject = m_globalObject.get();
@@ -890,7 +926,7 @@ bool CodeBlock::setConstantRegisters(const Vector<WriteBarrier<Unknown>>& consta
                 constant = clone;
             } else if (isTemplateRegistryKey(*m_vm, constant)) {
                 auto* templateObject = globalObject->templateRegistry().getTemplateObject(exec, jsCast<JSTemplateRegistryKey*>(constant));
-                RETURN_IF_EXCEPTION(scope, false);
+                RETURN_IF_EXCEPTION(scope, void());
                 constant = templateObject;
             }
         }
@@ -899,8 +935,6 @@ bool CodeBlock::setConstantRegisters(const Vector<WriteBarrier<Unknown>>& consta
     }
 
     m_constantsSourceCodeRepresentation = constantsSourceCodeRepresentation;
-
-    return true;
 }
 
 void CodeBlock::setAlternative(VM& vm, CodeBlock* alternative)
@@ -1121,12 +1155,11 @@ void CodeBlock::propagateTransitions(const ConcurrentJSLocker&, SlotVisitor& vis
 
     bool allAreMarkedSoFar = true;
         
-    Interpreter* interpreter = m_vm->interpreter;
     if (jitType() == JITCode::InterpreterThunk) {
         const Vector<unsigned>& propertyAccessInstructions = m_unlinkedCode->propertyAccessInstructions();
         for (size_t i = 0; i < propertyAccessInstructions.size(); ++i) {
             Instruction* instruction = &instructions()[propertyAccessInstructions[i]];
-            switch (interpreter->getOpcodeID(instruction[0])) {
+            switch (Interpreter::getOpcodeID(instruction[0])) {
             case op_put_by_id: {
                 StructureID oldStructureID = instruction[4].u.structureID;
                 StructureID newStructureID = instruction[6].u.structureID;
@@ -1256,11 +1289,10 @@ void CodeBlock::clearLLIntGetByIdCache(Instruction* instruction)
 
 void CodeBlock::finalizeLLIntInlineCaches()
 {
-    Interpreter* interpreter = m_vm->interpreter;
     const Vector<unsigned>& propertyAccessInstructions = m_unlinkedCode->propertyAccessInstructions();
     for (size_t size = propertyAccessInstructions.size(), i = 0; i < size; ++i) {
         Instruction* curInstruction = &instructions()[propertyAccessInstructions[i]];
-        switch (interpreter->getOpcodeID(curInstruction[0])) {
+        switch (Interpreter::getOpcodeID(curInstruction[0])) {
         case op_get_by_id:
         case op_get_by_id_proto_load:
         case op_get_by_id_unset: {
@@ -1342,7 +1374,7 @@ void CodeBlock::finalizeLLIntInlineCaches()
             break;
         }
         default:
-            OpcodeID opcodeID = interpreter->getOpcodeID(curInstruction[0]);
+            OpcodeID opcodeID = Interpreter::getOpcodeID(curInstruction[0]);
             ASSERT_WITH_MESSAGE_UNUSED(opcodeID, false, "Unhandled opcode in CodeBlock::finalizeUnconditionally, %s(%d) at bc %u", opcodeNames[opcodeID], opcodeID, propertyAccessInstructions[i]);
         }
     }
@@ -1677,6 +1709,37 @@ CallSiteIndex CodeBlock::newExceptionHandlingCallSiteIndex(CallSiteIndex origina
 #endif
 }
 
+void CodeBlock::ensureCatchLivenessIsComputedForBytecodeOffsetSlow(unsigned bytecodeOffset)
+{
+    ASSERT(Interpreter::getOpcodeID(m_instructions[bytecodeOffset]) == op_catch);
+    BytecodeLivenessAnalysis& bytecodeLiveness = livenessAnalysis();
+
+    // We get the live-out set of variables at op_catch, not the live-in. This
+    // is because the variables that the op_catch defines might be dead, and
+    // we can avoid profiling them and extracting them when doing OSR entry
+    // into the DFG.
+    FastBitVector liveLocals = bytecodeLiveness.getLivenessInfoAtBytecodeOffset(bytecodeOffset + OPCODE_LENGTH(op_catch));
+    Vector<VirtualRegister> liveOperands;
+    liveOperands.reserveInitialCapacity(liveLocals.bitCount());
+    liveLocals.forEachSetBit([&] (unsigned liveLocal) {
+        liveOperands.append(virtualRegisterForLocal(liveLocal));
+    });
+
+    for (int i = 0; i < numParameters(); ++i)
+        liveOperands.append(virtualRegisterForArgument(i));
+
+    auto profiles = std::make_unique<ValueProfileAndOperandBuffer>(liveOperands.size());
+    RELEASE_ASSERT(profiles->m_size == liveOperands.size());
+    for (unsigned i = 0; i < profiles->m_size; ++i)
+        profiles->m_buffer.get()[i].m_operand = liveOperands[i].offset();
+    m_instructions[bytecodeOffset + 3].u.pointer = profiles.get();
+
+    {
+        ConcurrentJSLocker locker(m_lock);
+        m_catchProfiles.append(WTFMove(profiles));
+    }
+}
+
 void CodeBlock::removeExceptionHandlerForCallSite(CallSiteIndex callSiteIndex)
 {
     RELEASE_ASSERT(m_rareData);
@@ -1720,11 +1783,10 @@ void CodeBlock::expressionRangeForBytecodeOffset(unsigned bytecodeOffset, int& d
 
 bool CodeBlock::hasOpDebugForLineAndColumn(unsigned line, unsigned column)
 {
-    Interpreter* interpreter = vm()->interpreter;
     const Instruction* begin = instructions().begin();
     const Instruction* end = instructions().end();
     for (const Instruction* it = begin; it != end;) {
-        OpcodeID opcodeID = interpreter->getOpcodeID(*it);
+        OpcodeID opcodeID = Interpreter::getOpcodeID(*it);
         if (opcodeID == op_debug) {
             unsigned bytecodeOffset = it - begin;
             int unused;
@@ -1892,7 +1954,8 @@ void CodeBlock::jettison(Profiler::JettisonReason reason, ReoptimizationMode mod
 
 #if ENABLE(DFG_JIT)
     if (reason != Profiler::JettisonDueToOldAge) {
-        if (Profiler::Compilation* compilation = jitCode()->dfgCommon()->compilation.get())
+        Profiler::Compilation* compilation = jitCode()->dfgCommon()->compilation.get();
+        if (UNLIKELY(compilation))
             compilation->setJettisonReason(reason, detail);
         
         // This accomplishes (1), and does its own book-keeping about whether it has already happened.
@@ -1935,7 +1998,7 @@ void CodeBlock::jettison(Profiler::JettisonReason reason, ReoptimizationMode mod
 
     // This accomplishes (2).
     ownerScriptExecutable()->installCode(
-        m_globalObject->vm(), alternative(), codeType(), specializationKind());
+        *m_vm, alternative(), codeType(), specializationKind());
 
 #if ENABLE(DFG_JIT)
     if (DFG::shouldDumpDisassembly())
@@ -2460,22 +2523,29 @@ const Identifier& CodeBlock::identifier(int index) const
 void CodeBlock::updateAllPredictionsAndCountLiveness(unsigned& numberOfLiveNonArgumentValueProfiles, unsigned& numberOfSamplesInProfiles)
 {
     ConcurrentJSLocker locker(m_lock);
-    
+
     numberOfLiveNonArgumentValueProfiles = 0;
     numberOfSamplesInProfiles = 0; // If this divided by ValueProfile::numberOfBuckets equals numberOfValueProfiles() then value profiles are full.
+
     for (unsigned i = 0; i < totalNumberOfValueProfiles(); ++i) {
-        ValueProfile* profile = getFromAllValueProfiles(i);
-        unsigned numSamples = profile->totalNumberOfSamples();
+        ValueProfile& profile = getFromAllValueProfiles(i);
+        unsigned numSamples = profile.totalNumberOfSamples();
         if (numSamples > ValueProfile::numberOfBuckets)
             numSamples = ValueProfile::numberOfBuckets; // We don't want profiles that are extremely hot to be given more weight.
         numberOfSamplesInProfiles += numSamples;
-        if (profile->m_bytecodeOffset < 0) {
-            profile->computeUpdatedPrediction(locker);
+        if (profile.m_bytecodeOffset < 0) {
+            profile.computeUpdatedPrediction(locker);
             continue;
         }
-        if (profile->numberOfSamples() || profile->m_prediction != SpecNone)
+        if (profile.numberOfSamples() || profile.m_prediction != SpecNone)
             numberOfLiveNonArgumentValueProfiles++;
-        profile->computeUpdatedPrediction(locker);
+        profile.computeUpdatedPrediction(locker);
+    }
+
+    for (auto& profileBucket : m_catchProfiles) {
+        profileBucket->forEach([&] (ValueProfileAndOperand& profile) {
+            profile.m_profile.computeUpdatedPrediction(locker);
+        });
     }
     
 #if ENABLE(DFG_JIT)
@@ -2498,7 +2568,7 @@ void CodeBlock::updateAllArrayPredictions()
     
     // Don't count these either, for similar reasons.
     for (unsigned i = m_arrayAllocationProfiles.size(); i--;)
-        m_arrayAllocationProfiles[i].updateIndexingType();
+        m_arrayAllocationProfiles[i].updateProfile();
 }
 
 void CodeBlock::updateAllPredictions()
@@ -2583,17 +2653,17 @@ void CodeBlock::dumpValueProfiles()
 {
     dataLog("ValueProfile for ", *this, ":\n");
     for (unsigned i = 0; i < totalNumberOfValueProfiles(); ++i) {
-        ValueProfile* profile = getFromAllValueProfiles(i);
-        if (profile->m_bytecodeOffset < 0) {
-            ASSERT(profile->m_bytecodeOffset == -1);
+        ValueProfile& profile = getFromAllValueProfiles(i);
+        if (profile.m_bytecodeOffset < 0) {
+            ASSERT(profile.m_bytecodeOffset == -1);
             dataLogF("   arg = %u: ", i);
         } else
-            dataLogF("   bc = %d: ", profile->m_bytecodeOffset);
-        if (!profile->numberOfSamples() && profile->m_prediction == SpecNone) {
+            dataLogF("   bc = %d: ", profile.m_bytecodeOffset);
+        if (!profile.numberOfSamples() && profile.m_prediction == SpecNone) {
             dataLogF("<empty>\n");
             continue;
         }
-        profile->dump(WTF::dataFile());
+        profile.dump(WTF::dataFile());
         dataLogF("\n");
     }
     dataLog("RareCaseProfile for ", *this, ":\n");
@@ -2666,12 +2736,11 @@ size_t CodeBlock::predictedMachineCodeSize()
 
 bool CodeBlock::usesOpcode(OpcodeID opcodeID)
 {
-    Interpreter* interpreter = vm()->interpreter;
     Instruction* instructionsBegin = instructions().begin();
     unsigned instructionCount = instructions().size();
     
     for (unsigned bytecodeOffset = 0; bytecodeOffset < instructionCount; ) {
-        switch (interpreter->getOpcodeID(instructionsBegin[bytecodeOffset])) {
+        switch (Interpreter::getOpcodeID(instructionsBegin[bytecodeOffset])) {
 #define DEFINE_OP(curOpcode, length)        \
         case curOpcode:                     \
             if (curOpcode == opcodeID)      \
@@ -2714,11 +2783,19 @@ String CodeBlock::nameForRegister(VirtualRegister virtualRegister)
     return "";
 }
 
-ValueProfile* CodeBlock::valueProfileForBytecodeOffset(int bytecodeOffset)
+ValueProfile* CodeBlock::tryGetValueProfileForBytecodeOffset(int bytecodeOffset)
 {
-    OpcodeID opcodeID = m_vm->interpreter->getOpcodeID(instructions()[bytecodeOffset]);
+    return tryBinarySearch<ValueProfile, int>(
+        m_valueProfiles, m_valueProfiles.size(), bytecodeOffset,
+        getValueProfileBytecodeOffset<ValueProfile>);
+}
+
+ValueProfile& CodeBlock::valueProfileForBytecodeOffset(int bytecodeOffset)
+{
+    OpcodeID opcodeID = Interpreter::getOpcodeID(instructions()[bytecodeOffset]);
     unsigned length = opcodeLength(opcodeID);
-    return instructions()[bytecodeOffset + length - 1].u.profile;
+    ASSERT(!!tryGetValueProfileForBytecodeOffset(bytecodeOffset));
+    return *instructions()[bytecodeOffset + length - 1].u.profile;
 }
 
 void CodeBlock::validate()
@@ -2744,6 +2821,31 @@ void CodeBlock::validate()
             dataLog("    Result: ", liveAtHead, "\n");
             endValidationDidFail();
         }
+    }
+
+    for (unsigned i = 0; i + 1 < numberOfValueProfiles(); ++i) {
+        if (valueProfile(i).m_bytecodeOffset > valueProfile(i + 1).m_bytecodeOffset) {
+            beginValidationDidFail();
+            dataLog("    Value profiles are not sorted.\n");
+            endValidationDidFail();
+        }
+    }
+     
+    for (unsigned bytecodeOffset = 0; bytecodeOffset < m_instructions.size(); ) {
+        OpcodeID opcode = Interpreter::getOpcodeID(m_instructions[bytecodeOffset]);
+        if (!!baselineAlternative()->handlerForBytecodeOffset(bytecodeOffset)) {
+            if (opcode == op_catch || opcode == op_enter) {
+                // op_catch/op_enter logically represent an entrypoint. Entrypoints are not allowed to be
+                // inside of a try block because they are responsible for bootstrapping state. And they
+                // are never allowed throw an exception because of this. We rely on this when compiling
+                // in the DFG. Because an entrypoint never throws, the bytecode generator will never
+                // allow once inside a try block.
+                beginValidationDidFail();
+                dataLog("    entrypoint not allowed inside a try block.");
+                endValidationDidFail();
+            }
+        }
+        bytecodeOffset += opcodeLength(opcode);
     }
 }
 
@@ -2805,7 +2907,7 @@ ArithProfile* CodeBlock::arithProfileForBytecodeOffset(int bytecodeOffset)
 
 ArithProfile* CodeBlock::arithProfileForPC(Instruction* pc)
 {
-    auto opcodeID = vm()->interpreter->getOpcodeID(pc[0]);
+    auto opcodeID = Interpreter::getOpcodeID(pc[0]);
     switch (opcodeID) {
     case op_negate:
         return bitwise_cast<ArithProfile*>(&pc[3].u.operand);
@@ -2852,12 +2954,12 @@ void CodeBlock::insertBasicBlockBoundariesForControlFlowProfiler(RefCountedArray
         // Because op_profile_control_flow is emitted at the beginning of every basic block, finding 
         // the next op_profile_control_flow will give us the text range of a single basic block.
         size_t startIdx = bytecodeOffsets[i];
-        RELEASE_ASSERT(vm()->interpreter->getOpcodeID(instructions[startIdx]) == op_profile_control_flow);
+        RELEASE_ASSERT(Interpreter::getOpcodeID(instructions[startIdx]) == op_profile_control_flow);
         int basicBlockStartOffset = instructions[startIdx + 1].u.operand;
         int basicBlockEndOffset;
         if (i + 1 < offsetsLength) {
             size_t endIdx = bytecodeOffsets[i + 1];
-            RELEASE_ASSERT(vm()->interpreter->getOpcodeID(instructions[endIdx]) == op_profile_control_flow);
+            RELEASE_ASSERT(Interpreter::getOpcodeID(instructions[endIdx]) == op_profile_control_flow);
             basicBlockEndOffset = instructions[endIdx + 1].u.operand - 1;
         } else {
             basicBlockEndOffset = m_sourceOffset + ownerScriptExecutable()->source().length() - 1; // Offset before the closing brace.
@@ -3009,9 +3111,10 @@ bool CodeBlock::installVMTrapBreakpoints()
     // we should not perturb the refCount of m_jitCode.
     if (!JITCode::isOptimizingJIT(jitType()))
         return false;
-    m_jitCode->dfgCommon()->installVMTrapBreakpoints();
+    m_jitCode->dfgCommon()->installVMTrapBreakpoints(this);
     return true;
 #else
+    UNREACHABLE_FOR_PLATFORM();
     return false;
 #endif
 }

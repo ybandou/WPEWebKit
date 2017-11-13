@@ -30,6 +30,7 @@
 #if USE(JSVALUE32_64)
 #include "JIT.h"
 
+#include "BytecodeStructs.h"
 #include "CCallHelpers.h"
 #include "Exception.h"
 #include "JITInlines.h"
@@ -192,9 +193,10 @@ void JIT::emitSlow_op_new_object(Instruction* currentInstruction, Vector<SlowCas
 
 void JIT::emit_op_overrides_has_instance(Instruction* currentInstruction)
 {
-    int dst = currentInstruction[1].u.operand;
-    int constructor = currentInstruction[2].u.operand;
-    int hasInstanceValue = currentInstruction[3].u.operand;
+    auto& bytecode = *reinterpret_cast<OpOverridesHasInstance*>(currentInstruction);
+    int dst = bytecode.dst();
+    int constructor = bytecode.constructor();
+    int hasInstanceValue = bytecode.hasInstanceValue();
 
     emitLoadPayload(hasInstanceValue, regT0);
     // We don't jump if we know what Symbol.hasInstance would do.
@@ -219,9 +221,10 @@ void JIT::emit_op_overrides_has_instance(Instruction* currentInstruction)
 
 void JIT::emit_op_instanceof(Instruction* currentInstruction)
 {
-    int dst = currentInstruction[1].u.operand;
-    int value = currentInstruction[2].u.operand;
-    int proto = currentInstruction[3].u.operand;
+    auto& bytecode = *reinterpret_cast<OpInstanceof*>(currentInstruction);
+    int dst = bytecode.dst();
+    int value = bytecode.value();
+    int proto = bytecode.prototype();
 
     // Load the operands into registers.
     // We use regT0 for baseVal since we will be done with this first, and we can then use it for the result.
@@ -266,9 +269,10 @@ void JIT::emit_op_instanceof_custom(Instruction*)
 
 void JIT::emitSlow_op_instanceof(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
 {
-    int dst = currentInstruction[1].u.operand;
-    int value = currentInstruction[2].u.operand;
-    int proto = currentInstruction[3].u.operand;
+    auto& bytecode = *reinterpret_cast<OpInstanceof*>(currentInstruction);
+    int dst = bytecode.dst();
+    int value = bytecode.value();
+    int proto = bytecode.prototype();
 
     linkSlowCaseIfNotJSCell(iter, value);
     linkSlowCaseIfNotJSCell(iter, proto);
@@ -282,10 +286,11 @@ void JIT::emitSlow_op_instanceof(Instruction* currentInstruction, Vector<SlowCas
 
 void JIT::emitSlow_op_instanceof_custom(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
 {
-    int dst = currentInstruction[1].u.operand;
-    int value = currentInstruction[2].u.operand;
-    int constructor = currentInstruction[3].u.operand;
-    int hasInstanceValue = currentInstruction[4].u.operand;
+    auto& bytecode = *reinterpret_cast<OpInstanceofCustom*>(currentInstruction);
+    int dst = bytecode.dst();
+    int value = bytecode.value();
+    int constructor = bytecode.constructor();
+    int hasInstanceValue = bytecode.hasInstanceValue();
 
     linkSlowCase(iter);
 
@@ -851,12 +856,40 @@ void JIT::emit_op_catch(Instruction* currentInstruction)
 
     unsigned thrownValue = currentInstruction[2].u.operand;
     emitStore(thrownValue, regT1, regT0);
+
+#if ENABLE(DFG_JIT)
+    // FIXME: consider inline caching the process of doing OSR entry, including
+    // argument type proofs, storing locals to the buffer, etc
+    // https://bugs.webkit.org/show_bug.cgi?id=175598
+
+    ValueProfileAndOperandBuffer* buffer = static_cast<ValueProfileAndOperandBuffer*>(currentInstruction[3].u.pointer);
+    if (buffer || !shouldEmitProfiling())
+        callOperation(operationTryOSREnterAtCatch, m_bytecodeOffset);
+    else
+        callOperation(operationTryOSREnterAtCatchAndValueProfile, m_bytecodeOffset);
+    auto skipOSREntry = branchTestPtr(Zero, returnValueGPR);
+    emitRestoreCalleeSaves();
+    jump(returnValueGPR);
+    skipOSREntry.link(this);
+    if (buffer && shouldEmitProfiling()) {
+        buffer->forEach([&] (ValueProfileAndOperand& profile) {
+            JSValueRegs regs(regT1, regT0);
+            emitGetVirtualRegister(profile.m_operand, regs);
+            emitValueProfilingSite(profile.m_profile);
+        });
+    }
+#endif // ENABLE(DFG_JIT)
 }
 
 void JIT::emit_op_assert(Instruction* currentInstruction)
 {
     JITSlowPathCall slowPathCall(this, currentInstruction, slow_path_assert);
     slowPathCall.call();
+}
+
+void JIT::emit_op_identity_with_profile(Instruction*)
+{
+    // We don't need to do anything here...
 }
 
 void JIT::emit_op_create_lexical_environment(Instruction* currentInstruction)

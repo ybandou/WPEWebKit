@@ -31,13 +31,13 @@
 #import "AuthenticationChallenge.h"
 #import "AuthenticationMac.h"
 #import "Logging.h"
-#import "NSURLRequestSPI.h"
 #import "ResourceHandle.h"
 #import "ResourceHandleClient.h"
 #import "ResourceRequest.h"
 #import "ResourceResponse.h"
 #import "SharedBuffer.h"
 #import "WebCoreURLResponse.h"
+#import <pal/spi/cf/CFNetworkSPI.h>
 
 using namespace WebCore;
 
@@ -144,11 +144,7 @@ using namespace WebCore;
 
     ResourceResponse resourceResponse(response);
     resourceResponse.setSource(ResourceResponse::Source::Network);
-#if ENABLE(WEB_TIMING)
     ResourceHandle::getConnectionTimingData(connection, resourceResponse.deprecatedNetworkLoadMetrics());
-#else
-    UNUSED_PARAM(connection);
-#endif
 
     m_handle->didReceiveResponse(WTFMove(resourceResponse));
 }

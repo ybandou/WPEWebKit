@@ -54,7 +54,6 @@
 #include "StyleGeneratedImage.h"
 #include "StylePropertyShorthand.h"
 #include "StyleResolver.h"
-#include "TextStream.h"
 #include <algorithm>
 #include <memory>
 #include <wtf/MathExtras.h>
@@ -62,6 +61,7 @@
 #include <wtf/Noncopyable.h>
 #include <wtf/PointerComparison.h>
 #include <wtf/RefCounted.h>
+#include <wtf/text/TextStream.h>
 
 namespace WebCore {
 
@@ -165,13 +165,9 @@ static inline RefPtr<ShapeValue> blendFunc(const AnimationBase*, ShapeValue* fro
     return ShapeValue::create(toShape.blend(fromShape, progress), to->cssBox());
 }
 
-static inline RefPtr<FilterOperation> blendFunc(const AnimationBase* animation, FilterOperation* fromOp, FilterOperation* toOp, double progress, bool blendToPassthrough = false)
+static inline RefPtr<FilterOperation> blendFunc(const AnimationBase*, FilterOperation* fromOp, FilterOperation* toOp, double progress, bool blendToPassthrough = false)
 {
     ASSERT(toOp);
-    if (toOp->blendingNeedsRendererSize()) {
-        LayoutSize size = is<RenderBox>(*animation->renderer()) ? downcast<RenderBox>(*animation->renderer()).borderBoxRect().size() : LayoutSize();
-        return toOp->blend(fromOp, progress, size, blendToPassthrough);
-    }
     return toOp->blend(fromOp, progress, blendToPassthrough);
 }
 
@@ -1493,6 +1489,9 @@ CSSPropertyAnimationWrapperMap::CSSPropertyAnimationWrapperMap()
         new LengthPropertyWrapper<Length>(CSSPropertyPaddingRight, &RenderStyle::paddingRight, &RenderStyle::setPaddingRight),
         new LengthPropertyWrapper<Length>(CSSPropertyPaddingTop, &RenderStyle::paddingTop, &RenderStyle::setPaddingTop),
         new LengthPropertyWrapper<Length>(CSSPropertyPaddingBottom, &RenderStyle::paddingBottom, &RenderStyle::setPaddingBottom),
+
+        new PropertyWrapperVisitedAffectedColor(CSSPropertyCaretColor, &RenderStyle::caretColor, &RenderStyle::setCaretColor, &RenderStyle::visitedLinkCaretColor, &RenderStyle::setVisitedLinkCaretColor),
+
         new PropertyWrapperVisitedAffectedColor(CSSPropertyColor, &RenderStyle::color, &RenderStyle::setColor, &RenderStyle::visitedLinkColor, &RenderStyle::setVisitedLinkColor),
 
         new PropertyWrapperVisitedAffectedColor(CSSPropertyBackgroundColor, &RenderStyle::backgroundColor, &RenderStyle::setBackgroundColor, &RenderStyle::visitedLinkBackgroundColor, &RenderStyle::setVisitedLinkBackgroundColor),

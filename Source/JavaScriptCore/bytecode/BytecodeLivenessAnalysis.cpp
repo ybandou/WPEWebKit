@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,18 +41,6 @@ BytecodeLivenessAnalysis::BytecodeLivenessAnalysis(CodeBlock* codeBlock)
     : m_graph(codeBlock, codeBlock->instructions())
 {
     compute();
-}
-
-template<typename Functor>
-void BytecodeLivenessAnalysis::computeDefsForBytecodeOffset(CodeBlock* codeBlock, OpcodeID opcodeID, Instruction* instruction, FastBitVector&, const Functor& functor)
-{
-    JSC::computeDefsForBytecodeOffset(codeBlock, opcodeID, instruction, functor);
-}
-
-template<typename Functor>
-void BytecodeLivenessAnalysis::computeUsesForBytecodeOffset(CodeBlock* codeBlock, OpcodeID opcodeID, Instruction* instruction, FastBitVector&, const Functor& functor)
-{
-    JSC::computeUsesForBytecodeOffset(codeBlock, opcodeID, instruction, functor);
 }
 
 void BytecodeLivenessAnalysis::getLivenessInfoAtBytecodeOffset(unsigned bytecodeOffset, FastBitVector& result)
@@ -119,7 +107,7 @@ void BytecodeLivenessAnalysis::computeKills(BytecodeKills& result)
         for (unsigned i = block->offsets().size(); i--;) {
             unsigned bytecodeOffset = block->offsets()[i];
             stepOverInstruction(
-                m_graph, bytecodeOffset, out,
+                m_graph, bytecodeOffset,
                 [&] (unsigned index) {
                     // This is for uses.
                     if (out[index])
@@ -139,7 +127,6 @@ void BytecodeLivenessAnalysis::dumpResults()
 {
     CodeBlock* codeBlock = m_graph.codeBlock();
     dataLog("\nDumping bytecode liveness for ", *codeBlock, ":\n");
-    Interpreter* interpreter = codeBlock->vm()->interpreter;
     Instruction* instructionsBegin = codeBlock->instructions().begin();
     unsigned i = 0;
 
@@ -196,7 +183,7 @@ void BytecodeLivenessAnalysis::dumpResults()
             dataLogF("\n");
             codeBlock->dumpBytecode(WTF::dataFile(), instructionsBegin, currentInstruction);
 
-            OpcodeID opcodeID = interpreter->getOpcodeID(instructionsBegin[bytecodeOffset].u.opcode);
+            OpcodeID opcodeID = Interpreter::getOpcodeID(instructionsBegin[bytecodeOffset].u.opcode);
             unsigned opcodeLength = opcodeLengths[opcodeID];
             bytecodeOffset += opcodeLength;
         }

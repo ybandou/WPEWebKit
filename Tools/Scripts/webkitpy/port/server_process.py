@@ -77,9 +77,6 @@ class ServerProcess(object):
         # FIXME: there should be a way to get win32 vs. cygwin from platforminfo.
         self._use_win32_apis = sys.platform.startswith('win')
 
-    def name(self):
-        return self._name
-
     def pid(self):
         return self._pid
 
@@ -123,7 +120,7 @@ class ServerProcess(object):
             env=self._env,
             universal_newlines=self._universal_newlines)
         self._pid = self._proc.pid
-        self._port.find_system_pid(self.name(), self._pid)
+        self._port.find_system_pid(self.process_name(), self._pid)
         if not self._use_win32_apis:
             self._set_file_nonblocking(self._proc.stdout)
             self._set_file_nonblocking(self._proc.stderr)
@@ -319,7 +316,8 @@ class ServerProcess(object):
     # It might be cleaner to pass in the file descriptor to poll instead.
     def _read(self, deadline, fetch_bytes_from_buffers_callback):
         while True:
-            if self.has_crashed():
+            # Polling does not need to occur before bytes are fetched from the buffer.
+            if self._crashed:
                 return None
 
             if time.time() > deadline:
@@ -329,6 +327,9 @@ class ServerProcess(object):
             bytes = fetch_bytes_from_buffers_callback()
             if bytes is not None:
                 return bytes
+
+            if self.has_crashed():
+                return None
 
             if self._use_win32_apis:
                 self._wait_for_data_and_update_buffers_using_win32_apis(deadline)
@@ -345,27 +346,31 @@ class ServerProcess(object):
 
         # Only bother to check for leaks or stderr if the process is still running.
         if self.poll() is None:
-            self._port.check_for_leaks(self.name(), self.pid())
+            self._port.check_for_leaks(self.process_name(), self.pid())
 
-        now = time.time()
         if self._proc.stdin:
             self._proc.stdin.close()
             self._proc.stdin = None
+
+        return self._wait_for_stop(timeout_secs)
+
+    def _wait_for_stop(self, timeout_secs=3.0):
+        now = time.time()
         killed = False
         if timeout_secs:
             deadline = now + timeout_secs
-            while self._proc.poll() is None and time.time() < deadline:
+            while self._proc and self._proc.poll() is None and time.time() < deadline:
                 time.sleep(0.01)
-            if self._proc.poll() is None:
+            if self._proc and self._proc.poll() is None:
                 _log.warning('stopping %s(pid %d) timed out, killing it' % (self._name, self._proc.pid))
 
-        if self._proc.poll() is None:
+        if self._proc and self._proc.poll() is None:
             self._kill()
             killed = True
             _log.debug('killed pid %d' % self._proc.pid)
 
         # read any remaining data on the pipes and return it.
-        if not killed:
+        if self._proc and not killed:
             if self._use_win32_apis:
                 self._wait_for_data_and_update_buffers_using_win32_apis(now)
             else:

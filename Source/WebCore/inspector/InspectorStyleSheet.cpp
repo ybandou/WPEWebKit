@@ -41,7 +41,6 @@
 #include "ContentSecurityPolicy.h"
 #include "Document.h"
 #include "Element.h"
-#include "ExceptionCode.h"
 #include "HTMLHeadElement.h"
 #include "HTMLNames.h"
 #include "HTMLParserIdioms.h"
@@ -573,7 +572,7 @@ ExceptionOr<String> InspectorStyle::text() const
     // Precondition: m_parentStyleSheet->ensureParsedDataReady() has been called successfully.
     auto sourceData = extractSourceData();
     if (!sourceData)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     auto result = m_parentStyleSheet->text();
     if (result.hasException())
@@ -602,9 +601,6 @@ void InspectorStyle::populateAllProperties(Vector<InspectorStyleProperty>* resul
         ASSERT(!styleDeclarationOrException.hasException());
         String styleDeclaration = styleDeclarationOrException.hasException() ? emptyString() : styleDeclarationOrException.releaseReturnValue();
         for (auto& sourceData : *sourcePropertyData) {
-            // FIXME: <https://webkit.org/b/166787> Web Inspector: Frontend should be made to expect and handle disabled properties
-            if (sourceData.disabled)
-                continue;
             InspectorStyleProperty p(sourceData, true, sourceData.disabled);
             p.setRawTextFromStyleDeclaration(styleDeclaration);
             result->append(p);
@@ -664,17 +660,21 @@ Ref<Inspector::Protocol::CSS::CSSStyle> InspectorStyle::styleWithProperties() co
         // Default "priority" == "".
         if (propertyEntry.important)
             property->setPriority("important");
+
+        if (it->hasSource) {
+            // The property range is relative to the style body start.
+            // Should be converted into an absolute range (relative to the stylesheet start)
+            // for the proper conversion into line:column.
+            SourceRange absolutePropertyRange = propertyEntry.range;
+            absolutePropertyRange.start += ruleBodyRangeStart;
+            absolutePropertyRange.end += ruleBodyRangeStart;
+            property->setRange(buildSourceRangeObject(absolutePropertyRange, lineEndings.get()));
+        }
+
         if (!it->disabled) {
             if (it->hasSource) {
                 ASSERT(sourceData);
                 property->setImplicit(false);
-                // The property range is relative to the style body start.
-                // Should be converted into an absolute range (relative to the stylesheet start)
-                // for the proper conversion into line:column.
-                SourceRange absolutePropertyRange = propertyEntry.range;
-                absolutePropertyRange.start += ruleBodyRangeStart;
-                absolutePropertyRange.end += ruleBodyRangeStart;
-                property->setRange(buildSourceRangeObject(absolutePropertyRange, lineEndings.get()));
 
                 // Parsed property overrides any property with the same name. Non-parsed property overrides
                 // previous non-parsed property with the same name (if any).
@@ -859,7 +859,7 @@ void InspectorStyleSheet::reparseStyleSheet(const String& text)
 ExceptionOr<void> InspectorStyleSheet::setText(const String& text)
 {
     if (!m_pageStyleSheet)
-        return Exception { NOT_SUPPORTED_ERR };
+        return Exception { NotSupportedError };
 
     m_parsedStyleSheet->setText(text);
     m_flatRules.clear();
@@ -871,7 +871,7 @@ ExceptionOr<String> InspectorStyleSheet::ruleSelector(const InspectorCSSId& id)
 {
     CSSStyleRule* rule = ruleForId(id);
     if (!rule)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
     return rule->selectorText();
 }
 
@@ -886,19 +886,19 @@ static bool isValidSelectorListString(const String& selector, Document* document
 ExceptionOr<void> InspectorStyleSheet::setRuleSelector(const InspectorCSSId& id, const String& selector)
 {
     if (!m_pageStyleSheet)
-        return Exception { NOT_SUPPORTED_ERR };
+        return Exception { NotSupportedError };
 
     // If the selector is invalid, do not proceed any further.
     if (!isValidSelectorListString(selector, m_pageStyleSheet->ownerDocument()))
-        return Exception { SYNTAX_ERR };
+        return Exception { SyntaxError };
 
     CSSStyleRule* rule = ruleForId(id);
     if (!rule)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     CSSStyleSheet* styleSheet = rule->parentStyleSheet();
     if (!styleSheet || !ensureParsedDataReady())
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     // If the stylesheet is already mutated at this point, that must mean that our data has been modified
     // elsewhere. This should never happen as ensureParsedDataReady would return false in that case.
@@ -907,7 +907,7 @@ ExceptionOr<void> InspectorStyleSheet::setRuleSelector(const InspectorCSSId& id,
     rule->setSelectorText(selector);
     auto sourceData = ruleSourceDataFor(&rule->style());
     if (!sourceData)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     String sheetText = m_parsedStyleSheet->text();
     sheetText.replace(sourceData->ruleHeaderRange.start, sourceData->ruleHeaderRange.length(), selector);
@@ -920,21 +920,37 @@ ExceptionOr<void> InspectorStyleSheet::setRuleSelector(const InspectorCSSId& id,
 ExceptionOr<CSSStyleRule*> InspectorStyleSheet::addRule(const String& selector)
 {
     if (!m_pageStyleSheet)
-        return Exception { NOT_SUPPORTED_ERR };
+        return Exception { NotSupportedError };
 
     if (!isValidSelectorListString(selector, m_pageStyleSheet->ownerDocument()))
-        return Exception { SYNTAX_ERR };
+        return Exception { SyntaxError };
 
     auto text = this->text();
     if (text.hasException())
         return text.releaseException();
 
-    StringBuilder styleSheetText;
-    styleSheetText.append(text.releaseReturnValue());
-
     auto addRuleResult = m_pageStyleSheet->addRule(selector, emptyString(), std::nullopt);
     if (addRuleResult.hasException())
         return addRuleResult.releaseException();
+
+    StringBuilder styleSheetText;
+    styleSheetText.append(text.releaseReturnValue());
+
+    if (!styleSheetText.isEmpty())
+        styleSheetText.append('\n');
+
+    styleSheetText.append(selector);
+    styleSheetText.appendLiteral(" {}");
+
+    // Using setText() as this operation changes the stylesheet rule set.
+    setText(styleSheetText.toString());
+
+    // Inspector Style Sheets are always treated as though their parsed data is ready.
+    if (m_origin == Inspector::Protocol::CSS::StyleSheetOrigin::Inspector)
+        fireStyleSheetChanged();
+    else
+        reparseStyleSheet(styleSheetText.toString());
+
     ASSERT(m_pageStyleSheet->length());
     unsigned lastRuleIndex = m_pageStyleSheet->length() - 1;
     CSSRule* rule = m_pageStyleSheet->item(lastRuleIndex);
@@ -945,18 +961,8 @@ ExceptionOr<CSSStyleRule*> InspectorStyleSheet::addRule(const String& selector)
         // What we just added has to be a CSSStyleRule - we cannot handle other types of rules yet.
         // If it is not a style rule, pretend we never touched the stylesheet.
         m_pageStyleSheet->deleteRule(lastRuleIndex);
-        return Exception { SYNTAX_ERR };
+        return Exception { SyntaxError };
     }
-
-    if (!styleSheetText.isEmpty())
-        styleSheetText.append('\n');
-
-    styleSheetText.append(selector);
-    styleSheetText.appendLiteral(" {}");
-    // Using setText() as this operation changes the stylesheet rule set.
-    setText(styleSheetText.toString());
-
-    fireStyleSheetChanged();
 
     return styleRule;
 }
@@ -964,18 +970,18 @@ ExceptionOr<CSSStyleRule*> InspectorStyleSheet::addRule(const String& selector)
 ExceptionOr<void> InspectorStyleSheet::deleteRule(const InspectorCSSId& id)
 {
     if (!m_pageStyleSheet)
-        return Exception { NOT_SUPPORTED_ERR };
+        return Exception { NotSupportedError };
 
     RefPtr<CSSStyleRule> rule = ruleForId(id);
     if (!rule)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
     CSSStyleSheet* styleSheet = rule->parentStyleSheet();
     if (!styleSheet || !ensureParsedDataReady())
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     auto sourceData = ruleSourceDataFor(&rule->style());
     if (!sourceData)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     auto deleteRuleResult = styleSheet->deleteRule(id.ordinal());
     if (deleteRuleResult.hasException())
@@ -1213,7 +1219,7 @@ ExceptionOr<void> InspectorStyleSheet::setStyleText(const InspectorCSSId& id, co
 {
     auto inspectorStyle = inspectorStyleForId(id);
     if (!inspectorStyle)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     if (oldText) {
         auto result = inspectorStyle->text();
@@ -1231,7 +1237,7 @@ ExceptionOr<void> InspectorStyleSheet::setStyleText(const InspectorCSSId& id, co
 ExceptionOr<String> InspectorStyleSheet::text() const
 {
     if (!ensureText())
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
     return String { m_parsedStyleSheet->text() };
 }
 
@@ -1352,18 +1358,18 @@ void InspectorStyleSheet::ensureFlatRules() const
 ExceptionOr<void> InspectorStyleSheet::setStyleText(CSSStyleDeclaration* style, const String& text)
 {
     if (!m_pageStyleSheet)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
     if (!ensureParsedDataReady())
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     String patchedStyleSheetText;
     bool success = styleSheetTextWithChangedStyle(style, text, &patchedStyleSheetText);
     if (!success)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     InspectorCSSId id = ruleOrStyleId(style);
     if (id.isEmpty())
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
 
     auto setCssTextResult = style->setCssText(text);
     if (setCssTextResult.hasException())

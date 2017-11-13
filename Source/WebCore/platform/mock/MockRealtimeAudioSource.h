@@ -32,7 +32,6 @@
 
 #if ENABLE(MEDIA_STREAM)
 
-#include "FontCascade.h"
 #include "ImageBuffer.h"
 #include "MockRealtimeMediaSource.h"
 #include <wtf/RunLoop.h>
@@ -42,7 +41,7 @@ namespace WebCore {
 class MockRealtimeAudioSource : public MockRealtimeMediaSource {
 public:
 
-    static CaptureSourceOrError create(const String&, const MediaConstraints*);
+    static CaptureSourceOrError create(const String& deviceID, const String& name, const MediaConstraints*);
     static Ref<MockRealtimeAudioSource> createMuted(const String& name);
 
     static AudioCaptureFactory& factory();
@@ -50,7 +49,7 @@ public:
     virtual ~MockRealtimeAudioSource();
 
 protected:
-    MockRealtimeAudioSource(const String& name = ASCIILiteral("Mock audio device"));
+    MockRealtimeAudioSource(const String& deviceID, const String& name);
 
     void startProducingData() final;
     void stopProducingData() final;

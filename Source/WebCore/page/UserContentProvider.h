@@ -25,17 +25,11 @@
 
 #pragma once
 
-#include "UserScriptTypes.h"
-#include "UserStyleSheetTypes.h"
 #include <functional>
 #include <wtf/Forward.h>
 #include <wtf/Function.h>
 #include <wtf/HashSet.h>
 #include <wtf/RefCounted.h>
-
-#if ENABLE(USER_MESSAGE_HANDLERS)
-#include "UserMessageHandlerDescriptorTypes.h"
-#endif
 
 #if ENABLE(CONTENT_EXTENSIONS)
 #include "ContentExtensionActions.h"
@@ -44,10 +38,14 @@
 
 namespace WebCore {
 
+class DOMWrapperWorld;
 class DocumentLoader;
 class Page;
 class ResourceRequest;
 class URL;
+class UserMessageHandlerDescriptor;
+class UserScript;
+class UserStyleSheet;
 
 enum class ResourceType : uint16_t;
 
@@ -93,7 +91,8 @@ public:
     // FIXME: These don't really belong here. They should probably bundled up in the ContentExtensionsBackend
     // which should always exist.
     ContentExtensions::BlockedStatus processContentExtensionRulesForLoad(const URL&, ResourceType, DocumentLoader& initiatingDocumentLoader);
-    Vector<ContentExtensions::Action> actionsForResourceLoad(const ResourceLoadInfo&, DocumentLoader& initiatingDocumentLoader);
+    std::pair<Vector<ContentExtensions::Action>, Vector<String>> actionsForResourceLoad(const ResourceLoadInfo&, DocumentLoader& initiatingDocumentLoader);
+    WEBCORE_EXPORT void forEachContentExtension(const WTF::Function<void(const String&, ContentExtensions::ContentExtension&)>&, DocumentLoader& initiatingDocumentLoader);
 #endif
 
 protected:

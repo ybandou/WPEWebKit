@@ -84,8 +84,6 @@ static String accessibleNameForNode(Node* node, Node* labelledbyNode = nullptr);
 AccessibilityNodeObject::AccessibilityNodeObject(Node* node)
     : AccessibilityObject()
     , m_ariaRole(UnknownRole)
-    , m_childrenDirty(false)
-    , m_subtreeDirty(false)
     , m_roleForMSAA(UnknownRole)
 #ifndef NDEBUG
     , m_initialized(false)
@@ -335,51 +333,6 @@ AccessibilityRole AccessibilityNodeObject::determineAccessibilityRole()
         return GroupRole;
     
     return UnknownRole;
-}
-
-void AccessibilityNodeObject::insertChild(AccessibilityObject* child, unsigned index)
-{
-    if (!child)
-        return;
-    
-    // If the parent is asking for this child's children, then either it's the first time (and clearing is a no-op),
-    // or its visibility has changed. In the latter case, this child may have a stale child cached.
-    // This can prevent aria-hidden changes from working correctly. Hence, whenever a parent is getting children, ensure data is not stale.
-    // Only clear the child's children when we know it's in the updating chain in order to avoid unnecessary work.
-    if (child->needsToUpdateChildren() || m_subtreeDirty) {
-        child->clearChildren();
-        // Pass m_subtreeDirty flag down to the child so that children cache gets reset properly.
-        if (m_subtreeDirty)
-            child->setNeedsToUpdateSubtree();
-    } else {
-        // For some reason the grand children might be detached so that we need to regenerate the
-        // children list of this child.
-        for (const auto& grandChild : child->children(false)) {
-            if (grandChild->isDetachedFromParent()) {
-                child->clearChildren();
-                break;
-            }
-        }
-    }
-    
-    setIsIgnoredFromParentDataForChild(child);
-    if (child->accessibilityIsIgnored()) {
-        const auto& children = child->children();
-        size_t length = children.size();
-        for (size_t i = 0; i < length; ++i)
-            m_children.insert(index + i, children[i]);
-    } else {
-        ASSERT(child->parentObject() == this);
-        m_children.insert(index, child);
-    }
-    
-    // Reset the child's m_isIgnoredFromParentData since we are done adding that child and its children.
-    child->clearIsIgnoredFromParentData();
-}
-
-void AccessibilityNodeObject::addChild(AccessibilityObject* child)
-{
-    insertChild(child, m_children.size());
 }
 
 void AccessibilityNodeObject::addChildren()
@@ -861,7 +814,7 @@ float AccessibilityNodeObject::valueForRange() const
 
     // In ARIA 1.1, the implicit value for aria-valuenow on a spin button is 0.
     // For other roles, it is half way between aria-valuemin and aria-valuemax.
-    auto value = getAttribute(aria_valuenowAttr);
+    auto& value = getAttribute(aria_valuenowAttr);
     if (!value.isEmpty())
         return value.toFloat();
 
@@ -879,7 +832,7 @@ float AccessibilityNodeObject::maxValueForRange() const
     if (!isRangeControl())
         return 0.0f;
 
-    auto value = getAttribute(aria_valuemaxAttr);
+    auto& value = getAttribute(aria_valuemaxAttr);
     if (!value.isEmpty())
         return value.toFloat();
 
@@ -899,7 +852,7 @@ float AccessibilityNodeObject::minValueForRange() const
     if (!isRangeControl())
         return 0.0f;
 
-    auto value = getAttribute(aria_valueminAttr);
+    auto& value = getAttribute(aria_valueminAttr);
     if (!value.isEmpty())
         return value.toFloat();
 
@@ -1499,7 +1452,7 @@ void AccessibilityNodeObject::helpText(Vector<AccessibilityText>& textOrder) con
     // type to HelpText.
     const AtomicString& title = getAttribute(titleAttr);
     if (!title.isEmpty()) {
-        if (!isMeter())
+        if (!isMeter() && !roleIgnoresTitle())
             textOrder.append(AccessibilityText(title, TitleTagText));
         else
             textOrder.append(AccessibilityText(title, HelpText));
@@ -1604,10 +1557,27 @@ String AccessibilityNodeObject::accessibilityDescription() const
     // Both are used to generate what a screen reader speaks.                                                           
     // If this point is reached (i.e. there's no accessibilityDescription) and there's no title(), we should fallback to using the title attribute.
     // The title attribute is normally used as help text (because it is a tooltip), but if there is nothing else available, this should be used (according to ARIA).
-    if (title().isEmpty())
+    // https://bugs.webkit.org/show_bug.cgi?id=170475: An exception is when the element is semantically unimportant. In those cases, title text should remain as help text.
+    if (title().isEmpty() && !roleIgnoresTitle())
         return getAttribute(titleAttr);
 
     return String();
+}
+
+// Returns whether the role was not intended to play a semantically meaningful part of the
+// accessibility hierarchy. This applies to generic groups like <div>'s with no role value set.
+bool AccessibilityNodeObject::roleIgnoresTitle() const
+{
+    if (ariaRoleAttribute() != UnknownRole)
+        return false;
+
+    switch (roleValue()) {
+    case DivRole:
+    case UnknownRole:
+        return true;
+    default:
+        return false;
+    }
 }
 
 String AccessibilityNodeObject::helpText() const
@@ -1778,6 +1748,14 @@ String AccessibilityNodeObject::textUnderElement(AccessibilityTextUnderElementMo
             continue;
 
         if (is<AccessibilityNodeObject>(*child)) {
+            // We should ignore the child if it's labeled by this node.
+            // This could happen when this node labels multiple child nodes and we didn't
+            // skip in the above ignoredChildNode check.
+            Vector<Element*> labeledByElements;
+            downcast<AccessibilityNodeObject>(*child).ariaLabeledByElements(labeledByElements);
+            if (labeledByElements.contains(node))
+                continue;
+            
             Vector<AccessibilityText> textOrder;
             downcast<AccessibilityNodeObject>(*child).alternativeText(textOrder);
             if (textOrder.size() > 0 && textOrder[0].text.length()) {

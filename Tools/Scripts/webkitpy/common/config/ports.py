@@ -72,6 +72,7 @@ class DeprecatedPort(object):
             "mac-wk2": MacWK2Port,
             "win": WinPort,
             "wincairo": WinCairoPort,
+            "wpe": WpePort,
         }
         default_port = {
             "Windows": WinPort,
@@ -132,6 +133,9 @@ class DeprecatedPort(object):
     def run_api_tests_command(self, build_style=None):
         command = self.script_shell_command("run-api-tests")
         return self._append_build_style_flag(command, build_style)
+
+    def run_sort_xcode_project_file_command(self):
+        return self.script_shell_command("sort-Xcode-project-file")
 
 
 class IOSPort(DeprecatedPort):
@@ -199,4 +203,20 @@ class GtkWK2Port(DeprecatedPort):
     def run_webkit_tests_command(self, build_style=None):
         command = super(GtkWK2Port, self).run_webkit_tests_command(build_style)
         command.append("--gtk")
+        return command
+
+
+class WpePort(DeprecatedPort):
+    port_flag_name = "wpe"
+
+    def build_webkit_command(self, build_style=None):
+        command = super(WpePort, self).build_webkit_command(build_style=build_style)
+        command.append("--wpe")
+        command.append("--update-wpe")
+        command.append(super(WpePort, self).makeArgs())
+        return command
+
+    def run_webkit_tests_command(self, build_style=None):
+        command = super(WpePort, self).run_webkit_tests_command(build_style)
+        command.append("--wpe")
         return command

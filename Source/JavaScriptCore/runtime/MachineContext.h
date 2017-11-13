@@ -33,11 +33,10 @@
 namespace JSC {
 namespace MachineContext {
 
-
-void*& stackPointer(PlatformRegisters&);
 void* stackPointer(const PlatformRegisters&);
 
 #if OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
+void*& stackPointer(PlatformRegisters&);
 void*& framePointer(PlatformRegisters&);
 void* framePointer(const PlatformRegisters&);
 void*& instructionPointer(PlatformRegisters&);
@@ -64,6 +63,7 @@ void* llintInstructionPointer(const mcontext_t&);
 #endif // HAVE(MACHINE_CONTEXT)
 #endif // OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
 
+#if OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
 inline void*& stackPointer(PlatformRegisters& regs)
 {
 #if OS(DARWIN)
@@ -111,8 +111,6 @@ inline void*& stackPointer(PlatformRegisters& regs)
 
 #elif HAVE(MACHINE_CONTEXT)
     return stackPointer(regs.machineContext);
-#else
-    return regs.stackPointer;
 #endif
 }
 
@@ -120,7 +118,12 @@ inline void* stackPointer(const PlatformRegisters& regs)
 {
     return stackPointer(const_cast<PlatformRegisters&>(regs));
 }
-
+#else // not OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
+inline void* stackPointer(const PlatformRegisters& regs)
+{
+    return regs.stackPointer;
+}
+#endif // OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
 
 #if HAVE(MACHINE_CONTEXT)
 inline void*& stackPointer(mcontext_t& machineContext)
@@ -143,7 +146,7 @@ inline void*& stackPointer(mcontext_t& machineContext)
 #error Unknown Architecture
 #endif
 
-#elif defined(__GLIBC__)
+#elif defined(__GLIBC__) || defined(__BIONIC__)
 
 #if CPU(X86)
     return reinterpret_cast<void*&>((uintptr_t&) machineContext.gregs[REG_ESP]);
@@ -248,7 +251,7 @@ inline void*& framePointer(mcontext_t& machineContext)
 #error Unknown Architecture
 #endif
 
-#elif defined(__GLIBC__)
+#elif defined(__GLIBC__) || defined(__BIONIC__)
 
 // The following sequence depends on glibc's sys/ucontext.h.
 #if CPU(X86)
@@ -351,7 +354,7 @@ inline void*& instructionPointer(mcontext_t& machineContext)
 #error Unknown Architecture
 #endif
 
-#elif defined(__GLIBC__)
+#elif defined(__GLIBC__) || defined(__BIONIC__)
 
 // The following sequence depends on glibc's sys/ucontext.h.
 #if CPU(X86)
@@ -463,7 +466,7 @@ inline void*& argumentPointer<1>(mcontext_t& machineContext)
 #error Unknown Architecture
 #endif
 
-#elif defined(__GLIBC__)
+#elif defined(__GLIBC__) || defined(__BIONIC__)
 
 // The following sequence depends on glibc's sys/ucontext.h.
 #if CPU(X86)
@@ -580,7 +583,7 @@ inline void*& llintInstructionPointer(mcontext_t& machineContext)
 #error Unknown Architecture
 #endif
 
-#elif defined(__GLIBC__)
+#elif defined(__GLIBC__) || defined(__BIONIC__)
 
 // The following sequence depends on glibc's sys/ucontext.h.
 #if CPU(X86)

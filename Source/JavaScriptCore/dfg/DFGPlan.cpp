@@ -41,6 +41,7 @@
 #include "DFGCriticalEdgeBreakingPhase.h"
 #include "DFGDCEPhase.h"
 #include "DFGFailedFinalizer.h"
+#include "DFGFixedButterflyAccessUncagingPhase.h"
 #include "DFGFixupPhase.h"
 #include "DFGGraphSafepoint.h"
 #include "DFGIntegerCheckCombiningPhase.h"
@@ -143,7 +144,7 @@ Plan::Plan(CodeBlock* passedCodeBlock, CodeBlock* profiledDFGCodeBlock,
     , mode(mode)
     , osrEntryBytecodeIndex(osrEntryBytecodeIndex)
     , mustHandleValues(mustHandleValues)
-    , compilation(vm->m_perBytecodeProfiler ? adoptRef(new Profiler::Compilation(vm->m_perBytecodeProfiler->ensureBytecodesFor(codeBlock), profilerCompilationKindForMode(mode))) : 0)
+    , compilation(UNLIKELY(vm->m_perBytecodeProfiler) ? adoptRef(new Profiler::Compilation(vm->m_perBytecodeProfiler->ensureBytecodesFor(codeBlock), profilerCompilationKindForMode(mode))) : nullptr)
     , inlineCallFrames(adoptRef(new InlineCallFrameSet()))
     , identifiers(codeBlock)
     , weakReferences(codeBlock)
@@ -365,9 +366,8 @@ Plan::CompilationPath Plan::compileInThreadImpl()
     // If we're doing validation, then run some analyses, to give them an opportunity
     // to self-validate. Now is as good a time as any to do this.
     if (validationEnabled()) {
-        dfg.ensureDominators();
-        dfg.ensureNaturalLoops();
-        dfg.ensurePrePostNumbering();
+        dfg.ensureCPSDominators();
+        dfg.ensureCPSNaturalLoops();
     }
 
     switch (mode) {
@@ -468,6 +468,7 @@ Plan::CompilationPath Plan::compileInThreadImpl()
         RUN_PHASE(performCFA);
         RUN_PHASE(performGlobalStoreBarrierInsertion);
         RUN_PHASE(performStoreBarrierClustering);
+        RUN_PHASE(performFixedButterflyAccessUncaging);
         if (Options::useMovHintRemoval())
             RUN_PHASE(performMovHintRemoval);
         RUN_PHASE(performCleanUp);

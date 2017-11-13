@@ -38,7 +38,7 @@
 #include "FrameDestructionObserver.h"
 #include "MediaProducer.h"
 #include "MutationObserver.h"
-#include "OrientationNotifer.h"
+#include "OrientationNotifier.h"
 #include "PageVisibilityState.h"
 #include "PlatformEvent.h"
 #include "ReferrerPolicy.h"
@@ -52,11 +52,13 @@
 #include "TreeScope.h"
 #include "UserActionElementSet.h"
 #include "ViewportArguments.h"
-#include <chrono>
 #include <memory>
+#include <pal/SessionID.h>
 #include <wtf/Deque.h>
 #include <wtf/HashCountedSet.h>
 #include <wtf/HashSet.h>
+#include <wtf/Optional.h>
+#include <wtf/Variant.h>
 #include <wtf/WeakPtr.h>
 #include <wtf/text/AtomicStringHash.h>
 
@@ -64,9 +66,17 @@
 #include "EventTrackingRegions.h"
 #endif
 
+#if ENABLE(IOS_TOUCH_EVENTS)
+#include <wtf/ThreadingPrimitives.h>
+#endif
+
 namespace JSC {
 class ExecState;
 class InputCursor;
+}
+
+namespace PAL {
+class Logger;
 }
 
 namespace WebCore {
@@ -82,17 +92,17 @@ class CachedCSSStyleSheet;
 class CachedFrameBase;
 class CachedResourceLoader;
 class CachedScript;
-class CanvasRenderingContext;
+class CanvasRenderingContext2D;
 class CharacterData;
 class Comment;
 class ConstantPropertyMap;
 class DOMImplementation;
-class DOMNamedFlowCollection;
 class DOMSelection;
 class DOMWindow;
 class DOMWrapperWorld;
 class Database;
 class DatabaseThread;
+class DeferredPromise;
 class DocumentFragment;
 class DocumentLoader;
 class DocumentMarkerController;
@@ -135,7 +145,6 @@ class MediaPlaybackTargetClient;
 class MediaQueryList;
 class MediaQueryMatcher;
 class MouseEventWithHitTestResults;
-class NamedFlowCollection;
 class NodeFilter;
 class NodeIterator;
 class Page;
@@ -168,6 +177,9 @@ class TextResourceDecoder;
 class TreeWalker;
 class VisibilityChangeClient;
 class VisitedLinkState;
+class WebGL2RenderingContext;
+class WebGLRenderingContext;
+class WebGPURenderingContext;
 class XPathEvaluator;
 class XPathExpression;
 class XPathNSResolver;
@@ -185,10 +197,6 @@ class TransformSource;
 struct AnnotatedRegionValue;
 #endif
 
-#if ENABLE(IOS_TOUCH_EVENTS)
-#include <WebKitAdditions/DocumentIOSForward.h>
-#endif
-
 #if ENABLE(TOUCH_EVENTS) || ENABLE(IOS_TOUCH_EVENTS)
 class Touch;
 class TouchList;
@@ -202,15 +210,7 @@ class DeviceOrientationController;
 #endif
 
 #if ENABLE(TEXT_AUTOSIZING)
-struct TextAutoSizingHash;
-class TextAutoSizingKey;
-class TextAutoSizingValue;
-
-struct TextAutoSizingTraits : WTF::GenericHashTraits<TextAutoSizingKey> {
-    static const bool emptyValueIsZero = true;
-    static void constructDeletedValue(TextAutoSizingKey& slot);
-    static bool isDeletedValue(const TextAutoSizingKey& value);
-};
+class TextAutoSizing;
 #endif
 
 #if ENABLE(MEDIA_SESSION)
@@ -276,7 +276,26 @@ enum class HttpEquivPolicy {
     DisabledByContentDispositionAttachmentSandbox
 };
 
-enum class CustomElementNameValidationStatus { Valid, ConflictsWithBuiltinNames, NoHyphen, ContainsUpperCase };
+enum class CustomElementNameValidationStatus {
+    Valid,
+    FirstCharacterIsNotLowercaseASCIILetter,
+    ContainsNoHyphen,
+    ContainsUppercaseASCIILetter,
+    ContainsDisallowedCharacter,
+    ConflictsWithStandardElementName
+};
+
+using RenderingContext = Variant<
+#if ENABLE(WEBGL)
+    RefPtr<WebGLRenderingContext>,
+#endif
+#if ENABLE(WEBGL2)
+    RefPtr<WebGL2RenderingContext>,
+#endif
+#if ENABLE(WEBGPU)
+    RefPtr<WebGPURenderingContext>,
+#endif
+    RefPtr<CanvasRenderingContext2D>>;
 
 class Document
     : public ContainerNode
@@ -387,11 +406,6 @@ public:
     static CustomElementNameValidationStatus validateCustomElementName(const AtomicString&);
 
     bool isCSSGridLayoutEnabled() const;
-#if ENABLE(CSS_REGIONS)
-    RefPtr<DOMNamedFlowCollection> webkitGetNamedFlows();
-#endif
-
-    NamedFlowCollection& namedFlows();
 
     WEBCORE_EXPORT RefPtr<Range> caretRangeFromPoint(int x, int y);
     RefPtr<Range> caretRangeFromPoint(const LayoutPoint& clientPoint);
@@ -439,11 +453,6 @@ public:
 
     String documentURI() const { return m_documentURI; }
     WEBCORE_EXPORT void setDocumentURI(const String&);
-
-#if ENABLE(WEB_REPLAY)
-    JSC::InputCursor& inputCursor();
-    void setInputCursor(Ref<JSC::InputCursor>&&);
-#endif
 
     using VisibilityState = PageVisibilityState;
     WEBCORE_EXPORT VisibilityState visibilityState() const;
@@ -533,7 +542,7 @@ public:
 
     enum class ResolveStyleType { Normal, Rebuild };
     void resolveStyle(ResolveStyleType = ResolveStyleType::Normal);
-    WEBCORE_EXPORT void updateStyleIfNeeded();
+    WEBCORE_EXPORT bool updateStyleIfNeeded();
     bool needsStyleRecalc() const;
     unsigned lastStyleUpdateSizeForTesting() const { return m_lastStyleUpdateSizeForTesting; }
 
@@ -547,7 +556,7 @@ public:
     };
     WEBCORE_EXPORT void updateLayoutIgnorePendingStylesheets(RunPostLayoutTasks = RunPostLayoutTasks::Asynchronously);
 
-    std::unique_ptr<RenderStyle> styleForElementIgnoringPendingStylesheets(Element&, const RenderStyle* parentStyle);
+    std::unique_ptr<RenderStyle> styleForElementIgnoringPendingStylesheets(Element&, const RenderStyle* parentStyle, PseudoId = NOPSEUDO);
 
     // Returns true if page box (margin boxes and page borders) is visible.
     WEBCORE_EXPORT bool isPageBoxVisible(int pageIndex);
@@ -565,7 +574,7 @@ public:
     void prepareForDestruction();
 
     // Override ScriptExecutionContext methods to do additional work
-    bool shouldBypassMainWorldContentSecurityPolicy() const final;
+    WEBCORE_EXPORT bool shouldBypassMainWorldContentSecurityPolicy() const final;
     void suspendActiveDOMObjects(ActiveDOMObject::ReasonForSuspension) final;
     void resumeActiveDOMObjects(ActiveDOMObject::ReasonForSuspension) final;
     void stopActiveDOMObjects() final;
@@ -590,10 +599,16 @@ public:
     
     WEBCORE_EXPORT DocumentLoader* loader() const;
 
-    WEBCORE_EXPORT void open(Document* ownerDocument = nullptr);
+    WEBCORE_EXPORT ExceptionOr<RefPtr<DOMWindow>> openForBindings(DOMWindow& activeWindow, DOMWindow& firstWindow, const String& url, const AtomicString& name, const String& features);
+    WEBCORE_EXPORT ExceptionOr<Document&> openForBindings(Document* responsibleDocument, const String& type, const String& replace);
+
+    // FIXME: We should rename this at some point and give back the name 'open' to the HTML specified ones.
+    WEBCORE_EXPORT void open(Document* responsibleDocument = nullptr);
     void implicitOpen();
 
-    // close() is the DOM API document.close()
+    WEBCORE_EXPORT ExceptionOr<void> closeForBindings();
+
+    // FIXME: We should rename this at some point and give back the name 'close' to the HTML specified one.
     WEBCORE_EXPORT void close();
     // In some situations (see the code), we ignore document.close().
     // explicitClose() bypass these checks and actually tries to close the
@@ -604,9 +619,9 @@ public:
 
     void cancelParsing();
 
-    void write(SegmentedString&& text, Document* ownerDocument = nullptr);
-    WEBCORE_EXPORT void write(const String& text, Document* ownerDocument = nullptr);
-    WEBCORE_EXPORT void writeln(const String& text, Document* ownerDocument = nullptr);
+    void write(Document* responsibleDocument, SegmentedString&&);
+    WEBCORE_EXPORT ExceptionOr<void> write(Document* responsibleDocument, Vector<String>&&);
+    WEBCORE_EXPORT ExceptionOr<void> writeln(Document* responsibleDocument, Vector<String>&&);
 
     bool wellFormed() const { return m_wellFormed; }
 
@@ -625,17 +640,17 @@ public:
 
     WEBCORE_EXPORT URL completeURL(const String&) const final;
     URL completeURL(const String&, const URL& baseURLOverride) const;
+    PAL::SessionID sessionID() const final;
 
     String userAgent(const URL&) const final;
 
     void disableEval(const String& errorMessage) final;
+    void disableWebAssembly(const String& errorMessage) final;
 
 #if ENABLE(INDEXED_DATABASE)
     IDBClient::IDBConnectionProxy* idbConnectionProxy() final;
 #endif
-#if ENABLE(WEB_SOCKETS)
     SocketProvider* socketProvider() final;
-#endif
 
     bool canNavigate(Frame* targetFrame);
     Frame* findUnsafeParentScrollPropagationBoundary();
@@ -949,11 +964,8 @@ public:
     bool hasNodesWithMissingStyle() const { return m_hasNodesWithMissingStyle; }
     void setHasNodesWithMissingStyle() { m_hasNodesWithMissingStyle = true; }
 
-    void updateFocusAppearanceSoon(SelectionRestorationMode);
-    void cancelFocusAppearanceUpdate();
-
     // Extension for manipulating canvas drawing contexts for use in CSS
-    CanvasRenderingContext* getCSSCanvasContext(const String& type, const String& name, int width, int height);
+    std::optional<RenderingContext> getCSSCanvasContext(const String& type, const String& name, int width, int height);
     HTMLCanvasElement* getCSSCanvasElement(const String& name);
 
     bool isDNSPrefetchEnabled() const { return m_isDNSPrefetchEnabled; }
@@ -1055,6 +1067,7 @@ public:
     bool loadEventFinished() const { return m_loadEventFinished; }
 
     bool isContextThread() const final;
+    bool isSecureContext() const final;
     bool isJSExecutionForbidden() const final { return false; }
 
     void enqueueWindowEvent(Ref<Event>&&);
@@ -1117,8 +1130,6 @@ public:
 
 #if ENABLE(IOS_TOUCH_EVENTS)
 #include <WebKitAdditions/DocumentIOS.h>
-#elif ENABLE(TOUCH_EVENTS)
-    Ref<Touch> createTouch(DOMWindow*, EventTarget*, int identifier, int pageX, int pageY, int screenX, int screenY, int radiusX, int radiusY, float rotationAngle, float force) const;
 #endif
 
 #if ENABLE(DEVICE_ORIENTATION) && PLATFORM(IOS)
@@ -1126,17 +1137,13 @@ public:
     DeviceOrientationController* deviceOrientationController() const;
 #endif
 
-#if ENABLE(WEB_TIMING)
     const DocumentTiming& timing() const { return m_documentTiming; }
-#endif
 
     double monotonicTimestamp() const;
 
     int requestAnimationFrame(Ref<RequestAnimationFrameCallback>&&);
     void cancelAnimationFrame(int id);
     void serviceScriptedAnimations(double timestamp);
-
-    void sendWillRevealEdgeEventsIfNeeded(const IntPoint& oldPosition, const IntPoint& newPosition, const IntRect& visibleRect, const IntSize& contentsSize, Element* target = nullptr);
 
     EventTarget* errorEventTarget() final;
     void logExceptionToConsole(const String& errorMessage, const String& sourceURL, int lineNumber, int columnNumber, RefPtr<Inspector::ScriptCallStack>&&) final;
@@ -1202,6 +1209,7 @@ public:
 #endif
 
     void convertAbsoluteToClientQuads(Vector<FloatQuad>&, const RenderStyle&);
+    void convertAbsoluteToClientRects(Vector<FloatRect>&, const RenderStyle&);
     void convertAbsoluteToClientRect(FloatRect&, const RenderStyle&);
 
     bool hasActiveParser();
@@ -1218,8 +1226,10 @@ public:
     bool inStyleRecalc() const { return m_inStyleRecalc; }
     bool inRenderTreeUpdate() const { return m_inRenderTreeUpdate; }
 
+    void updateTextRenderer(Text&, unsigned offsetOfReplacedText, unsigned lengthOfReplacedText);
+
     // Return a Locale for the default locale if the argument is null or empty.
-    Locale& getCachedLocale(const AtomicString& locale = nullAtom);
+    Locale& getCachedLocale(const AtomicString& locale = nullAtom());
 
     const Document* templateDocument() const;
     Document& ensureTemplateDocument();
@@ -1231,6 +1241,10 @@ public:
     void addDisabledFieldsetElement() { m_disabledFieldsetElementsCount++; }
     void removeDisabledFieldsetElement() { ASSERT(m_disabledFieldsetElementsCount); m_disabledFieldsetElementsCount--; }
 
+    WEBCORE_EXPORT void addConsoleMessage(std::unique_ptr<Inspector::ConsoleMessage>&&) final;
+
+    // The following addConsoleMessage function is deprecated.
+    // Callers should try to create the ConsoleMessage themselves.
     WEBCORE_EXPORT void addConsoleMessage(MessageSource, MessageLevel, const String& message, unsigned long requestIdentifier = 0) final;
 
     SecurityOrigin& securityOrigin() const { return *SecurityContext::securityOrigin(); }
@@ -1254,10 +1268,11 @@ public:
     WEBCORE_EXPORT void addAudioProducer(MediaProducer*);
     WEBCORE_EXPORT void removeAudioProducer(MediaProducer*);
     MediaProducer::MediaStateFlags mediaState() const { return m_mediaState; }
+    void noteUserInteractionWithMediaElement();
     bool isCapturing() const { return MediaProducer::isCapturing(m_mediaState); }
     WEBCORE_EXPORT void updateIsPlayingMedia(uint64_t = HTMLMediaElementInvalidID);
     void pageMutedStateDidChange();
-    WeakPtr<Document> createWeakPtr() { return m_weakFactory.createWeakPtr(); }
+    WeakPtr<Document> createWeakPtr() { return m_weakFactory.createWeakPtr(*this); }
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
     void addPlaybackTargetPickerClient(MediaPlaybackTargetClient&);
@@ -1283,6 +1298,9 @@ public:
     void setDeviceIDHashSalt(const String& salt) { m_idHashSalt = salt; }
     String deviceIDHashSalt() const { return m_idHashSalt; }
     void stopMediaCapture();
+    void registerForMediaStreamStateChangeCallbacks(HTMLMediaElement&);
+    void unregisterForMediaStreamStateChangeCallbacks(HTMLMediaElement&);
+    void mediaStreamCaptureStateChanged();
 #endif
 
 // FIXME: Find a better place for this functionality.
@@ -1313,6 +1331,34 @@ public:
     void orientationChanged(int orientation);
     OrientationNotifier& orientationNotifier() { return m_orientationNotifier; }
 
+    WEBCORE_EXPORT const AtomicString& bgColor() const;
+    WEBCORE_EXPORT void setBgColor(const String&);
+    WEBCORE_EXPORT const AtomicString& fgColor() const;
+    WEBCORE_EXPORT void setFgColor(const String&);
+    WEBCORE_EXPORT const AtomicString& alinkColor() const;
+    WEBCORE_EXPORT void setAlinkColor(const String&);
+    WEBCORE_EXPORT const AtomicString& linkColorForBindings() const;
+    WEBCORE_EXPORT void setLinkColorForBindings(const String&);
+    WEBCORE_EXPORT const AtomicString& vlinkColor() const;
+    WEBCORE_EXPORT void setVlinkColor(const String&);
+
+    // Per https://html.spec.whatwg.org/multipage/obsolete.html#dom-document-clear, this method does nothing.
+    void clear() { }
+    // Per https://html.spec.whatwg.org/multipage/obsolete.html#dom-document-captureevents, this method does nothing.
+    void captureEvents() { }
+    // Per https://html.spec.whatwg.org/multipage/obsolete.html#dom-document-releaseevents, this method does nothing.
+    void releaseEvents() { }
+
+#if ENABLE(TEXT_AUTOSIZING)
+    TextAutoSizing& textAutoSizing();
+#endif
+
+    PAL::Logger& logger() const;
+
+    bool hasStorageAccess() const { return m_hasStorageAccess; };
+    void requestStorageAccess(Ref<DeferredPromise>&& passedPromise);
+    void setUserGrantsStorageAccessOverride(bool value) { m_grantStorageAccessOverride = value; }
+
 protected:
     enum ConstructionFlags { Synthesized = 1, NonRenderedPlaceholder = 1 << 1 };
     Document(Frame*, const URL&, unsigned = DefaultDocumentClass, unsigned constructionFlags = 0);
@@ -1326,9 +1372,11 @@ private:
     friend class IgnoreDestructiveWriteCountIncrementer;
     friend class IgnoreOpensDuringUnloadCountIncrementer;
 
+    bool shouldInheritContentSecurityPolicyFromOwner() const;
+
     void detachFromFrame() { observeFrame(nullptr); }
 
-    void updateTitleElement(Element* newTitleElement);
+    void updateTitleElement(Element& changingTitleElement);
     void frameDestroyed() final;
 
     void commonTeardown();
@@ -1355,6 +1403,8 @@ private:
     void refScriptExecutionContext() final { ref(); }
     void derefScriptExecutionContext() final { deref(); }
 
+    // The following addMessage function is deprecated.
+    // Callers should try to create the ConsoleMessage themselves.
     void addMessage(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber, unsigned columnNumber, RefPtr<Inspector::ScriptCallStack>&&, JSC::ExecState* = nullptr, unsigned long requestIdentifier = 0) final;
 
     Seconds minimumDOMTimerInterval() const final;
@@ -1363,7 +1413,6 @@ private:
 
     void updateTitleFromTitleElement();
     void updateTitle(const StringWithDirection&);
-    void updateFocusAppearanceTimerFired();
     void updateBaseURL();
 
     void buildAccessKeyMap(TreeScope* root);
@@ -1418,6 +1467,8 @@ private:
     bool shouldEnforceHTTP09Sandbox() const;
 
     void platformSuspendOrStopActiveDOMObjects();
+
+    bool domainIsRegisterable(const String&) const;
 
     const Ref<Settings> m_settings;
 
@@ -1486,7 +1537,6 @@ private:
     const std::unique_ptr<DocumentMarkerController> m_markers;
     
     Timer m_styleRecalcTimer;
-    Timer m_updateFocusAppearanceTimer;
 
     Element* m_cssTarget { nullptr };
 
@@ -1583,9 +1633,7 @@ private:
 
     ViewportArguments m_viewportArguments;
 
-#if ENABLE(WEB_TIMING)
     DocumentTiming m_documentTiming;
-#endif
 
     RefPtr<MediaQueryMatcher> m_mediaQueryMatcher;
     
@@ -1599,7 +1647,7 @@ private:
     void clearScriptedAnimationController();
     RefPtr<ScriptedAnimationController> m_scriptedAnimationController;
 
-    void notifyVisibilityChangedToMediaCapture();
+    void notifyMediaCaptureOfVisibilityChanged();
 
 #if ENABLE(DEVICE_ORIENTATION) && PLATFORM(IOS)
     std::unique_ptr<DeviceMotionClient> m_deviceMotionClient;
@@ -1612,19 +1660,10 @@ private:
     Vector<Task> m_pendingTasks;
 
 #if ENABLE(TEXT_AUTOSIZING)
-public:
-    void addAutoSizedNode(Text&, float size);
-    void updateAutoSizedNodes();
-    void clearAutoSizedNodes();
-
-private:
-    using TextAutoSizingMap = HashMap<TextAutoSizingKey, std::unique_ptr<TextAutoSizingValue>, TextAutoSizingHash, TextAutoSizingTraits>;
-    TextAutoSizingMap m_textAutoSizedNodes;
+    std::unique_ptr<TextAutoSizing> m_textAutoSizing;
 #endif
 
     Timer m_visualUpdatesSuppressionTimer;
-
-    RefPtr<NamedFlowCollection> m_namedFlows;
 
     void clearSharedObjectPool();
     Timer m_sharedObjectPoolClearTimer;
@@ -1638,10 +1677,6 @@ private:
     Document* m_templateDocumentHost { nullptr }; // Manually managed weakref (backpointer from m_templateDocument).
 
     Ref<CSSFontSelector> m_fontSelector;
-
-#if ENABLE(WEB_REPLAY)
-    Ref<JSC::InputCursor> m_inputCursor;
-#endif
 
     HashSet<MediaProducer*> m_audioProducers;
 
@@ -1665,9 +1700,7 @@ private:
     Timer m_didAssociateFormControlsTimer;
     Timer m_cookieCacheExpiryTimer;
 
-#if ENABLE(WEB_SOCKETS)
     RefPtr<SocketProvider> m_socketProvider;
-#endif
 
     String m_cachedDOMCookies;
 
@@ -1692,10 +1725,10 @@ private:
 
     InheritedBool m_designMode { inherit };
     MediaProducer::MediaStateFlags m_mediaState { MediaProducer::IsNotPlaying };
+    bool m_userHasInteractedWithMediaElement { false };
     PageCacheState m_pageCacheState { NotInPageCache };
-    ReferrerPolicy m_referrerPolicy { ReferrerPolicy::Default };
+    ReferrerPolicy m_referrerPolicy { ReferrerPolicy::NoReferrerWhenDowngrade };
     ReadyState m_readyState { Complete };
-    SelectionRestorationMode m_updateFocusAppearanceRestoresSelection { SelectionRestorationMode::SetDefault };
 
     MutationObserverOptions m_mutationObserverTypes { 0 };
 
@@ -1763,6 +1796,7 @@ private:
 #endif
 
 #if ENABLE(MEDIA_STREAM)
+    HashSet<HTMLMediaElement*> m_mediaStreamStateChangeElements;
     String m_idHashSalt;
     bool m_hasHadActiveMediaStreamTrack { false };
 #endif
@@ -1772,8 +1806,13 @@ private:
 #endif
 
     OrientationNotifier m_orientationNotifier;
+    mutable PAL::SessionID m_sessionID;
+    mutable RefPtr<PAL::Logger> m_logger;
 
     static bool hasEverCreatedAnAXObjectCache;
+
+    bool m_hasStorageAccess { false };
+    bool m_grantStorageAccessOverride { false };
 };
 
 Element* eventTargetElementForDocument(Document*);
@@ -1798,11 +1837,6 @@ inline AXObjectCache* Document::existingAXObjectCache() const
 }
 
 // These functions are here because they require the Document class definition and we want to inline them.
-
-inline bool Node::isDocumentNode() const
-{
-    return this == &document();
-}
 
 inline ScriptExecutionContext* Node::scriptExecutionContext() const
 {

@@ -28,19 +28,20 @@
 
 #if ENABLE(MEDIA_STREAM) && USE(AVFOUNDATION)
 
-#import "AVFoundationSPI.h"
 #import "AudioTrackPrivateMediaStreamCocoa.h"
 #import "Clock.h"
 #import "GraphicsContextCG.h"
 #import "Logging.h"
 #import "MediaStreamPrivate.h"
-#import "MediaTimeAVFoundation.h"
 #import "PixelBufferConformerCV.h"
 #import "VideoTrackPrivateMediaStream.h"
 #import <AVFoundation/AVSampleBufferDisplayLayer.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CATransaction.h>
 #import <objc_runtime.h>
+#import <pal/avfoundation/MediaTimeAVFoundation.h>
+#import <pal/spi/mac/AVFoundationSPI.h>
+#import <wtf/Function.h>
 #import <wtf/MainThread.h>
 #import <wtf/NeverDestroyed.h>
 
@@ -187,7 +188,6 @@ static const double rendererLatency = 0.02;
 
 MediaPlayerPrivateMediaStreamAVFObjC::MediaPlayerPrivateMediaStreamAVFObjC(MediaPlayer* player)
     : m_player(player)
-    , m_weakPtrFactory(this)
     , m_statusChangeListener(adoptNS([[WebAVSampleBufferStatusChangeListener alloc] initWithParent:this]))
     , m_clock(Clock::create())
 #if PLATFORM(IOS) || (PLATFORM(MAC) && ENABLE(VIDEO_PRESENTATION_MODE))
@@ -231,24 +231,18 @@ void MediaPlayerPrivateMediaStreamAVFObjC::registerMediaEngine(MediaEngineRegist
 
 bool MediaPlayerPrivateMediaStreamAVFObjC::isAvailable()
 {
-    if (!AVFoundationLibrary() || !isCoreMediaFrameworkAvailable() || !getAVSampleBufferDisplayLayerClass())
-        return false;
-
-    return true;
+    return AVFoundationLibrary() && isCoreMediaFrameworkAvailable() && getAVSampleBufferDisplayLayerClass();
 }
 
 void MediaPlayerPrivateMediaStreamAVFObjC::getSupportedTypes(HashSet<String, ASCIICaseInsensitiveHash>& types)
 {
-    static NeverDestroyed<HashSet<String, ASCIICaseInsensitiveHash>> cache;
-    types = cache;
+    // FIXME: Is it really correct to list no supported types?
+    types.clear();
 }
 
 MediaPlayer::SupportsType MediaPlayerPrivateMediaStreamAVFObjC::supportsType(const MediaEngineSupportParameters& parameters)
 {
-    if (parameters.isMediaStream)
-        return MediaPlayer::IsSupported;
-
-    return MediaPlayer::IsNotSupported;
+    return parameters.isMediaStream ? MediaPlayer::IsSupported : MediaPlayer::IsNotSupported;
 }
 
 #pragma mark -
@@ -256,12 +250,23 @@ MediaPlayer::SupportsType MediaPlayerPrivateMediaStreamAVFObjC::supportsType(con
 
 void MediaPlayerPrivateMediaStreamAVFObjC::removeOldSamplesFromPendingQueue(PendingSampleQueue& queue)
 {
+    if (queue.isEmpty())
+        return;
+
+    auto decodeTime = queue.first()->decodeTime();
+    if (!decodeTime.isValid() || decodeTime < MediaTime::zeroTime()) {
+        while (queue.size() > 5)
+            queue.removeFirst();
+
+        return;
+    }
+
     MediaTime now = streamTime();
     while (!queue.isEmpty()) {
         if (queue.first()->decodeTime() > now)
             break;
         queue.removeFirst();
-    };
+    }
 }
 
 void MediaPlayerPrivateMediaStreamAVFObjC::addSampleToPendingQueue(PendingSampleQueue& queue, MediaSample& sample)
@@ -298,7 +303,7 @@ MediaTime MediaPlayerPrivateMediaStreamAVFObjC::calculateTimelineOffset(const Me
         sampleTime = sample.presentationTime();
     MediaTime timelineOffset = streamTime() - sampleTime + MediaTime::createWithDouble(latency);
     if (timelineOffset.timeScale() != sampleTime.timeScale())
-        timelineOffset = toMediaTime(CMTimeConvertScale(toCMTime(timelineOffset), sampleTime.timeScale(), kCMTimeRoundingMethod_Default));
+        timelineOffset = PAL::toMediaTime(CMTimeConvertScale(PAL::toCMTime(timelineOffset), sampleTime.timeScale(), kCMTimeRoundingMethod_Default));
     return timelineOffset;
 }
 
@@ -325,7 +330,7 @@ CGAffineTransform MediaPlayerPrivateMediaStreamAVFObjC::videoTransformationMatri
     return m_videoTransform;
 }
 
-static void runWithoutAnimations(std::function<void()> function)
+static void runWithoutAnimations(const WTF::Function<void()>& function)
 {
     [CATransaction begin];
     [CATransaction setAnimationDuration:0];
@@ -388,7 +393,11 @@ void MediaPlayerPrivateMediaStreamAVFObjC::enqueueVideoSample(MediaStreamTrackPr
 
 void MediaPlayerPrivateMediaStreamAVFObjC::requestNotificationWhenReadyForVideoData()
 {
+    auto weakThis = createWeakPtr();
     [m_sampleBufferDisplayLayer requestMediaDataWhenReadyOnQueue:dispatch_get_main_queue() usingBlock:^ {
+        if (!weakThis)
+            return;
+
         [m_sampleBufferDisplayLayer stopRequestingMediaData];
 
         while (!m_pendingVideoSampleQueue.isEmpty()) {
@@ -636,6 +645,8 @@ void MediaPlayerPrivateMediaStreamAVFObjC::play()
 
     scheduleDeferredTask([this] {
         updateReadyState();
+        if (m_player)
+            m_player->rateChanged();
     });
 }
 
@@ -654,6 +665,11 @@ void MediaPlayerPrivateMediaStreamAVFObjC::pause()
 
     updateDisplayMode();
     flushRenderers();
+
+    scheduleDeferredTask([this] {
+        if (m_player)
+            m_player->rateChanged();
+    });
 }
 
 void MediaPlayerPrivateMediaStreamAVFObjC::setVolume(float volume)
@@ -863,15 +879,27 @@ void MediaPlayerPrivateMediaStreamAVFObjC::readyStateChanged(MediaStreamTrackPri
     });
 }
 
+bool MediaPlayerPrivateMediaStreamAVFObjC::supportsPictureInPicture() const
+{
+#if PLATFORM(IOS)
+    for (const auto& track : m_videoTrackMap.values()) {
+        if (track->streamTrack().isCaptureTrack())
+            return false;
+    }
+#endif
+    
+    return true;
+}
+
 #if PLATFORM(IOS) || (PLATFORM(MAC) && ENABLE(VIDEO_PRESENTATION_MODE))
-void MediaPlayerPrivateMediaStreamAVFObjC::setVideoFullscreenLayer(PlatformLayer* videoFullscreenLayer, std::function<void()> completionHandler)
+void MediaPlayerPrivateMediaStreamAVFObjC::setVideoFullscreenLayer(PlatformLayer* videoFullscreenLayer, WTF::Function<void()>&& completionHandler)
 {
     if (m_videoFullscreenLayerManager->videoFullscreenLayer() == videoFullscreenLayer) {
         completionHandler();
         return;
     }
 
-    m_videoFullscreenLayerManager->setVideoFullscreenLayer(videoFullscreenLayer, completionHandler);
+    m_videoFullscreenLayerManager->setVideoFullscreenLayer(videoFullscreenLayer, WTFMove(completionHandler));
 }
 
 void MediaPlayerPrivateMediaStreamAVFObjC::setVideoFullscreenFrame(FloatRect frame)

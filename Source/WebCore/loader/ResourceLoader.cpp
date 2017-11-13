@@ -245,13 +245,12 @@ void ResourceLoader::loadDataURL()
     auto url = m_request.url();
     ASSERT(url.protocolIsData());
 
-    RefPtr<ResourceLoader> protectedThis(this);
     DataURLDecoder::ScheduleContext scheduleContext;
 #if HAVE(RUNLOOP_TIMER)
     if (auto* scheduledPairs = m_frame->page()->scheduledRunLoopPairs())
         scheduleContext.scheduledPairs = *scheduledPairs;
 #endif
-    DataURLDecoder::decode(url, scheduleContext, [protectedThis, url](auto decodeResult) {
+    DataURLDecoder::decode(url, scheduleContext, [protectedThis = makeRef(*this), url](auto decodeResult) {
         if (protectedThis->reachedTerminalState())
             return;
         if (!decodeResult) {
@@ -263,10 +262,11 @@ void ResourceLoader::loadDataURL()
         auto& result = decodeResult.value();
         auto dataSize = result.data ? result.data->size() : 0;
 
-        ResourceResponse dataResponse { url, result.mimeType, dataSize, result.charset };
+        ResourceResponse dataResponse { url, result.mimeType, static_cast<long long>(dataSize), result.charset };
         dataResponse.setHTTPStatusCode(200);
         dataResponse.setHTTPStatusText(ASCIILiteral("OK"));
         dataResponse.setHTTPHeaderField(HTTPHeaderName::ContentType, result.contentType);
+        dataResponse.setSource(ResourceResponse::Source::Network);
         protectedThis->didReceiveResponse(dataResponse);
 
         if (!protectedThis->reachedTerminalState() && dataSize)
@@ -403,7 +403,7 @@ void ResourceLoader::willSendRequestInternal(ResourceRequest& request, const Res
     }
 }
 
-void ResourceLoader::willSendRequest(ResourceRequest&& request, const ResourceResponse& redirectResponse, std::function<void(ResourceRequest&&)>&& callback)
+void ResourceLoader::willSendRequest(ResourceRequest&& request, const ResourceResponse& redirectResponse, WTF::Function<void(ResourceRequest&&)>&& callback)
 {
     willSendRequestInternal(request, redirectResponse);
     callback(WTFMove(request));
@@ -673,7 +673,7 @@ void ResourceLoader::cannotShowURL(ResourceHandle*)
 
 bool ResourceLoader::shouldUseCredentialStorage()
 {
-    if (m_options.allowCredentials == DoNotAllowStoredCredentials)
+    if (m_options.storedCredentialsPolicy == StoredCredentialsPolicy::DoNotUse)
         return false;
 
     Ref<ResourceLoader> protectedThis(*this);
@@ -695,7 +695,7 @@ void ResourceLoader::didReceiveAuthenticationChallenge(const AuthenticationChall
     // anything including possibly derefing this; one example of this is Radar 3266216.
     Ref<ResourceLoader> protectedThis(*this);
 
-    if (m_options.allowCredentials == AllowStoredCredentials) {
+    if (m_options.storedCredentialsPolicy == StoredCredentialsPolicy::Use) {
         if (isAllowedToAskUserForCredentials()) {
             frameLoader()->notifier().didReceiveAuthenticationChallenge(this, challenge);
             return;

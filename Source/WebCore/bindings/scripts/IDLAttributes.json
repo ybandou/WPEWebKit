@@ -31,12 +31,22 @@
         "CachedAttribute": {
             "contextsAllowed": ["attribute"]
         },
+        "CallTracingCallback": {
+            "contextsAllowed": ["interface", "attribute", "operation"],
+            "values": ["*"]
+        },
         "CallbackNeedsOperatorEqual": {
             "contextsAllowed": ["callback-function"]
         },
+        "CallbackThisObject": {
+            "contextsAllowed": ["callback-function", "operation"]
+        },
+        "CallNamedSetterOnlyForSupportedProperties": {
+            "contextsAllowed": ["operation"]
+        },
         "CallWith": {
             "contextsAllowed": ["attribute", "operation"],
-            "values": ["Document", "ScriptExecutionContext", "ScriptState", "ScriptArguments", "CallStack", "GlobalObject", "ActiveWindow", "FirstWindow", "CallerDocument", "CallerWindow"]
+            "values": ["Document", "ScriptExecutionContext", "ScriptState", "GlobalObject", "ActiveWindow", "FirstWindow", "ResponsibleDocument", "World"]
         },
         "CheckSecurity": {
             "contextsAllowed": ["interface"]
@@ -52,6 +62,10 @@
         },
         "Conditional": {
             "contextsAllowed": ["interface", "dictionary", "dictionary-member", "enum", "attribute", "operation", "constant", "callback-function"],
+            "values": ["*"]
+        },
+        "ConditionallyReadWrite": {
+            "contextsAllowed": ["attribute"],
             "values": ["*"]
         },
         "ConstantsScope": {
@@ -74,16 +88,22 @@
         "Custom": {
             "contextsAllowed": ["attribute", "operation"]
         },
-        "CustomCall": {
+        "CustomConstructor": {
             "contextsAllowed": ["interface"]
         },
-        "CustomConstructor": {
+        "CustomDefineOwnProperty": {
+            "contextsAllowed": ["interface"]
+        },
+        "CustomDefineOwnPropertyOnPrototype": {
             "contextsAllowed": ["interface"]
         },
         "CustomDeleteProperty": {
             "contextsAllowed": ["interface"]
         },
-        "CustomEnumerateProperty": {
+        "CustomGetCallData": {
+            "contextsAllowed": ["interface"]
+        },
+        "CustomGetOwnPropertyNames": {
             "contextsAllowed": ["interface"]
         },
         "CustomGetOwnPropertySlot": {
@@ -101,19 +121,19 @@
         "CustomIsReachable": {
             "contextsAllowed": ["interface"]
         },
-        "CustomNamedGetter": {
-            "contextsAllowed": ["interface"]
-        },
-        "CustomNamedSetter": {
-            "contextsAllowed": ["interface"]
-        },
         "CustomPreventExtensions": {
             "contextsAllowed": ["interface"]
         },
         "CustomProxyToJSObject": {
             "contextsAllowed": ["interface"]
         },
-        "CustomPutFunction": {
+        "CustomPushEventHandlerScope": {
+            "contextsAllowed": ["interface"]
+        },
+        "CustomPut": {
+            "contextsAllowed": ["interface"]
+        },
+        "CustomPutOnPrototype": {
             "contextsAllowed": ["interface"]
         },
         "CustomSetter": {
@@ -128,6 +148,9 @@
         "DOMJIT": {
             "contextsAllowed": ["interface", "attribute", "operation"],
             "values": ["", "ReadDOM", "Getter"]
+        },
+        "DefaultDefineOwnProperty": {
+            "contextsAllowed": ["interface"]
         },
         "DoNotCheckConstants": {
             "contextsAllowed": ["interface"]
@@ -183,9 +206,6 @@
             "contextsAllowed": ["interface"],
             "values": ["", "Impl", "ImplWebGLRenderingContext", "ImplDocument", "ImplElementRoot", "ImplFrame", "ImplOwnerNodeRoot", "ImplScriptExecutionContext"]
         },
-        "GetterMayThrowException": {
-            "contextsAllowed": ["attribute"]
-        },
         "Global": {
             "contextsAllowed": ["interface"],
             "values": ["*"],
@@ -222,28 +242,13 @@
         "JSBuiltinConstructor": {
             "contextsAllowed": ["interface"]
         },
-        "JSCustomDefineOwnProperty": {
-            "contextsAllowed": ["interface"]
-        },
-        "JSCustomDefineOwnPropertyOnPrototype": {
-            "contextsAllowed": ["interface"]
-        },
         "JSCustomFinalize": {
-            "contextsAllowed": ["interface"]
-        },
-        "JSCustomGetOwnPropertySlotAndDescriptor": {
             "contextsAllowed": ["interface"]
         },
         "JSCustomHeader": {
             "contextsAllowed": ["interface"]
         },
         "JSCustomMarkFunction": {
-            "contextsAllowed": ["interface"]
-        },
-        "JSCustomNamedGetterOnPrototype": {
-            "contextsAllowed": ["interface"]
-        },
-        "JSCustomPushEventHandlerScope": {
             "contextsAllowed": ["interface"]
         },
         "JSCustomToNativeObject": {
@@ -270,6 +275,13 @@
             "contextsAllowed": ["interface"],
             "standard": {
                 "url": "https://heycam.github.io/webidl/#LegacyUnenumerableNamedProperties"
+            }
+        },
+        "LegacyWindowAlias": {
+            "contextsAllowed": ["interface"],
+            "values": ["*"],
+            "standard": {
+                "url": "https://heycam.github.io/webidl/#LegacyWindowAlias"
             }
         },
         "LenientSetter": {
@@ -330,6 +342,10 @@
             "contextsAllowed": ["operation"],
             "notes" : "Only used by WebKitTestRunner and DumpRenderTree"
         },
+        "Plugin": {
+            "contextsAllowed": ["interface"],
+            "notes" : "Should only be used by elements that forward to Netscape plug-ins"
+        },
         "PrimaryGlobal": {
             "contextsAllowed": ["interface"],
             "values": ["*"],
@@ -339,6 +355,9 @@
         },
         "PrivateIdentifier": {
             "contextsAllowed": ["interface", "attribute", "operation"]
+        },
+        "PromiseProxy": {
+            "contextsAllowed": ["operation"]
         },
         "PublicIdentifier": {
             "contextsAllowed": ["interface", "attribute", "operation"]
@@ -369,6 +388,15 @@
         "RequiresExistingAtomicString": {
             "contextsAllowed": ["type"]
         },
+        "RethrowException": {
+            "contextsAllowed": ["operation", "callback-function"]
+        },
+        "ReturnsOwnPromise": {
+            "contextsAllowed": ["operation"]
+        },
+        "ReturnValue": {
+            "contextsAllowed": ["argument"]
+        },
         "SameObject": {
             "contextsAllowed": ["attribute"],
             "standard": {
@@ -380,15 +408,14 @@
             "contextsAllowed": ["interface", "dictionary", "enum", "attribute", "operation", "constant"],
             "standard": {
                 "url": "https://heycam.github.io/webidl/#SecureContext"
-            },
-            "unsupported": true
+            }
         },
         "SetterCallWith": {
             "contextsAllowed": ["attribute"],
-            "values": ["ScriptExecutionContext", "ScriptState", "ScriptArguments", "CallStack", "GlobalObject", "ActiveWindow", "FirstWindow"]
+            "values": ["ScriptExecutionContext", "ScriptState", "GlobalObject", "ActiveWindow", "FirstWindow"]
         },
-        "SetterMayThrowException": {
-            "contextsAllowed": ["attribute"]
+        "SkipCallbackInvokeCheck": {
+            "contextsAllowed": ["operation", "callback-function"]
         },
         "SkipVTableValidation": {
             "contextsAllowed": ["interface"]

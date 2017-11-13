@@ -30,7 +30,6 @@
 #include "B3SparseCollection.h"
 #include "BasicBlockLocation.h"
 #include "CodeBlock.h"
-#include "DFGAbstractValue.h"
 #include "DFGAdjacencyList.h"
 #include "DFGArithMode.h"
 #include "DFGArrayMode.h"
@@ -53,7 +52,6 @@
 #include "Operands.h"
 #include "PutByIdVariant.h"
 #include "SpeculatedType.h"
-#include "StructureSet.h"
 #include "TypeLocation.h"
 #include "ValueProfile.h"
 #include <type_traits>
@@ -64,14 +62,15 @@ namespace JSC {
 
 namespace DOMJIT {
 class GetterSetter;
-class Patchpoint;
-class CallDOMGetterPatchpoint;
+class CallDOMGetterSnippet;
 class Signature;
 }
 
 namespace Profiler {
 class ExecutionCounter;
 }
+
+class Snippet;
 
 namespace DFG {
 
@@ -100,6 +99,7 @@ struct MultiPutByOffsetData {
 struct NewArrayBufferData {
     unsigned startConstant;
     unsigned numConstants;
+    unsigned vectorLengthHint;
     IndexingType indexingType;
 };
 
@@ -204,6 +204,10 @@ struct SwitchData {
     bool didUseJumpTable;
 };
 
+struct EntrySwitchData {
+    Vector<BasicBlock*> cases;
+};
+
 struct CallVarargsData {
     int firstVarArgOffset;
 };
@@ -238,9 +242,15 @@ struct StackAccessData {
 };
 
 struct CallDOMGetterData {
-    DOMJIT::GetterSetter* domJIT { nullptr };
-    DOMJIT::CallDOMGetterPatchpoint* patchpoint { nullptr };
+    PropertySlot::GetValueFunc customAccessorGetter { nullptr };
+    const DOMJIT::GetterSetter* domJIT { nullptr };
+    DOMJIT::CallDOMGetterSnippet* snippet { nullptr };
     unsigned identifierNumber { 0 };
+};
+
+enum class BucketOwnerType : uint32_t {
+    Map,
+    Set
 };
 
 // === Node ===
@@ -423,9 +433,15 @@ public:
         m_opInfo = set;
     }
 
+    void convertCheckStructureOrEmptyToCheckStructure()
+    {
+        ASSERT(op() == CheckStructureOrEmpty);
+        setOpAndDefaultFlags(CheckStructure);
+    }
+
     void convertToCheckStructureImmediate(Node* structure)
     {
-        ASSERT(op() == CheckStructure);
+        ASSERT(op() == CheckStructure || op() == CheckStructureOrEmpty);
         m_op = CheckStructureImmediate;
         children.setChild1(Edge(structure, CellUse));
     }
@@ -593,7 +609,7 @@ public:
 
     void convertToPhantomNewFunction()
     {
-        ASSERT(m_op == NewFunction || m_op == NewGeneratorFunction || m_op == NewAsyncFunction);
+        ASSERT(m_op == NewFunction || m_op == NewGeneratorFunction || m_op == NewAsyncFunction || m_op == NewAsyncGeneratorFunction);
         m_op = PhantomNewFunction;
         m_flags |= NodeMustGenerate;
         m_opInfo = OpInfoWrapper();
@@ -621,6 +637,16 @@ public:
         children = AdjacencyList();
     }
 
+    void convertToPhantomNewAsyncGeneratorFunction()
+    {
+        ASSERT(m_op == NewAsyncGeneratorFunction);
+        m_op = PhantomNewAsyncGeneratorFunction;
+        m_flags |= NodeMustGenerate;
+        m_opInfo = OpInfoWrapper();
+        m_opInfo2 = OpInfoWrapper();
+        children = AdjacencyList();
+    }
+    
     void convertToPhantomCreateActivation()
     {
         ASSERT(m_op == CreateActivation || m_op == MaterializeCreateActivation);
@@ -666,6 +692,31 @@ public:
     {
         ASSERT(m_op == ArithAbs && child1().useKind() == Int32Use);
         m_op = ArithNegate;
+    }
+
+    void convertToCompareEqPtr(FrozenValue* cell, Edge node)
+    {
+        ASSERT(m_op == CompareStrictEq);
+        setOpAndDefaultFlags(CompareEqPtr);
+        children.setChild1(node);
+        children.setChild2(Edge());
+        m_opInfo = cell;
+    }
+
+    void convertToNumberToStringWithValidRadixConstant(int32_t radix)
+    {
+        ASSERT(m_op == NumberToStringWithRadix);
+        ASSERT(2 <= radix && radix <= 36);
+        setOpAndDefaultFlags(NumberToStringWithValidRadixConstant);
+        children.setChild2(Edge());
+        m_opInfo = radix;
+    }
+
+    void convertToGetGlobalThis()
+    {
+        ASSERT(m_op == ToThis);
+        setOpAndDefaultFlags(GetGlobalThis);
+        children.setChild1(Edge());
     }
     
     void convertToDirectCall(FrozenValue*);
@@ -978,7 +1029,7 @@ public:
     unsigned getPutInfo()
     {
         ASSERT(hasGetPutInfo());
-        return m_opInfo2.as<unsigned>();
+        return static_cast<unsigned>(m_opInfo.as<uint64_t>() >> 32);
     }
 
     bool hasAccessorAttributes()
@@ -1064,6 +1115,11 @@ public:
     unsigned numConstants()
     {
         return newArrayBufferData()->numConstants;
+    }
+
+    unsigned vectorLengthHint()
+    {
+        return newArrayBufferData()->vectorLengthHint;
     }
     
     bool hasIndexingType()
@@ -1277,9 +1333,14 @@ public:
         return op() == Branch;
     }
     
-    bool isSwitch()
+    bool isSwitch() const
     {
         return op() == Switch;
+    }
+
+    bool isEntrySwitch() const
+    {
+        return op() == EntrySwitch;
     }
 
     bool isTerminal()
@@ -1288,12 +1349,15 @@ public:
         case Jump:
         case Branch:
         case Switch:
+        case EntrySwitch:
         case Return:
         case TailCall:
         case DirectTailCall:
         case TailCallVarargs:
         case TailCallForwardVarargs:
         case Unreachable:
+        case Throw:
+        case ThrowStaticError:
             return true;
         default:
             return false;
@@ -1306,6 +1370,22 @@ public:
             return true;
 
         return false;
+    }
+
+    // As is described in DFGNodeType.h's ForceOSRExit, this is a pseudo-terminal.
+    // It means that execution should fall out of DFG at this point, but execution
+    // does continue in the basic block - just in a different compiler.
+    // FIXME: This is used for lightweight reachability decision. But this should
+    // be replaced with AI-based reachability ideally.
+    bool isPseudoTerminal()
+    {
+        switch (op()) {
+        case ForceOSRExit:
+        case CheckBadCell:
+            return true;
+        default:
+            return false;
+        }
     }
 
     unsigned targetBytecodeOffsetDuringParsing()
@@ -1331,6 +1411,12 @@ public:
         ASSERT(isSwitch());
         return m_opInfo.as<SwitchData*>();
     }
+
+    EntrySwitchData* entrySwitchData()
+    {
+        ASSERT(isEntrySwitch());
+        return m_opInfo.as<EntrySwitchData*>();
+    }
     
     unsigned numSuccessors()
     {
@@ -1341,6 +1427,8 @@ public:
             return 2;
         case Switch:
             return switchData()->cases.size() + 1;
+        case EntrySwitch:
+            return entrySwitchData()->cases.size();
         default:
             return 0;
         }
@@ -1353,7 +1441,9 @@ public:
                 return switchData()->cases[index].target.block;
             RELEASE_ASSERT(index == switchData()->cases.size());
             return switchData()->fallThrough.block;
-        }
+        } else if (isEntrySwitch())
+            return entrySwitchData()->cases[index];
+
         switch (index) {
         case 0:
             if (isJump())
@@ -1487,7 +1577,8 @@ public:
         case StringReplace:
         case StringReplaceRegExp:
         case ToNumber:
-        case LoadFromJSMapBucket:
+        case LoadKeyFromMapBucket:
+        case LoadValueFromMapBucket:
         case CallDOMGetter:
         case CallDOM:
         case ParseInt:
@@ -1500,6 +1591,8 @@ public:
         case AtomicsStore:
         case AtomicsSub:
         case AtomicsXor:
+        case GetDynamicVar:
+        case WeakMapGet:
             return true;
         default:
             return false;
@@ -1517,6 +1610,24 @@ public:
         ASSERT(hasHeapPrediction());
         m_opInfo2 = prediction;
     }
+
+    SpeculatedType getForcedPrediction()
+    {
+        ASSERT(op() == IdentityWithProfile);
+        return m_opInfo.as<SpeculatedType>();
+    }
+
+    uint32_t catchOSREntryIndex() const
+    {
+        ASSERT(op() == ExtractCatchLocal);
+        return m_opInfo.as<uint32_t>();
+    }
+
+    SpeculatedType catchLocalPrediction()
+    {
+        ASSERT(op() == ExtractCatchLocal);
+        return m_opInfo2.as<SpeculatedType>();
+    }
     
     bool hasCellOperand()
     {
@@ -1526,6 +1637,7 @@ public:
         case NewFunction:
         case NewGeneratorFunction:
         case NewAsyncFunction:
+        case NewAsyncGeneratorFunction:
         case CreateActivation:
         case MaterializeCreateActivation:
         case NewRegexp:
@@ -1624,6 +1736,7 @@ public:
     {
         switch (op()) {
         case CheckStructure:
+        case CheckStructureOrEmpty:
         case CheckStructureImmediate:
         case MaterializeNewObject:
             return true;
@@ -1761,6 +1874,7 @@ public:
         switch (op()) {
         case NewFunction:
         case NewGeneratorFunction:
+        case NewAsyncGeneratorFunction:
         case NewAsyncFunction:
             return true;
         default:
@@ -1774,6 +1888,7 @@ public:
         case PhantomNewFunction:
         case PhantomNewGeneratorFunction:
         case PhantomNewAsyncFunction:
+        case PhantomNewAsyncGeneratorFunction:
             return true;
         default:
             return false;
@@ -1792,6 +1907,7 @@ public:
         case PhantomNewFunction:
         case PhantomNewGeneratorFunction:
         case PhantomNewAsyncFunction:
+        case PhantomNewAsyncGeneratorFunction:
         case PhantomCreateActivation:
             return true;
         default:
@@ -1804,6 +1920,7 @@ public:
         switch (op()) {
         case GetIndexedPropertyStorage:
         case GetArrayLength:
+        case GetVectorLength:
         case In:
         case PutByValDirect:
         case PutByVal:
@@ -1816,6 +1933,7 @@ public:
         case ArrayifyToStructure:
         case ArrayPush:
         case ArrayPop:
+        case ArrayIndexOf:
         case HasIndexedProperty:
         case AtomicsAdd:
         case AtomicsAnd:
@@ -1910,7 +2028,7 @@ public:
     {
         return m_virtualRegister.isValid();
     }
-    
+
     VirtualRegister virtualRegister()
     {
         ASSERT(hasResult());
@@ -1933,6 +2051,12 @@ public:
     Profiler::ExecutionCounter* executionCounter()
     {
         return m_opInfo.as<Profiler::ExecutionCounter*>();
+    }
+
+    unsigned entrypointIndex()
+    {
+        ASSERT(op() == InitializeEntrypointArguments);
+        return m_opInfo.as<unsigned>();
     }
 
     bool shouldGenerate()
@@ -2503,6 +2627,34 @@ public:
         return m_opInfo.as<unsigned>();
     }
 
+    bool hasBucketOwnerType()
+    {
+        return op() == GetMapBucketNext;
+    }
+
+    BucketOwnerType bucketOwnerType()
+    {
+        ASSERT(hasBucketOwnerType());
+        return m_opInfo.as<BucketOwnerType>();
+    }
+
+    bool hasValidRadixConstant()
+    {
+        return op() == NumberToStringWithValidRadixConstant;
+    }
+
+    int32_t validRadixConstant()
+    {
+        ASSERT(hasValidRadixConstant());
+        return m_opInfo.as<int32_t>();
+    }
+
+    uint32_t errorType()
+    {
+        ASSERT(op() == ThrowStaticError);
+        return m_opInfo.as<uint32_t>();
+    }
+
     void dumpChildren(PrintStream& out)
     {
         if (!child1())
@@ -2611,14 +2763,14 @@ private:
             return static_cast<T>(u.constPointer);
         }
         template <typename T>
-        ALWAYS_INLINE auto as() const -> typename std::enable_if<std::is_integral<T>::value && sizeof(T) == 4, T>::type
+        ALWAYS_INLINE auto as() const -> typename std::enable_if<(std::is_integral<T>::value || std::is_enum<T>::value) && sizeof(T) == 4, T>::type
         {
-            return u.int32;
+            return static_cast<T>(u.int32);
         }
         template <typename T>
-        ALWAYS_INLINE auto as() const -> typename std::enable_if<std::is_integral<T>::value && sizeof(T) == 8, T>::type
+        ALWAYS_INLINE auto as() const -> typename std::enable_if<(std::is_integral<T>::value || std::is_enum<T>::value) && sizeof(T) == 8, T>::type
         {
-            return u.int64;
+            return static_cast<T>(u.int64);
         }
         ALWAYS_INLINE RegisteredStructure asRegisteredStructure() const
         {

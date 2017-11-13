@@ -29,14 +29,15 @@
 #include "config.h"
 #include "ExceptionHelpers.h"
 
-#include "CodeBlock.h"
 #include "CallFrame.h"
+#include "CatchScope.h"
+#include "CodeBlock.h"
 #include "ErrorHandlingScope.h"
 #include "Exception.h"
-#include "JSGlobalObjectFunctions.h"
 #include "Interpreter.h"
-#include "Nodes.h"
 #include "JSCInlines.h"
+#include "JSGlobalObjectFunctions.h"
+#include "Nodes.h"
 #include "RuntimeType.h"
 #include <wtf/text/StringBuilder.h>
 #include <wtf/text/StringView.h>
@@ -69,13 +70,21 @@ bool isTerminatedExecutionException(VM& vm, Exception* exception)
 
 JSObject* createStackOverflowError(ExecState* exec)
 {
-    return createRangeError(exec, ASCIILiteral("Maximum call stack size exceeded."));
+    return createStackOverflowError(exec, exec->lexicalGlobalObject());
+}
+
+JSObject* createStackOverflowError(ExecState* exec, JSGlobalObject* globalObject)
+{
+    auto* error = createRangeError(exec, globalObject, ASCIILiteral("Maximum call stack size exceeded."));
+    jsCast<ErrorInstance*>(error)->setStackOverflowError();
+    return error;
 }
 
 JSObject* createUndefinedVariableError(ExecState* exec, const Identifier& ident)
 {
-    if (exec->propertyNames().isPrivateName(ident)) {
-        String message(makeString("Can't find private variable: @", exec->propertyNames().lookUpPublicName(ident).string()));
+    if (ident.isPrivateName()) {
+        VM& vm = exec->vm();
+        String message(makeString("Can't find private variable: @", vm.propertyNames->lookUpPublicName(ident).string()));
         return createReferenceError(exec, message);
     }
     String message(makeString("Can't find variable: ", ident.string()));
@@ -89,10 +98,11 @@ JSString* errorDescriptionForValue(ExecState* exec, JSValue v)
     if (v.isSymbol())
         return jsNontrivialString(exec, asSymbol(v)->descriptiveString());
     if (v.isObject()) {
+        VM& vm = exec->vm();
         CallData callData;
         JSObject* object = asObject(v);
-        if (object->methodTable()->getCallData(object, callData) != CallType::None)
-            return exec->vm().smallStrings.functionString();
+        if (object->methodTable(vm)->getCallData(object, callData) != CallType::None)
+            return vm.smallStrings.functionString();
         return jsString(exec, JSObject::calculatedClassName(object));
     }
     return v.toString(exec);

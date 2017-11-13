@@ -31,6 +31,7 @@
 
 #include "HTMLTrackElement.h"
 #include "TextTrackCueList.h"
+#include "VTTCue.h"
 #include "VTTRegionList.h"
 
 namespace WebCore {
@@ -47,6 +48,9 @@ void LoadableTextTrack::scheduleLoad(const URL& url)
 {
     if (url == m_url)
         return;
+
+    // When src attribute is changed we need to flush all collected track data
+    removeAllCues();
 
     // 4.8.10.12.3 Sourcing out-of-band text tracks (continued)
 
@@ -94,6 +98,7 @@ void LoadableTextTrack::newCuesAvailable(TextTrackLoader* loader)
 
     for (auto& newCue : newCues) {
         newCue->setTrack(this);
+        DEBUG_LOG(LOGIDENTIFIER, *toVTTCue(newCue.get()));
         m_cues->add(newCue.releaseNonNull());
     }
 
@@ -107,6 +112,8 @@ void LoadableTextTrack::cueLoadingCompleted(TextTrackLoader* loader, bool loadin
 
     if (!m_trackElement)
         return;
+
+    INFO_LOG(LOGIDENTIFIER);
 
     m_trackElement->didCompleteLoad(loadingFailed ? HTMLTrackElement::Failure : HTMLTrackElement::Success);
 }
@@ -127,7 +134,7 @@ void LoadableTextTrack::newRegionsAvailable(TextTrackLoader* loader)
 AtomicString LoadableTextTrack::id() const
 {
     if (!m_trackElement)
-        return emptyAtom;
+        return emptyAtom();
     return m_trackElement->attributeWithoutSynchronization(idAttr);
 }
 

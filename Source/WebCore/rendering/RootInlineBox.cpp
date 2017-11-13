@@ -43,7 +43,7 @@ namespace WebCore {
 
 struct SameSizeAsRootInlineBox : public InlineFlowBox {
     unsigned variables[7];
-    void* pointers[3];
+    void* pointers[4];
 };
 
 COMPILE_ASSERT(sizeof(RootInlineBox) == sizeof(SameSizeAsRootInlineBox), RootInlineBox_should_stay_small);
@@ -126,13 +126,9 @@ float RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,  bool ltr, f
     if (!gEllipsisBoxMap)
         gEllipsisBoxMap = new EllipsisBoxMap();
 
-    // Create an ellipsis box.
-    auto newEllipsisBox = std::make_unique<EllipsisBox>(blockFlow(), ellipsisStr, this, ellipsisWidth - (markupBox ? markupBox->logicalWidth() : 0), logicalHeight(), y(), !prevRootBox(), isHorizontal(), markupBox);
-    auto ellipsisBox = newEllipsisBox.get();
-
-    gEllipsisBoxMap->add(this, WTFMove(newEllipsisBox));
+    ASSERT(!hasEllipsisBox());
+    auto* ellipsisBox = gEllipsisBoxMap->set(this, std::make_unique<EllipsisBox>(blockFlow(), ellipsisStr, this, ellipsisWidth - (markupBox ? markupBox->logicalWidth() : 0), logicalHeight(), y(), !prevRootBox(), isHorizontal(), markupBox)).iterator->value.get();
     setHasEllipsisBox(true);
-
     // FIXME: Do we need an RTL version of this?
     if (ltr && (x() + logicalWidth() + ellipsisWidth) <= blockRightEdge) {
         ellipsisBox->setX(x() + logicalWidth());
@@ -140,7 +136,7 @@ float RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,  bool ltr, f
     }
 
     // Now attempt to find the nearest glyph horizontally and place just to the right (or left in RTL)
-    // of that glyph.  Mark all of the objects that intersect the ellipsis box as not painting (as being
+    // of that glyph. Mark all of the objects that intersect the ellipsis box as not painting (as being
     // truncated).
     bool foundBox = false;
     float truncatedWidth = 0;
@@ -168,15 +164,6 @@ void RootInlineBox::paintEllipsisBox(PaintInfo& paintInfo, const LayoutPoint& pa
 
 void RootInlineBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, LayoutUnit lineTop, LayoutUnit lineBottom)
 {
-    RenderNamedFlowFragment* namedFlowFragment = renderer().currentRenderNamedFlowFragment();
-
-    // Check if we are in the correct region.
-    if (namedFlowFragment) {
-        RenderRegion* region = containingRegion();
-        if (region && region != reinterpret_cast<RenderRegion*>(namedFlowFragment))
-            return;
-    }
-    
     InlineFlowBox::paint(paintInfo, paintOffset, lineTop, lineBottom);
     paintEllipsisBox(paintInfo, paintOffset, lineTop, lineBottom);
 }
@@ -288,8 +275,8 @@ LayoutUnit RootInlineBox::alignBoxesInBlockDirection(LayoutUnit heightOfBlock, G
     
     maxHeight = std::max<LayoutUnit>(0, maxHeight); // FIXME: Is this really necessary?
 
-    LayoutUnit lineTopWithLeading = !hasAnonymousInlineBlock() ? heightOfBlock : lineTop;
-    LayoutUnit lineBottomWithLeading = !hasAnonymousInlineBlock() ? heightOfBlock + maxHeight : lineBottom;
+    LayoutUnit lineTopWithLeading = heightOfBlock;
+    LayoutUnit lineBottomWithLeading = heightOfBlock + maxHeight;
     setLineTopBottomPositions(lineTop, lineBottom, lineTopWithLeading, lineBottomWithLeading);
     setPaginatedLineWidth(blockFlow().availableLogicalWidthForContent(heightOfBlock));
 
@@ -894,14 +881,6 @@ void RootInlineBox::ascentAndDescentForBox(InlineBox& box, GlyphOverflowAndFallb
     // Replaced boxes will return 0 for the line-height if line-box-contain says they are
     // not to be included.
     if (box.renderer().isReplaced()) {
-        if (hasAnonymousInlineBlock()) {
-            ascent = 0; // Margins exist "outside" the line, since they have to collapse.
-            descent = 0;
-            affectsAscent = true;
-            affectsDescent = true;
-            return;
-        }
-            
         if (lineStyle().lineBoxContain() & LineBoxContainReplaced) {
             ascent = box.baselinePosition(baselineType());
             descent = box.lineHeight() - ascent;
@@ -912,9 +891,6 @@ void RootInlineBox::ascentAndDescentForBox(InlineBox& box, GlyphOverflowAndFallb
         }
         return;
     }
-    
-    if (hasAnonymousInlineBlock())
-        return;
 
     Vector<const Font*>* usedFonts = nullptr;
     GlyphOverflow* glyphOverflow = nullptr;

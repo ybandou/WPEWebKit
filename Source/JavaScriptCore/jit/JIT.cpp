@@ -33,7 +33,7 @@
 #include "CodeBlock.h"
 #include "CodeBlockWithJITType.h"
 #include "DFGCapabilities.h"
-#include "Interpreter.h"
+#include "InterpreterInlines.h"
 #include "JITInlines.h"
 #include "JITOperations.h"
 #include "JSArray.h"
@@ -41,12 +41,14 @@
 #include "JSFunction.h"
 #include "LinkBuffer.h"
 #include "MaxFrameExtentForSlowPathCall.h"
+#include "ModuleProgramCodeBlock.h"
 #include "PCToCodeOriginMap.h"
 #include "ProfilerDatabase.h"
 #include "ProgramCodeBlock.h"
 #include "ResultType.h"
 #include "SlowPathCall.h"
 #include "StackAlignment.h"
+#include "ThunkGenerators.h"
 #include "TypeProfilerLog.h"
 #include <wtf/CryptographicallyRandomNumber.h>
 #include <wtf/GraphNodeWorklist.h>
@@ -87,7 +89,6 @@ JIT::JIT(VM* vm, CodeBlock* codeBlock, unsigned loopOSREntryBytecodeOffset)
     , m_putByIdIndex(UINT_MAX)
     , m_byValInstructionIndex(UINT_MAX)
     , m_callLinkInfoIndex(UINT_MAX)
-    , m_randomGenerator(cryptographicallyRandomNumber())
     , m_pcToCodeOriginMapBuilder(*vm)
     , m_canBeOptimized(false)
     , m_shouldEmitProfiling(false)
@@ -186,8 +187,9 @@ void JIT::privateCompileMainPass()
 
     m_callLinkInfoIndex = 0;
 
+    VM& vm = *m_codeBlock->vm();
     unsigned startBytecodeOffset = 0;
-    if (m_loopOSREntryBytecodeOffset && m_codeBlock->inherits(*m_codeBlock->vm(), ProgramCodeBlock::info())) {
+    if (m_loopOSREntryBytecodeOffset && (m_codeBlock->inherits(vm, ProgramCodeBlock::info()) || m_codeBlock->inherits(vm, ModuleProgramCodeBlock::info()))) {
         // We can only do this optimization because we execute ProgramCodeBlock's exactly once.
         // This optimization would be invalid otherwise. When the LLInt determines it wants to
         // do OSR entry into the baseline JIT in a loop, it will pass in the bytecode offset it
@@ -225,7 +227,7 @@ void JIT::privateCompileMainPass()
         if (m_disassembler)
             m_disassembler->setForBytecodeMainPath(m_bytecodeOffset, label());
         Instruction* currentInstruction = instructionsBegin + m_bytecodeOffset;
-        ASSERT_WITH_MESSAGE(m_interpreter->isOpcode(currentInstruction->u.opcode), "privateCompileMainPass gone bad @ %d", m_bytecodeOffset);
+        ASSERT_WITH_MESSAGE(Interpreter::isOpcode(currentInstruction->u.opcode), "privateCompileMainPass gone bad @ %d", m_bytecodeOffset);
 
         m_pcToCodeOriginMapBuilder.appendItem(label(), CodeOrigin(m_bytecodeOffset));
 
@@ -240,9 +242,9 @@ void JIT::privateCompileMainPass()
         dataLogF("Old JIT emitting code for bc#%u at offset 0x%lx.\n", m_bytecodeOffset, (long)debugOffset());
 #endif
         
-        OpcodeID opcodeID = m_interpreter->getOpcodeID(currentInstruction->u.opcode);
+        OpcodeID opcodeID = Interpreter::getOpcodeID(currentInstruction->u.opcode);
 
-        if (m_compilation) {
+        if (UNLIKELY(m_compilation)) {
             add64(
                 TrustedImm32(1),
                 AbsoluteAddress(m_compilation->executionCounterFor(Profiler::OriginStack(Profiler::Origin(
@@ -288,6 +290,8 @@ void JIT::privateCompileMainPass()
         DEFINE_OP(op_get_rest_length)
         DEFINE_OP(op_check_tdz)
         DEFINE_OP(op_assert)
+        DEFINE_OP(op_identity_with_profile)
+        DEFINE_OP(op_unreachable)
         DEFINE_OP(op_debug)
         DEFINE_OP(op_del_by_id)
         DEFINE_OP(op_del_by_val)
@@ -330,6 +334,7 @@ void JIT::privateCompileMainPass()
         DEFINE_OP(op_jtrue)
         DEFINE_OP(op_loop_hint)
         DEFINE_OP(op_check_traps)
+        DEFINE_OP(op_nop)
         DEFINE_OP(op_lshift)
         DEFINE_OP(op_mod)
         DEFINE_OP(op_mov)
@@ -348,6 +353,8 @@ void JIT::privateCompileMainPass()
         DEFINE_OP(op_new_generator_func_exp)
         DEFINE_OP(op_new_async_func)
         DEFINE_OP(op_new_async_func_exp)
+        DEFINE_OP(op_new_async_generator_func)
+        DEFINE_OP(op_new_async_generator_func_exp)
         DEFINE_OP(op_new_object)
         DEFINE_OP(op_new_regexp)
         DEFINE_OP(op_not)
@@ -472,7 +479,7 @@ void JIT::privateCompileSlowCases()
         if (m_disassembler)
             m_disassembler->setForBytecodeSlowPath(m_bytecodeOffset, label());
 
-        switch (m_interpreter->getOpcodeID(currentInstruction->u.opcode)) {
+        switch (Interpreter::getOpcodeID(currentInstruction->u.opcode)) {
         DEFINE_SLOWCASE_OP(op_add)
         DEFINE_SLOWCASE_OP(op_bitand)
         DEFINE_SLOWCASE_OP(op_bitor)
@@ -608,9 +615,9 @@ void JIT::compileWithoutLinking(JITCompilationEffort effort)
         break;
     }
 
-    if (Options::dumpDisassembly() || (m_vm->m_perBytecodeProfiler && Options::disassembleBaselineForProfiler()))
+    if (UNLIKELY(Options::dumpDisassembly() || (m_vm->m_perBytecodeProfiler && Options::disassembleBaselineForProfiler())))
         m_disassembler = std::make_unique<JITDisassembler>(m_codeBlock);
-    if (m_vm->m_perBytecodeProfiler) {
+    if (UNLIKELY(m_vm->m_perBytecodeProfiler)) {
         m_compilation = adoptRef(
             new Profiler::Compilation(
                 m_vm->m_perBytecodeProfiler->ensureBytecodesFor(m_codeBlock),
@@ -624,7 +631,7 @@ void JIT::compileWithoutLinking(JITCompilationEffort effort)
         m_disassembler->setStartOfCode(label());
 
     // Just add a little bit of randomness to the codegen
-    if (m_randomGenerator.getUint32() & 1)
+    if (random() & 1)
         nop();
 
     emitFunctionPrologue();
@@ -657,8 +664,13 @@ void JIT::compileWithoutLinking(JITCompilationEffort effort)
         }
     }
 
-    addPtr(TrustedImm32(stackPointerOffsetFor(m_codeBlock) * sizeof(Register)), callFrameRegister, regT1);
-    Jump stackOverflow = branchPtr(Above, AbsoluteAddress(m_vm->addressOfSoftStackLimit()), regT1);
+    int frameTopOffset = stackPointerOffsetFor(m_codeBlock) * sizeof(Register);
+    unsigned maxFrameSize = -frameTopOffset;
+    addPtr(TrustedImm32(frameTopOffset), callFrameRegister, regT1);
+    JumpList stackOverflow;
+    if (UNLIKELY(maxFrameSize > Options::reservedZoneSize()))
+        stackOverflow.append(branchPtr(Above, regT1, callFrameRegister));
+    stackOverflow.append(branchPtr(Above, AbsoluteAddress(m_vm->addressOfSoftStackLimit()), regT1));
 
     move(regT1, stackPointerRegister);
     checkStackPointerAlignment();
@@ -833,7 +845,7 @@ CompilationResult JIT::link()
         m_disassembler->dump(patchBuffer);
         patchBuffer.didAlreadyDisassemble();
     }
-    if (m_compilation) {
+    if (UNLIKELY(m_compilation)) {
         if (Options::disassembleBaselineForProfiler())
             m_disassembler->reportToProfiler(m_compilation.get(), patchBuffer);
         m_vm->m_perBytecodeProfiler->addCompilation(m_codeBlock, *m_compilation);

@@ -31,6 +31,7 @@
 #include "FontDescription.h"
 
 #include "LocaleToScriptMapping.h"
+#include <wtf/text/StringHash.h>
 
 namespace WebCore {
 
@@ -78,6 +79,7 @@ FontDescription::FontDescription()
     , m_variantEastAsianWidth(static_cast<unsigned>(FontVariantEastAsianWidth::Normal))
     , m_variantEastAsianRuby(static_cast<unsigned>(FontVariantEastAsianRuby::Normal))
     , m_opticalSizing(static_cast<unsigned>(FontOpticalSizing::Enabled))
+    , m_fontStyleAxis(FontCascadeDescription::initialFontStyleAxis() == FontStyleAxis::ital)
 {
 }
 
@@ -95,6 +97,22 @@ FontCascadeDescription::FontCascadeDescription()
     , m_isSpecifiedFont(false)
 {
 }
+
+#if !USE_PLATFORM_SYSTEM_FALLBACK_LIST
+void FontDescription::invalidateCaches()
+{
+}
+
+unsigned FontCascadeDescription::effectiveFamilyCount() const
+{
+    return familyCount();
+}
+
+FontFamilySpecification FontCascadeDescription::effectiveFamilyAt(unsigned i) const
+{
+    return familyAt(i);
+}
+#endif
 
 FontSelectionValue FontCascadeDescription::lighterWeight(FontSelectionValue weight)
 {
@@ -137,5 +155,32 @@ bool FontCascadeDescription::familiesEqualForTextAutoSizing(const FontCascadeDes
 }
 
 #endif // ENABLE(TEXT_AUTOSIZING)
+
+bool FontCascadeDescription::familyNamesAreEqual(const AtomicString& family1, const AtomicString& family2)
+{
+    // FIXME: <rdar://problem/33594253> CoreText matches dot-prefixed font names case sensitively. We should
+    // always take the case insensitive patch once this radar is fixed.
+    if (family1.startsWith('.'))
+        return StringHash::equal(family1.string(), family2.string());
+    return ASCIICaseInsensitiveHash::equal(family1, family2);
+}
+
+unsigned FontCascadeDescription::familyNameHash(const AtomicString& family)
+{
+    // FIXME: <rdar://problem/33594253> CoreText matches dot-prefixed font names case sensitively. We should
+    // always take the case insensitive patch once this radar is fixed.
+    if (family.startsWith('.'))
+        return StringHash::hash(family.string());
+    return ASCIICaseInsensitiveHash::hash(family);
+}
+
+String FontCascadeDescription::foldedFamilyName(const AtomicString& family)
+{
+    // FIXME: <rdar://problem/33594253> CoreText matches dot-prefixed font names case sensitively. We should
+    // always take the case insensitive patch once this radar is fixed.
+    if (family.startsWith('.'))
+        return family.string();
+    return family.string().foldCase();
+}
 
 } // namespace WebCore

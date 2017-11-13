@@ -44,13 +44,11 @@ static bool parseBooleanTestHeaderValue(const std::string& value)
 TestOptions::TestOptions(NSURL *testURL, const TestCommand& command)
 {
     std::string path = command.absolutePath;
-    if (path.empty() && [testURL isFileURL])
-        path = [testURL fileSystemRepresentation];
-    else
-        path = command.pathOrURL;
-
-    if (path.empty())
-        return;
+    if (path.empty()) {
+        path = [testURL isFileURL] ? [testURL fileSystemRepresentation] : command.pathOrURL;
+        if (path.empty())
+            return;
+    }
 
     std::string options;
     std::ifstream testFile(path.data());
@@ -80,7 +78,9 @@ TestOptions::TestOptions(NSURL *testURL, const TestCommand& command)
         }
         auto key = pairString.substr(pairStart, equalsLocation - pairStart);
         auto value = pairString.substr(equalsLocation + 1, pairEnd - (equalsLocation + 1));
-        if (key == "enableIntersectionObserver")
+        if (key == "enableAttachmentElement")
+            this->enableAttachmentElement = parseBooleanTestHeaderValue(value);
+        else if (key == "enableIntersectionObserver")
             this->enableIntersectionObserver = parseBooleanTestHeaderValue(value);
         else if (key == "enableModernMediaControls")
             this->enableModernMediaControls = parseBooleanTestHeaderValue(value);
@@ -90,6 +90,17 @@ TestOptions::TestOptions(NSURL *testURL, const TestCommand& command)
             this->enableCredentialManagement = parseBooleanTestHeaderValue(value);
         else if (key == "enableDragDestinationActionLoad")
             this->enableDragDestinationActionLoad = parseBooleanTestHeaderValue(value);
+        else if (key == "layerBackedWebView")
+            this->layerBackedWebView = parseBooleanTestHeaderValue(value);
+        else if (key == "enableIsSecureContextAttribute")
+            this->enableIsSecureContextAttribute = parseBooleanTestHeaderValue(value);
+        else if (key == "enableInspectorAdditions")
+            this->enableInspectorAdditions = parseBooleanTestHeaderValue(value);
         pairStart = pairEnd + 1;
     }
+}
+
+bool TestOptions::webViewIsCompatibleWithOptions(const TestOptions& other) const
+{
+    return other.layerBackedWebView == layerBackedWebView;
 }

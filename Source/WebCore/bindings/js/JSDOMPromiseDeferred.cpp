@@ -26,8 +26,7 @@
 #include "config.h"
 #include "JSDOMPromiseDeferred.h"
 
-#include "ExceptionCode.h"
-#include "JSDOMError.h"
+#include "DOMWindow.h"
 #include "JSDOMWindow.h"
 #include <builtins/BuiltinNames.h>
 #include <runtime/Exception.h>
@@ -63,9 +62,10 @@ void DeferredPromise::callFunction(ExecState& exec, JSValue function, JSValue re
 
     // DeferredPromise should only be used by internal implementations that are well behaved.
     // In practice, the only exception we should ever see here is the TerminatedExecutionException.
-    ASSERT_UNUSED(scope, !scope.exception() || isTerminatedExecutionException(vm, scope.exception()));
+    EXCEPTION_ASSERT_UNUSED(scope, !scope.exception() || isTerminatedExecutionException(vm, scope.exception()));
 
-    clear();
+    if (m_mode == Mode::ClearPromiseOnResolve)
+        clear();
 }
 
 void DeferredPromise::reject()
@@ -92,7 +92,7 @@ void DeferredPromise::reject(std::nullptr_t)
     reject(state, JSC::jsNull());
 }
 
-void DeferredPromise::reject(Exception&& exception)
+void DeferredPromise::reject(Exception exception)
 {
     if (isSuspended())
         return;
@@ -101,6 +101,18 @@ void DeferredPromise::reject(Exception&& exception)
     ASSERT(m_globalObject);
     auto& state = *m_globalObject->globalExec();
     JSC::JSLockHolder locker(&state);
+
+    if (exception.code() == ExistingExceptionError) {
+        auto scope = DECLARE_CATCH_SCOPE(state.vm());
+
+        EXCEPTION_ASSERT(scope.exception());
+
+        auto error = scope.exception()->value();
+        scope.clearException();
+
+        reject<IDLAny>(error);
+        return;
+    }
 
     auto scope = DECLARE_THROW_SCOPE(state.vm());
     auto error = createDOMException(state, WTFMove(exception));
@@ -121,6 +133,18 @@ void DeferredPromise::reject(ExceptionCode ec, const String& message)
     ASSERT(m_globalObject);
     auto& state = *m_globalObject->globalExec();
     JSC::JSLockHolder locker(&state);
+
+    if (ec == ExistingExceptionError) {
+        auto scope = DECLARE_CATCH_SCOPE(state.vm());
+
+        EXCEPTION_ASSERT(scope.exception());
+
+        auto error = scope.exception()->value();
+        scope.clearException();
+
+        reject<IDLAny>(error);
+        return;
+    }
 
     auto scope = DECLARE_THROW_SCOPE(state.vm());
     auto error = createDOMException(&state, ec, message);
@@ -196,7 +220,7 @@ void fulfillPromiseWithJSON(Ref<DeferredPromise>&& promise, const String& data)
 {
     JSC::JSValue value = parseAsJSON(promise->globalObject()->globalExec(), data);
     if (!value)
-        promise->reject(SYNTAX_ERR);
+        promise->reject(SyntaxError);
     else
         promise->resolve<IDLAny>(value);
 }

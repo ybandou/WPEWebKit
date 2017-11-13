@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011, 2013-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,7 +29,7 @@
 
 #include "DFGArithMode.h"
 #include "JITOperations.h"
-#include "PutKind.h"
+#include "TypedArrayType.h"
 
 namespace JSC { namespace DFG {
 
@@ -69,8 +69,10 @@ EncodedJSValue JIT_OPERATION operationArithCeil(ExecState*, EncodedJSValue) WTF_
 EncodedJSValue JIT_OPERATION operationArithTrunc(ExecState*, EncodedJSValue) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationGetByVal(ExecState*, EncodedJSValue encodedBase, EncodedJSValue encodedProperty) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationGetByValCell(ExecState*, JSCell*, EncodedJSValue encodedProperty) WTF_INTERNAL;
-EncodedJSValue JIT_OPERATION operationGetByValArrayInt(ExecState*, JSArray*, int32_t) WTF_INTERNAL;
+EncodedJSValue JIT_OPERATION operationGetByValObjectInt(ExecState*, JSObject*, int32_t) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationGetByValStringInt(ExecState*, JSString*, int32_t) WTF_INTERNAL;
+EncodedJSValue JIT_OPERATION operationGetByValObjectString(ExecState*, JSCell*, JSCell* string) WTF_INTERNAL;
+EncodedJSValue JIT_OPERATION operationGetByValObjectSymbol(ExecState*, JSCell*, JSCell* symbol) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationToPrimitive(ExecState*, EncodedJSValue) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationToNumber(ExecState*, EncodedJSValue) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationGetByIdWithThis(ExecState*, EncodedJSValue, EncodedJSValue, UniquedStringImpl*) WTF_INTERNAL;
@@ -79,6 +81,7 @@ char* JIT_OPERATION operationNewArray(ExecState*, Structure*, void*, size_t) WTF
 char* JIT_OPERATION operationNewArrayBuffer(ExecState*, Structure*, size_t, size_t) WTF_INTERNAL;
 char* JIT_OPERATION operationNewEmptyArray(ExecState*, Structure*) WTF_INTERNAL;
 char* JIT_OPERATION operationNewArrayWithSize(ExecState*, Structure*, int32_t, Butterfly*) WTF_INTERNAL;
+char* JIT_OPERATION operationNewArrayWithSizeAndHint(ExecState*, Structure*, int32_t, int32_t, Butterfly*) WTF_INTERNAL;
 char* JIT_OPERATION operationNewInt8ArrayWithSize(ExecState*, Structure*, int32_t, char*) WTF_INTERNAL;
 char* JIT_OPERATION operationNewInt8ArrayWithOneArgument(ExecState*, Structure*, EncodedJSValue) WTF_INTERNAL;
 char* JIT_OPERATION operationNewInt16ArrayWithSize(ExecState*, Structure*, int32_t, char*) WTF_INTERNAL;
@@ -101,6 +104,10 @@ void JIT_OPERATION operationPutByValStrict(ExecState*, EncodedJSValue encodedBas
 void JIT_OPERATION operationPutByValNonStrict(ExecState*, EncodedJSValue encodedBase, EncodedJSValue encodedProperty, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValCellStrict(ExecState*, JSCell*, EncodedJSValue encodedProperty, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValCellNonStrict(ExecState*, JSCell*, EncodedJSValue encodedProperty, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValCellStringStrict(ExecState*, JSCell*, JSCell* string, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValCellStringNonStrict(ExecState*, JSCell*, JSCell* string, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValCellSymbolStrict(ExecState*, JSCell*, JSCell* symbol, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValCellSymbolNonStrict(ExecState*, JSCell*, JSCell* symbol, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValBeyondArrayBoundsStrict(ExecState*, JSObject*, int32_t index, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValBeyondArrayBoundsNonStrict(ExecState*, JSObject*, int32_t index, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValDirectBeyondArrayBoundsNonStrict(ExecState*, JSObject*, int32_t index, EncodedJSValue encodedValue) WTF_INTERNAL;
@@ -108,6 +115,10 @@ void JIT_OPERATION operationPutByValDirectStrict(ExecState*, EncodedJSValue enco
 void JIT_OPERATION operationPutByValDirectNonStrict(ExecState*, EncodedJSValue encodedBase, EncodedJSValue encodedProperty, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValDirectCellStrict(ExecState*, JSCell*, EncodedJSValue encodedProperty, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValDirectCellNonStrict(ExecState*, JSCell*, EncodedJSValue encodedProperty, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValDirectCellStringStrict(ExecState*, JSCell*, JSCell* string, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValDirectCellStringNonStrict(ExecState*, JSCell*, JSCell* string, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValDirectCellSymbolStrict(ExecState*, JSCell*, JSCell* symbol, EncodedJSValue encodedValue) WTF_INTERNAL;
+void JIT_OPERATION operationPutByValDirectCellSymbolNonStrict(ExecState*, JSCell*, JSCell* symbol, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValDirectBeyondArrayBoundsStrict(ExecState*, JSObject*, int32_t index, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutByValDirectBeyondArrayBoundsNonStrict(ExecState*, JSObject*, int32_t index, EncodedJSValue encodedValue) WTF_INTERNAL;
 void JIT_OPERATION operationPutDoubleByValBeyondArrayBoundsStrict(ExecState*, JSObject*, int32_t index, double value) WTF_INTERNAL;
@@ -131,6 +142,7 @@ EncodedJSValue JIT_OPERATION operationArrayPopAndRecoverLength(ExecState*, JSArr
 EncodedJSValue JIT_OPERATION operationRegExpExecString(ExecState*, JSGlobalObject*, RegExpObject*, JSString*) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationRegExpExec(ExecState*, JSGlobalObject*, RegExpObject*, EncodedJSValue) WTF_INTERNAL;
 EncodedJSValue JIT_OPERATION operationRegExpExecGeneric(ExecState*, JSGlobalObject*, EncodedJSValue, EncodedJSValue) WTF_INTERNAL;
+EncodedJSValue JIT_OPERATION operationWeakMapGet(ExecState*, JSCell*, JSCell*, int32_t) WTF_INTERNAL;
 // These comparisons return a boolean within a size_t such that the value is zero extended to fill the register.
 size_t JIT_OPERATION operationRegExpTestString(ExecState*, JSGlobalObject*, RegExpObject*, JSString*) WTF_INTERNAL;
 size_t JIT_OPERATION operationRegExpTest(ExecState*, JSGlobalObject*, RegExpObject*, EncodedJSValue) WTF_INTERNAL;
@@ -202,8 +214,15 @@ void JIT_OPERATION operationNotifyWrite(ExecState*, WatchpointSet*);
 void JIT_OPERATION operationThrowStackOverflowForVarargs(ExecState*) WTF_INTERNAL;
 int32_t JIT_OPERATION operationSizeOfVarargs(ExecState*, EncodedJSValue arguments, int32_t firstVarArgOffset);
 void JIT_OPERATION operationLoadVarargs(ExecState*, int32_t firstElementDest, EncodedJSValue arguments, int32_t offset, int32_t length, int32_t mandatoryMinimum);
+void JIT_OPERATION operationThrowDFG(ExecState*, EncodedJSValue);
+void JIT_OPERATION operationThrowStaticError(ExecState*, JSString*, uint32_t);
 
 int32_t JIT_OPERATION operationHasOwnProperty(ExecState*, JSObject*, EncodedJSValue);
+
+int32_t JIT_OPERATION operationArrayIndexOfString(ExecState*, Butterfly*, JSString*, int32_t);
+int32_t JIT_OPERATION operationArrayIndexOfValue(ExecState*, Butterfly*, EncodedJSValue, int32_t);
+int32_t JIT_OPERATION operationArrayIndexOfValueDouble(ExecState*, Butterfly*, EncodedJSValue, int32_t);
+int32_t JIT_OPERATION operationArrayIndexOfValueInt32OrContiguous(ExecState*, Butterfly*, EncodedJSValue, int32_t);
 
 JSCell* JIT_OPERATION operationSpreadFastArray(ExecState*, JSCell*);
 JSCell* JIT_OPERATION operationSpreadGeneric(ExecState*, JSCell*);
@@ -224,8 +243,6 @@ JSCell* JIT_OPERATION operationNewObjectWithButterfly(ExecState*, Structure*, Bu
 JSCell* JIT_OPERATION operationNewObjectWithButterflyWithIndexingHeaderAndVectorLength(ExecState*, Structure*, unsigned length, Butterfly*) WTF_INTERNAL;
 
 void JIT_OPERATION operationProcessTypeProfilerLogDFG(ExecState*) WTF_INTERNAL;
-
-void JIT_OPERATION debugOperationPrintSpeculationFailure(ExecState*, void*, void*) WTF_INTERNAL;
 
 void JIT_OPERATION triggerReoptimizationNow(CodeBlock*, OSRExitBase*) WTF_INTERNAL;
 

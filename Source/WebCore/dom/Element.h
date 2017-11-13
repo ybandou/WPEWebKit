@@ -28,7 +28,6 @@
 #include "Document.h"
 #include "ElementData.h"
 #include "HTMLNames.h"
-#include "RegionOversetState.h"
 #include "ScrollToOptions.h"
 #include "ScrollTypes.h"
 #include "ShadowRootMode.h"
@@ -40,6 +39,7 @@ namespace WebCore {
 class CustomElementReactionQueue;
 class DatasetDOMStringMap;
 class DOMRect;
+class DOMRectList;
 class DOMTokenList;
 class ElementRareData;
 class HTMLDocument;
@@ -51,7 +51,6 @@ class PlatformKeyboardEvent;
 class PlatformMouseEvent;
 class PlatformWheelEvent;
 class PseudoElement;
-class RenderNamedFlowFragment;
 class RenderTreePosition;
 class WebAnimation;
 struct ElementStyle;
@@ -172,7 +171,9 @@ public:
 
     WEBCORE_EXPORT IntRect boundsInRootViewSpace();
 
-    Vector<Ref<DOMRect>> getClientRects();
+    FloatRect boundingClientRect();
+
+    WEBCORE_EXPORT Ref<DOMRectList> getClientRects();
     Ref<DOMRect> getBoundingClientRect();
 
     // Returns the absolute bounding box translated into client coordinates.
@@ -342,9 +343,6 @@ public:
     void setStyleIsAffectedByPreviousSibling() { setFlag(StyleIsAffectedByPreviousSibling); }
     void setChildIndex(unsigned);
 
-    void setRegionOversetState(RegionOversetState);
-    RegionOversetState regionOversetState() const;
-
     AtomicString computeInheritedLanguage() const;
     Locale& locale() const;
 
@@ -464,15 +462,6 @@ public:
 
     bool isSpellCheckingEnabled() const;
 
-    RenderNamedFlowFragment* renderNamedFlowFragment() const;
-
-#if ENABLE(CSS_REGIONS)
-    virtual bool shouldMoveToFlowThread(const RenderStyle&) const;
-    
-    WEBCORE_EXPORT const AtomicString& webkitRegionOverset() const;
-    Vector<RefPtr<Range>> webkitGetRegionFlowRanges() const;
-#endif
-
     bool hasID() const;
     bool hasClass() const;
     bool hasName() const;
@@ -503,6 +492,8 @@ public:
     virtual std::optional<ElementStyle> resolveCustomStyle(const RenderStyle& parentStyle, const RenderStyle* shadowHostStyle);
 
     LayoutRect absoluteEventHandlerBounds(bool& includesFixedPositionElements) override;
+
+    const RenderStyle* existingComputedStyle() const;
 
     void setBeforePseudoElement(Ref<PseudoElement>&&);
     void setAfterPseudoElement(Ref<PseudoElement>&&);
@@ -543,14 +534,10 @@ public:
     void invalidateStyleAndRenderersForSubtree();
 
     bool hasDisplayContents() const;
-    void setHasDisplayContents(bool);
+    void storeDisplayContentsStyle(std::unique_ptr<RenderStyle>);
 
     using ContainerNode::setAttributeEventListener;
     void setAttributeEventListener(const AtomicString& eventType, const QualifiedName& attributeName, const AtomicString& value);
-
-    bool isNamedFlowContentElement() const { return hasRareData() && rareDataIsNamedFlowContentElement(); }
-    void setIsNamedFlowContentElement();
-    void clearIsNamedFlowContentElement();
 
 #if ENABLE(WEB_ANIMATIONS)
     Vector<WebAnimation*> getAnimations();
@@ -566,7 +553,7 @@ protected:
     void childrenChanged(const ChildChange&) override;
     void removeAllEventListeners() final;
     virtual void parserDidSetAttributes();
-    void didMoveToNewDocument(Document&) override;
+    void didMoveToNewDocument(Document& oldDocument, Document& newDocument) override;
 
     void clearTabIndexExplicitlyIfNeeded();
     void setTabIndexExplicitly(int);
@@ -634,20 +621,17 @@ private:
     void formatForDebugger(char* buffer, unsigned length) const override;
 #endif
 
-    void cancelFocusAppearanceUpdate();
-
     // The cloneNode function is private so that non-virtual cloneElementWith/WithoutChildren are used instead.
     Ref<Node> cloneNodeInternal(Document&, CloningOperation) override;
     virtual Ref<Element> cloneElementWithoutAttributesAndChildren(Document&);
 
     void removeShadowRoot();
 
-    const RenderStyle* existingComputedStyle();
     const RenderStyle& resolveComputedStyle();
+    const RenderStyle& resolvePseudoElementStyle(PseudoId);
 
     bool rareDataStyleAffectedByEmpty() const;
     bool rareDataStyleAffectedByFocusWithin() const;
-    bool rareDataIsNamedFlowContentElement() const;
     bool rareDataChildrenAffectedByHover() const;
     bool rareDataStyleAffectedByActive() const;
     bool rareDataChildrenAffectedByDrag() const;
@@ -657,8 +641,6 @@ private:
     unsigned rareDataChildIndex() const;
 
     SpellcheckAttributeState spellcheckAttributeState() const;
-
-    void unregisterNamedFlowContentElement();
 
     void createUniqueElementData();
 
@@ -719,7 +701,7 @@ inline const AtomicString& Element::attributeWithoutSynchronization(const Qualif
         if (const Attribute* attribute = findAttributeByName(name))
             return attribute->value();
     }
-    return nullAtom;
+    return nullAtom();
 }
 
 inline bool Element::hasAttributesWithoutUpdate() const
@@ -729,21 +711,21 @@ inline bool Element::hasAttributesWithoutUpdate() const
 
 inline const AtomicString& Element::idForStyleResolution() const
 {
-    return hasID() ? elementData()->idForStyleResolution() : nullAtom;
+    return hasID() ? elementData()->idForStyleResolution() : nullAtom();
 }
 
 inline const AtomicString& Element::getIdAttribute() const
 {
     if (hasID())
         return elementData()->findAttributeByName(HTMLNames::idAttr)->value();
-    return nullAtom;
+    return nullAtom();
 }
 
 inline const AtomicString& Element::getNameAttribute() const
 {
     if (hasName())
         return elementData()->findAttributeByName(HTMLNames::nameAttr)->value();
-    return nullAtom;
+    return nullAtom();
 }
 
 inline void Element::setIdAttribute(const AtomicString& value)

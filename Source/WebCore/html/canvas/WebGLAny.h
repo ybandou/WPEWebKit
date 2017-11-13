@@ -57,6 +57,7 @@ using WebGLAny = Variant<
     float,
     String,
     Vector<bool>,
+    Vector<int>,
     RefPtr<Float32Array>,
     RefPtr<Int32Array>,
     RefPtr<Uint32Array>,
@@ -71,8 +72,6 @@ using WebGLAny = Variant<
     , RefPtr<WebGLVertexArrayObject>
 #endif
 >;
-
-JSC::JSValue convertToJSValue(JSC::ExecState&, JSDOMGlobalObject&, const WebGLAny&);
 
 } // namespace WebCore
 

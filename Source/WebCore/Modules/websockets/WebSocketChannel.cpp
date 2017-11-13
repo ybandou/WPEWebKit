@@ -29,9 +29,6 @@
  */
 
 #include "config.h"
-
-#if ENABLE(WEB_SOCKETS)
-
 #include "WebSocketChannel.h"
 
 #include "Blob.h"
@@ -123,7 +120,7 @@ void WebSocketChannel::connect(const URL& requestedURL, const String& protocol)
     if (Frame* frame = m_document->frame()) {
         ref();
         Page* page = frame->page();
-        SessionID sessionID = page ? page->sessionID() : SessionID::defaultSessionID();
+        PAL::SessionID sessionID = page ? page->sessionID() : PAL::SessionID::defaultSessionID();
         String partition = m_document->topDocument().securityOrigin().domainForCachePartition();
         m_handle = m_socketProvider->createSocketStreamHandle(m_handshake->url(), *this, sessionID, partition);
     }
@@ -418,7 +415,7 @@ void WebSocketChannel::skipBuffer(size_t len)
 {
     ASSERT_WITH_SECURITY_IMPLICATION(len <= m_buffer.size());
     memmove(m_buffer.data(), m_buffer.data() + len, m_buffer.size() - len);
-    m_buffer.resize(m_buffer.size() - len);
+    m_buffer.shrink(m_buffer.size() - len);
 }
 
 bool WebSocketChannel::processBuffer()
@@ -495,7 +492,8 @@ void WebSocketChannel::startClosingHandshake(int code, const String& reason)
         unsigned char lowByte = code;
         buf.append(static_cast<char>(highByte));
         buf.append(static_cast<char>(lowByte));
-        buf.append(reason.utf8().data(), reason.utf8().length());
+        auto reasonUTF8 = reason.utf8();
+        buf.append(reasonUTF8.data(), reasonUTF8.length());
     }
     enqueueRawFrame(WebSocketFrame::OpCodeClose, buf.data(), buf.size());
     Ref<WebSocketChannel> protectedThis(*this); // An attempt to send closing handshake may fail, which will get the channel closed and dereferenced.
@@ -811,7 +809,7 @@ void WebSocketChannel::abortOutgoingFrameQueue()
     }
 }
 
-void WebSocketChannel::sendFrame(WebSocketFrame::OpCode opCode, const char* data, size_t dataLength, Function<void(bool)> completionHandler)
+void WebSocketChannel::sendFrame(WebSocketFrame::OpCode opCode, const char* data, size_t dataLength, WTF::Function<void(bool)> completionHandler)
 {
     ASSERT(m_handle);
     ASSERT(!m_suspended);
@@ -831,6 +829,19 @@ void WebSocketChannel::sendFrame(WebSocketFrame::OpCode opCode, const char* data
     m_handle->sendData(frameData.data(), frameData.size(), WTFMove(completionHandler));
 }
 
-}  // namespace WebCore
+ResourceRequest WebSocketChannel::clientHandshakeRequest()
+{
+    return m_handshake->clientHandshakeRequest();
+}
 
-#endif  // ENABLE(WEB_SOCKETS)
+const ResourceResponse& WebSocketChannel::serverHandshakeResponse() const
+{
+    return m_handshake->serverHandshakeResponse();
+}
+
+WebSocketHandshake::Mode WebSocketChannel::handshakeMode() const
+{
+    return m_handshake->mode();
+}
+
+} // namespace WebCore

@@ -32,10 +32,8 @@
 #include "FrameLoaderTypes.h"
 #include "LayoutMilestones.h"
 #include "LinkIcon.h"
-#include "ResourceLoadPriority.h"
 #include <functional>
 #include <wtf/Forward.h>
-#include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
 #if ENABLE(CONTENT_FILTERING)
@@ -57,6 +55,10 @@ OBJC_CLASS NSCachedURLResponse;
 OBJC_CLASS NSDictionary;
 OBJC_CLASS NSView;
 #endif
+
+namespace PAL {
+class SessionID;
+}
 
 namespace WebCore {
 
@@ -82,7 +84,6 @@ class MessageEvent;
 class NavigationAction;
 class Page;
 class PluginViewBase;
-class PolicyChecker;
 class PreviewLoaderClient;
 class ProtectionSpace;
 class RTCPeerConnectionHandler;
@@ -91,7 +92,6 @@ class ResourceHandle;
 class ResourceRequest;
 class ResourceResponse;
 class SecurityOrigin;
-class SessionID;
 class SharedBuffer;
 class SubstituteData;
 class URL;
@@ -99,7 +99,7 @@ class Widget;
 
 struct StringWithDirection;
 
-typedef std::function<void (PolicyAction)> FramePolicyFunction;
+typedef WTF::Function<void (PolicyAction)> FramePolicyFunction;
 
 class WEBCORE_EXPORT FrameLoaderClient {
 public:
@@ -152,13 +152,14 @@ public:
     virtual void dispatchDidChangeProvisionalURL() { }
     virtual void dispatchDidCancelClientRedirect() = 0;
     virtual void dispatchWillPerformClientRedirect(const URL&, double interval, double fireDate) = 0;
+    virtual void dispatchDidChangeMainDocument() { }
     virtual void dispatchDidNavigateWithinPage() { }
     virtual void dispatchDidChangeLocationWithinPage() = 0;
     virtual void dispatchDidPushStateWithinPage() = 0;
     virtual void dispatchDidReplaceStateWithinPage() = 0;
     virtual void dispatchDidPopStateWithinPage() = 0;
     virtual void dispatchWillClose() = 0;
-    virtual void dispatchDidReceiveIcon() = 0;
+    virtual void dispatchDidReceiveIcon() { }
     virtual void dispatchDidStartProvisionalLoad() = 0;
     virtual void dispatchDidReceiveTitle(const StringWithDirection&) = 0;
     virtual void dispatchDidCommitLoad(std::optional<HasInsecureContent>) = 0;
@@ -176,15 +177,15 @@ public:
     virtual Frame* dispatchCreatePage(const NavigationAction&) = 0;
     virtual void dispatchShow() = 0;
 
-    virtual void dispatchDecidePolicyForResponse(const ResourceResponse&, const ResourceRequest&, FramePolicyFunction) = 0;
-    virtual void dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String& frameName, FramePolicyFunction) = 0;
-    virtual void dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, FormState*, FramePolicyFunction) = 0;
+    virtual void dispatchDecidePolicyForResponse(const ResourceResponse&, const ResourceRequest&, FramePolicyFunction&&) = 0;
+    virtual void dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String& frameName, FramePolicyFunction&&) = 0;
+    virtual void dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, bool didReceiveRedirectResponse, FormState*, FramePolicyFunction&&) = 0;
     virtual void cancelPolicyCheck() = 0;
 
     virtual void dispatchUnableToImplementPolicy(const ResourceError&) = 0;
 
     virtual void dispatchWillSendSubmitEvent(Ref<FormState>&&) = 0;
-    virtual void dispatchWillSubmitForm(FormState&, FramePolicyFunction) = 0;
+    virtual void dispatchWillSubmitForm(FormState&, WTF::Function<void(void)>&&) = 0;
 
     virtual void revertToProvisionalState(DocumentLoader*) = 0;
     virtual void setMainDocumentError(DocumentLoader*, const ResourceError&) = 0;
@@ -272,7 +273,7 @@ public:
     virtual void dispatchDidBecomeFrameset(bool) = 0; // Can change due to navigation or DOM modification.
 
     virtual bool canCachePage() const = 0;
-    virtual void convertMainResourceLoadToDownload(DocumentLoader*, SessionID, const ResourceRequest&, const ResourceResponse&) = 0;
+    virtual void convertMainResourceLoadToDownload(DocumentLoader*, PAL::SessionID, const ResourceRequest&, const ResourceResponse&) = 0;
 
     virtual RefPtr<Frame> createFrame(const URL&, const String& name, HTMLFrameOwnerElement&, const String& referrer, bool allowsScrolling, int marginWidth, int marginHeight) = 0;
     virtual RefPtr<Widget> createPlugin(const IntSize&, HTMLPlugInElement&, const URL&, const Vector<String>&, const Vector<String>&, const String&, bool loadManually) = 0;
@@ -286,7 +287,7 @@ public:
 
     virtual void dispatchDidClearWindowObjectInWorld(DOMWrapperWorld&) = 0;
 
-    virtual void registerForIconNotification(bool listen = true) = 0;
+    virtual void registerForIconNotification() { }
 
 #if PLATFORM(COCOA)
     // Allow an accessibility object to retrieve a Frame parent if there's no PlatformWidget.
@@ -312,10 +313,6 @@ public:
 
     virtual Ref<FrameNetworkingContext> createNetworkingContext() = 0;
 
-#if ENABLE(REQUEST_AUTOCOMPLETE)
-    virtual void didRequestAutocomplete(Ref<FormState>&&) = 0;
-#endif
-
     virtual bool shouldPaintBrokenImage(const URL&) const { return true; }
 
     virtual void dispatchGlobalObjectAvailable(DOMWrapperWorld&) { }
@@ -332,8 +329,8 @@ public:
     // Informs the embedder that a WebGL canvas inside this frame received a lost context
     // notification with the given GL_ARB_robustness guilt/innocence code (see Extensions3D.h).
     virtual void didLoseWebGLContext(int) { }
-    virtual WebGLLoadPolicy webGLPolicyForURL(const String&) const { return WebGLAllowCreation; }
-    virtual WebGLLoadPolicy resolveWebGLPolicyForURL(const String&) const { return WebGLAllowCreation; }
+    virtual WebGLLoadPolicy webGLPolicyForURL(const URL&) const { return WebGLAllowCreation; }
+    virtual WebGLLoadPolicy resolveWebGLPolicyForURL(const URL&) const { return WebGLAllowCreation; }
 #endif
 
     virtual void forcePageTransitionIfNeeded() { }
@@ -353,8 +350,7 @@ public:
 
     virtual void didRestoreScrollPosition() { }
 
-    virtual bool useIconLoadingClient() { return false; }
-    virtual void getLoadDecisionForIcon(const LinkIcon&, uint64_t) { }
+    virtual void getLoadDecisionForIcons(const Vector<std::pair<WebCore::LinkIcon&, uint64_t>>&) { }
     virtual void finishedLoadingIcon(uint64_t, SharedBuffer*) { }
 };
 

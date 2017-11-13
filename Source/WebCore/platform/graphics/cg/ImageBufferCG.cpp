@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Nikolas Zimmermann <zimmermann@kde.org>
- * Copyright (C) 2008, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2008-2017 Apple Inc. All rights reserved.
  * Copyright (C) 2010 Torch Mobile (Beijing) Co. Ltd. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,12 +47,13 @@
 #include <wtf/text/WTFString.h>
 
 #if PLATFORM(COCOA)
+#include "UTIUtilities.h"
 #include "WebCoreSystemInterface.h"
 #endif
 
 #if USE(IOSURFACE_CANVAS_BACKING_STORE)
 #include "IOSurface.h"
-#include "IOSurfaceSPI.h"
+#include <pal/spi/cocoa/IOSurfaceSPI.h>
 #endif
 
 // CA uses ARGB32 for textures and ARGB32 -> ARGB32 resampling is optimized.
@@ -107,7 +108,7 @@ std::unique_ptr<ImageBuffer> ImageBuffer::createCompatibleBuffer(const FloatSize
         return nullptr;
 
     // Set up a corresponding scale factor on the graphics context.
-    buffer->context().scale(FloatSize(scaledSize.width() / size.width(), scaledSize.height() / size.height()));
+    buffer->context().scale(scaledSize / size);
     return buffer;
 }
 
@@ -212,6 +213,10 @@ FloatSize ImageBuffer::sizeForDestinationSize(FloatSize destinationSize) const
 #if USE(IOSURFACE_CANVAS_BACKING_STORE)
 size_t ImageBuffer::memoryCost() const
 {
+    // memoryCost() may be invoked concurrently from a GC thread, and we need to be careful about what data we access here and how.
+    // It's safe to access internalSize() because it doesn't do any pointer chasing.
+    // It's safe to access m_data.surface because the surface can only be assigned during construction of this ImageBuffer.
+    // It's safe to access m_data.surface->totalBytes() because totalBytes() doesn't chase pointers.
     if (m_data.surface)
         return m_data.surface->totalBytes();
     return 4 * internalSize().width() * internalSize().height();
@@ -219,6 +224,9 @@ size_t ImageBuffer::memoryCost() const
 
 size_t ImageBuffer::externalMemoryCost() const
 {
+    // externalMemoryCost() may be invoked concurrently from a GC thread, and we need to be careful about what data we access here and how.
+    // It's safe to access m_data.surface because the surface can only be assigned during construction of this ImageBuffer.
+    // It's safe to access m_data.surface->totalBytes() because totalBytes() doesn't chase pointers.
     if (m_data.surface)
         return m_data.surface->totalBytes();
     return 0;
@@ -440,10 +448,11 @@ static inline CFStringRef jpegUTI()
     return kUTTypeJPEG;
 }
     
-static RetainPtr<CFStringRef> utiFromMIMEType(const String& mimeType)
+static RetainPtr<CFStringRef> utiFromImageBufferMIMEType(const String& mimeType)
 {
+    // FIXME: Why doesn't iOS use the CoreServices version?
 #if PLATFORM(MAC)
-    return adoptCF(UTTypeCreatePreferredIdentifierForTag(kUTTagClassMIMEType, mimeType.createCFString().get(), 0));
+    return UTIFromMIMEType(mimeType).createCFString();
 #else
     ASSERT(isMainThread()); // It is unclear if CFSTR is threadsafe.
 
@@ -525,7 +534,7 @@ RetainPtr<CFDataRef> ImageBuffer::toCFData(const String& mimeType, std::optional
     if (context().isAcceleratedContext())
         flushContext();
 
-    auto uti = utiFromMIMEType(mimeType);
+    auto uti = utiFromImageBufferMIMEType(mimeType);
     ASSERT(uti);
 
     RetainPtr<CGImageRef> image;
@@ -567,7 +576,7 @@ static RetainPtr<CFDataRef> cfData(const ImageData& source, const String& mimeTy
 {
     ASSERT(MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(mimeType));
 
-    auto uti = utiFromMIMEType(mimeType);
+    auto uti = utiFromImageBufferMIMEType(mimeType);
     ASSERT(uti);
 
     CGImageAlphaInfo dataAlphaInfo = kCGImageAlphaLast;
@@ -580,7 +589,7 @@ static RetainPtr<CFDataRef> cfData(const ImageData& source, const String& mimeTy
         if (!premultipliedData.tryReserveCapacity(size))
             return nullptr;
 
-        premultipliedData.resize(size);
+        premultipliedData.grow(size);
         unsigned char *buffer = premultipliedData.data();
         for (size_t i = 0; i < size; i += 4) {
             unsigned alpha = data[i + 3];

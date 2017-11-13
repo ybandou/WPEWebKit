@@ -30,10 +30,9 @@
 
 #include "FloatRect.h"
 #include "WindRule.h"
-#include <functional>
 #include <wtf/FastMalloc.h>
+#include <wtf/Function.h>
 #include <wtf/Forward.h>
-#include <wtf/Vector.h>
 
 #if USE(CG)
 
@@ -73,6 +72,10 @@ typedef void PlatformPath;
 
 typedef PlatformPath* PlatformPathPtr;
 
+namespace WTF {
+class TextStream;
+}
+
 namespace WebCore {
 
     class AffineTransform;
@@ -83,7 +86,6 @@ namespace WebCore {
     class PathTraversalState;
     class RoundedRect;
     class StrokeStyleApplier;
-    class TextStream;
 
     enum PathElementType {
         PathElementMoveToPoint, // The points member will contain 1 value.
@@ -101,7 +103,7 @@ namespace WebCore {
         FloatPoint* points;
     };
 
-    typedef std::function<void (const PathElement&)> PathApplierFunction;
+    using PathApplierFunction = WTF::Function<void (const PathElement&)>;
 
     class Path {
         WTF_MAKE_FAST_ALLOCATED;
@@ -212,7 +214,7 @@ namespace WebCore {
 #endif
     };
 
-TextStream& operator<<(TextStream&, const Path&);
+WTF::TextStream& operator<<(WTF::TextStream&, const Path&);
 
 }
 

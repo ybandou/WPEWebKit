@@ -73,6 +73,7 @@ public:
     void displayAndTrackRepaints();
     void execCommand(JSStringRef name, JSStringRef value);
     bool findString(JSContextRef, JSStringRef, JSObjectRef optionsArray);
+    void forceImmediateCompletion();
     void goBack();
     JSValueRef originsWithApplicationCache(JSContextRef);
     long long applicationCacheDiskUsageForOrigin(JSStringRef name);
@@ -120,7 +121,6 @@ public:
     void setUserStyleSheetEnabled(bool flag);
     void setUserStyleSheetLocation(JSStringRef path);
     void setValueForUser(JSContextRef, JSValueRef nodeObject, JSStringRef value);
-    void setViewModeMediaFeature(JSStringRef);
     void setXSSAuditorEnabled(bool flag);
     void setSpatialNavigationEnabled(bool);
     void setScrollbarPolicy(JSStringRef orientation, JSStringRef policy);

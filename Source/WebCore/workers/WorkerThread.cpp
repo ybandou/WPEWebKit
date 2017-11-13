@@ -72,7 +72,7 @@ unsigned WorkerThread::workerThreadCount()
 struct WorkerThreadStartupData {
     WTF_MAKE_NONCOPYABLE(WorkerThreadStartupData); WTF_MAKE_FAST_ALLOCATED;
 public:
-    WorkerThreadStartupData(const URL& scriptURL, const String& identifier, const String& userAgent, const String& sourceCode, WorkerThreadStartMode, const ContentSecurityPolicyResponseHeaders&, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin);
+    WorkerThreadStartupData(const URL& scriptURL, const String& identifier, const String& userAgent, const String& sourceCode, WorkerThreadStartMode, const ContentSecurityPolicyResponseHeaders&, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin, PAL::SessionID);
 
     URL m_scriptURL;
     String m_identifier;
@@ -83,9 +83,10 @@ public:
     bool m_shouldBypassMainWorldContentSecurityPolicy;
     Ref<SecurityOrigin> m_topOrigin;
     MonotonicTime m_timeOrigin;
+    PAL::SessionID m_sessionID;
 };
 
-WorkerThreadStartupData::WorkerThreadStartupData(const URL& scriptURL, const String& identifier, const String& userAgent, const String& sourceCode, WorkerThreadStartMode startMode, const ContentSecurityPolicyResponseHeaders& contentSecurityPolicyResponseHeaders, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin)
+WorkerThreadStartupData::WorkerThreadStartupData(const URL& scriptURL, const String& identifier, const String& userAgent, const String& sourceCode, WorkerThreadStartMode startMode, const ContentSecurityPolicyResponseHeaders& contentSecurityPolicyResponseHeaders, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin, PAL::SessionID sessionID)
     : m_scriptURL(scriptURL.isolatedCopy())
     , m_identifier(identifier.isolatedCopy())
     , m_userAgent(userAgent.isolatedCopy())
@@ -95,26 +96,22 @@ WorkerThreadStartupData::WorkerThreadStartupData(const URL& scriptURL, const Str
     , m_shouldBypassMainWorldContentSecurityPolicy(shouldBypassMainWorldContentSecurityPolicy)
     , m_topOrigin(topOrigin.isolatedCopy())
     , m_timeOrigin(timeOrigin)
+    , m_sessionID(sessionID.isolatedCopy())
 {
 }
 
-WorkerThread::WorkerThread(const URL& scriptURL, const String& identifier, const String& userAgent, const String& sourceCode, WorkerLoaderProxy& workerLoaderProxy, WorkerReportingProxy& workerReportingProxy, WorkerThreadStartMode startMode, const ContentSecurityPolicyResponseHeaders& contentSecurityPolicyResponseHeaders, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin, IDBClient::IDBConnectionProxy* connectionProxy, SocketProvider* socketProvider, JSC::RuntimeFlags runtimeFlags)
+WorkerThread::WorkerThread(const URL& scriptURL, const String& identifier, const String& userAgent, const String& sourceCode, WorkerLoaderProxy& workerLoaderProxy, WorkerReportingProxy& workerReportingProxy, WorkerThreadStartMode startMode, const ContentSecurityPolicyResponseHeaders& contentSecurityPolicyResponseHeaders, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin, IDBClient::IDBConnectionProxy* connectionProxy, SocketProvider* socketProvider, JSC::RuntimeFlags runtimeFlags, PAL::SessionID sessionID)
     : m_workerLoaderProxy(workerLoaderProxy)
     , m_workerReportingProxy(workerReportingProxy)
     , m_runtimeFlags(runtimeFlags)
-    , m_startupData(std::make_unique<WorkerThreadStartupData>(scriptURL, identifier, userAgent, sourceCode, startMode, contentSecurityPolicyResponseHeaders, shouldBypassMainWorldContentSecurityPolicy, topOrigin, timeOrigin))
+    , m_startupData(std::make_unique<WorkerThreadStartupData>(scriptURL, identifier, userAgent, sourceCode, startMode, contentSecurityPolicyResponseHeaders, shouldBypassMainWorldContentSecurityPolicy, topOrigin, timeOrigin, sessionID))
 #if ENABLE(INDEXED_DATABASE)
     , m_idbConnectionProxy(connectionProxy)
 #endif
-#if ENABLE(WEB_SOCKETS)
     , m_socketProvider(socketProvider)
-#endif
 {
 #if !ENABLE(INDEXED_DATABASE)
     UNUSED_PARAM(connectionProxy);
-#endif
-#if !ENABLE(WEB_SOCKETS)
-    UNUSED_PARAM(socketProvider);
 #endif
 
     std::lock_guard<StaticLock> lock(threadSetMutex);
@@ -138,14 +135,11 @@ bool WorkerThread::start()
     if (m_thread)
         return true;
 
-    m_thread = Thread::create(WorkerThread::workerThreadStart, this, "WebCore: Worker");
+    m_thread = Thread::create("WebCore: Worker", [this] {
+        workerThread();
+    });
 
     return m_thread;
-}
-
-void WorkerThread::workerThreadStart(void* thread)
-{
-    static_cast<WorkerThread*>(thread)->workerThread();
 }
 
 void WorkerThread::workerThread()
@@ -166,7 +160,7 @@ void WorkerThread::workerThread()
         // while WorkerThread::stop() is accessing it. Note that WorkerThread::stop() can
         // be called before we've finished creating the WorkerGlobalScope.
         LockHolder lock(m_threadCreationAndWorkerGlobalScopeMutex);
-        m_workerGlobalScope = createWorkerGlobalScope(m_startupData->m_scriptURL, m_startupData->m_identifier, m_startupData->m_userAgent, m_startupData->m_contentSecurityPolicyResponseHeaders, m_startupData->m_shouldBypassMainWorldContentSecurityPolicy, WTFMove(m_startupData->m_topOrigin), m_startupData->m_timeOrigin);
+        m_workerGlobalScope = createWorkerGlobalScope(m_startupData->m_scriptURL, m_startupData->m_identifier, m_startupData->m_userAgent, m_startupData->m_contentSecurityPolicyResponseHeaders, m_startupData->m_shouldBypassMainWorldContentSecurityPolicy, WTFMove(m_startupData->m_topOrigin), m_startupData->m_timeOrigin, m_startupData->m_sessionID);
 
         scriptController = m_workerGlobalScope->script();
 
@@ -219,7 +213,7 @@ void WorkerThread::workerThread()
     // We cannot let any objects survive past thread exit, because no other thread will run GC or otherwise destroy them.
     workerGlobalScopeToDelete = nullptr;
 
-    // Clean up WebCore::ThreadGlobalData before WTF::WTFThreadData goes away!
+    // Clean up WebCore::ThreadGlobalData before WTF::Thread goes away!
     threadGlobalData().destroy();
 
     // The thread object may be already destroyed from notification now, don't try to access "this".
@@ -310,11 +304,7 @@ IDBClient::IDBConnectionProxy* WorkerThread::idbConnectionProxy()
 
 SocketProvider* WorkerThread::socketProvider()
 {
-#if ENABLE(WEB_SOCKETS)
     return m_socketProvider.get();
-#else
-    return nullptr;
-#endif
 }
 
 } // namespace WebCore

@@ -318,6 +318,10 @@ void UIScriptController::keyboardAccessoryBarPrevious()
 {
 }
 
+void UIScriptController::applyAutocorrection(JSStringRef, JSStringRef, JSValueRef)
+{
+}
+
 double UIScriptController::zoomScale() const
 {
     return 1;
@@ -457,7 +461,7 @@ void UIScriptController::overridePreference(JSStringRef, JSStringRef)
 {
 }
 
-void UIScriptController::insertText(JSStringRef, int, int)
+void UIScriptController::replaceTextAtRange(JSStringRef, int, int)
 {
 }
 

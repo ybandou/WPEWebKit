@@ -42,9 +42,9 @@
 #include <wtf/win/GDIObject.h>
 
 #if USE(CG)
-#include "CoreGraphicsSPI.h"
 #include <ApplicationServices/ApplicationServices.h>
 #include <WebKitSystemInterface/WebKitSystemInterface.h>
+#include <pal/spi/cg/CoreGraphicsSPI.h>
 #endif
 
 #if USE(DIRECT2D)
@@ -137,12 +137,12 @@ static const Vector<String>* getLinkedFonts(String& family)
         return result;
     }
 
-    WCHAR* linkedFonts = reinterpret_cast<WCHAR*>(malloc(linkedFontsBufferSize));
-    if (::RegQueryValueEx(fontLinkKey, family.charactersWithNullTermination().data(), 0, nullptr, reinterpret_cast<BYTE*>(linkedFonts), &linkedFontsBufferSize) == ERROR_SUCCESS) {
-        unsigned length = linkedFontsBufferSize / sizeof(*linkedFonts);
-        appendLinkedFonts(linkedFonts, length, result);
+    static const constexpr unsigned InitialBufferSize { 256 / sizeof(WCHAR) };
+    Vector<WCHAR, InitialBufferSize> linkedFonts(roundUpToMultipleOf<sizeof(WCHAR)>(linkedFontsBufferSize) / sizeof(WCHAR));
+    if (::RegQueryValueEx(fontLinkKey, family.charactersWithNullTermination().data(), 0, nullptr, reinterpret_cast<BYTE*>(linkedFonts.data()), &linkedFontsBufferSize) == ERROR_SUCCESS) {
+        unsigned length = linkedFontsBufferSize / sizeof(WCHAR);
+        appendLinkedFonts(linkedFonts.data(), length, result);
     }
-    free(linkedFonts);
     RegCloseKey(fontLinkKey);
     return result;
 }
@@ -340,8 +340,9 @@ RefPtr<Font> FontCache::fontFromDescriptionAndLogFont(const FontDescription& fon
 
 Ref<Font> FontCache::lastResortFallbackFont(const FontDescription& fontDescription)
 {
-    DEPRECATED_DEFINE_STATIC_LOCAL(AtomicString, fallbackFontName, ());
-    if (!fallbackFontName.isEmpty())
+    static NeverDestroyed<AtomicString> fallbackFontName;
+
+    if (!fallbackFontName.get().isEmpty())
         return *fontForFamily(fontDescription, fallbackFontName);
 
     // FIXME: Would be even better to somehow get the user's default font here.  For now we'll pick
@@ -360,7 +361,7 @@ Ref<Font> FontCache::lastResortFallbackFont(const FontDescription& fontDescripti
     RefPtr<Font> simpleFont;
     for (size_t i = 0; i < WTF_ARRAY_LENGTH(fallbackFonts); ++i) {
         if (simpleFont = fontForFamily(fontDescription, fallbackFonts[i])) {
-            fallbackFontName = fallbackFonts[i];
+            fallbackFontName.get() = fallbackFonts[i];
             return *simpleFont;
         }
     }
@@ -677,7 +678,7 @@ const AtomicString& FontCache::platformAlternateFamilyName(const AtomicString& f
             return microsoftSansSerif;
         break;
     }
-    return nullAtom;
+    return nullAtom();
 }
 
 }

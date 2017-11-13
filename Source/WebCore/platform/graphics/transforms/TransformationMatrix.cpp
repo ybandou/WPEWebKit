@@ -28,27 +28,20 @@
 #include "TransformationMatrix.h"
 
 #include "AffineTransform.h"
-#include "FloatRect.h"
 #include "FloatQuad.h"
+#include "FloatRect.h"
 #include "IntRect.h"
 #include "LayoutRect.h"
-#include "TextStream.h"
 #include <cmath>
 #include <wtf/Assertions.h>
 #include <wtf/MathExtras.h>
+#include <wtf/text/TextStream.h>
 
 #if CPU(X86_64)
 #include <emmintrin.h>
 #endif
 
 namespace WebCore {
-
-//
-// Supporting Math Functions
-//
-// This is a set of function from various places (attributed inline) to do things like
-// inversion and decomposition of a 4x4 matrix. They are used throughout the code
-//
 
 //
 // Adapted from Matrix Inversion by Richard Carling, Graphics Gems <http://tog.acm.org/GraphicsGems/index.html>.
@@ -704,6 +697,25 @@ LayoutRect TransformationMatrix::clampedBoundsOfProjectedQuad(const FloatQuad& q
         bottom = clampEdgeValue(ceilf(mappedQuadBounds.maxY()));
 
     return LayoutRect(LayoutUnit::clamp(left), LayoutUnit::clamp(top),  LayoutUnit::clamp(right - left), LayoutUnit::clamp(bottom - top));
+}
+
+void TransformationMatrix::map4ComponentPoint(double& x, double& y, double& z, double& w) const
+{
+    if (isIdentityOrTranslation()) {
+        x += m_matrix[3][0];
+        y += m_matrix[3][1];
+        z += m_matrix[3][2];
+        return;
+    }
+
+    Vector4 input = { x, y, z, w };
+    Vector4 result;
+    v4MulPointByMatrix(input, m_matrix, result);
+
+    x = result[0];
+    y = result[1];
+    z = result[2];
+    w = result[3];
 }
 
 FloatPoint TransformationMatrix::mapPoint(const FloatPoint& p) const

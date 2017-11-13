@@ -36,14 +36,14 @@
 #include "LinkBuffer.h"
 #include "JSCInlines.h"
 #include "ProfilerCompilation.h"
+#include "ThunkGenerators.h"
 #include "VirtualRegister.h"
 
 namespace JSC { namespace FTL {
 
-using namespace DFG;
-
 void link(State& state)
 {
+    using namespace DFG;
     Graph& graph = state.graph;
     CodeBlock* codeBlock = graph.m_codeBlock;
     VM& vm = graph.m_vm;
@@ -67,13 +67,14 @@ void link(State& state)
     CCallHelpers::Address frame = CCallHelpers::Address(
         CCallHelpers::stackPointerRegister, -static_cast<int32_t>(AssemblyHelpers::prologueStackPointerDelta()));
     
-    if (Profiler::Compilation* compilation = graph.compilation()) {
+    Profiler::Compilation* compilation = graph.compilation();
+    if (UNLIKELY(compilation)) {
         compilation->addDescription(
             Profiler::OriginStack(),
             toCString("Generated FTL JIT code for ", CodeBlockWithJITType(codeBlock, JITCode::FTLJIT), ", instruction count = ", graph.m_codeBlock->instructionCount(), ":\n"));
         
-        graph.ensureDominators();
-        graph.ensureNaturalLoops();
+        graph.ensureSSADominators();
+        graph.ensureSSANaturalLoops();
         
         const char* prefix = "    ";
         

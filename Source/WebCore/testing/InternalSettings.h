@@ -95,6 +95,11 @@ public:
     ExceptionOr<void> setUserInterfaceDirectionPolicy(const String&);
     ExceptionOr<String> systemLayoutDirection();
     ExceptionOr<void> setSystemLayoutDirection(const String&);
+    ExceptionOr<void> setShouldMockBoldSystemFontForAccessibility(bool);
+    ExceptionOr<void> setShouldManageAudioSessionCategory(bool);
+
+    enum class FrameFlatteningValue { Disabled, EnabledForNonFullScreenIFrames, FullyEnabled };
+    ExceptionOr<void> setFrameFlattening(const FrameFlatteningValue&);
     
     static void setAllowsAnySSLCertificate(bool);
 
@@ -109,14 +114,12 @@ public:
     ForcedAccessibilityValue forcedPrefersReducedMotionAccessibilityValue() const;
     void setForcedPrefersReducedMotionAccessibilityValue(ForcedAccessibilityValue);
 
-    bool shouldDispatchRequestAnimationFrameEvents();
-    void setShouldDispatchRequestAnimationFrameEvents(bool);
-
     // RuntimeEnabledFeatures.
     static void setIndexedDBWorkersEnabled(bool);
     static void setCSSGridLayoutEnabled(bool);
     static void setWebGL2Enabled(bool);
     static void setWebGPUEnabled(bool);
+    static void setWebVREnabled(bool);
 
 private:
     explicit InternalSettings(Page*);
@@ -188,12 +191,19 @@ private:
         Settings::ForcedAccessibilityValue m_forcedColorsAreInvertedAccessibilityValue;
         Settings::ForcedAccessibilityValue m_forcedDisplayIsMonochromeAccessibilityValue;
         Settings::ForcedAccessibilityValue m_forcedPrefersReducedMotionAccessibilityValue;
+        FrameFlattening m_frameFlattening;
 
         // Runtime enabled settings.
         bool m_indexedDBWorkersEnabled;
         bool m_cssGridLayoutEnabled;
         bool m_webGL2Enabled;
         bool m_webGPUEnabled;
+        bool m_webVREnabled;
+        
+        bool m_shouldMockBoldSystemFontForAccessibility;
+#if USE(AUDIO_SESSION)
+        bool m_shouldManageAudioSessionCategory;
+#endif
     };
 
     Page* m_page;

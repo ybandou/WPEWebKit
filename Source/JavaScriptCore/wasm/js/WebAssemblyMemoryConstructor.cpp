@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -100,7 +100,10 @@ static EncodedJSValue JSC_HOST_CALL constructJSWebAssemblyMemory(ExecState* exec
     if (!memory)
         return JSValue::encode(throwException(exec, throwScope, createOutOfMemoryError(exec)));
 
-    return JSValue::encode(JSWebAssemblyMemory::create(vm, exec->lexicalGlobalObject()->WebAssemblyMemoryStructure(), adoptRef(*memory.leakRef())));
+    auto* jsMemory = JSWebAssemblyMemory::create(exec, vm, exec->lexicalGlobalObject()->WebAssemblyMemoryStructure(), adoptRef(*memory.leakRef()));
+    RETURN_IF_EXCEPTION(throwScope, encodedJSValue());
+
+    return JSValue::encode(jsMemory);
 }
 
 static EncodedJSValue JSC_HOST_CALL callJSWebAssemblyMemory(ExecState* exec)
@@ -125,8 +128,8 @@ Structure* WebAssemblyMemoryConstructor::createStructure(VM& vm, JSGlobalObject*
 void WebAssemblyMemoryConstructor::finishCreation(VM& vm, WebAssemblyMemoryPrototype* prototype)
 {
     Base::finishCreation(vm, ASCIILiteral("Memory"));
-    putDirectWithoutTransition(vm, vm.propertyNames->prototype, prototype, DontEnum | DontDelete | ReadOnly);
-    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), ReadOnly | DontEnum | DontDelete);
+    putDirectWithoutTransition(vm, vm.propertyNames->prototype, prototype, PropertyAttribute::DontEnum | PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly);
+    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum | PropertyAttribute::DontDelete);
 }
 
 WebAssemblyMemoryConstructor::WebAssemblyMemoryConstructor(VM& vm, Structure* structure)
@@ -144,13 +147,6 @@ CallType WebAssemblyMemoryConstructor::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = callJSWebAssemblyMemory;
     return CallType::Host;
-}
-
-void WebAssemblyMemoryConstructor::visitChildren(JSCell* cell, SlotVisitor& visitor)
-{
-    auto* thisObject = jsCast<WebAssemblyMemoryConstructor*>(cell);
-    ASSERT_GC_OBJECT_INHERITS(thisObject, info());
-    Base::visitChildren(thisObject, visitor);
 }
 
 } // namespace JSC

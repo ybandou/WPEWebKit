@@ -52,10 +52,6 @@ public:
     }
     ~CSSFontFaceSet();
 
-    static FontSelectionValue convertFontWeightFromValue(const CSSValue&);
-    static FontSelectionValue convertFontStretchFromValue(const CSSValue&);
-    static FontSelectionValue convertFontStyleFromValue(const CSSValue&);
-
     void addClient(CSSFontFaceSetClient&);
     void removeClient(CSSFontFaceSetClient&);
 
@@ -64,6 +60,7 @@ public:
     void add(CSSFontFace&);
     void remove(const CSSFontFace&);
     void purge();
+    void emptyCaches();
     void clear();
     CSSFontFace& operator[](size_t i);
 
@@ -75,6 +72,8 @@ public:
 
     enum class Status { Loading, Loaded };
     Status status() const { return m_status; }
+
+    bool hasActiveFontFaces() { return status() == Status::Loading; }
 
     ExceptionOr<Vector<std::reference_wrapper<CSSFontFace>>> matchingFaces(const String& font, const String& text);
 

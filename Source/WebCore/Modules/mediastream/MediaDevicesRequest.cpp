@@ -55,8 +55,8 @@ Ref<MediaDevicesRequest> MediaDevicesRequest::create(Document& document, MediaDe
 
 MediaDevicesRequest::~MediaDevicesRequest()
 {
-    if (m_enumerationRequest)
-        m_enumerationRequest->cancel();
+    // This should only get destroyed after the enumeration request has completed or has been canceled.
+    ASSERT(!m_enumerationRequest || m_enumerationRequest->wasCanceled());
 }
 
 SecurityOrigin* MediaDevicesRequest::securityOrigin() const
@@ -69,6 +69,9 @@ SecurityOrigin* MediaDevicesRequest::securityOrigin() const
 
 void MediaDevicesRequest::contextDestroyed()
 {
+    // The call to m_enumerationRequest->cancel() might delete this.
+    auto protectedThis = makeRef(*this);
+
     if (m_enumerationRequest) {
         m_enumerationRequest->cancel();
         m_enumerationRequest = nullptr;
@@ -76,7 +79,7 @@ void MediaDevicesRequest::contextDestroyed()
     ContextDestructionObserver::contextDestroyed();
 }
 
-void MediaDevicesRequest::filterDeviceList(Vector<RefPtr<MediaDeviceInfo>>& devices)
+void MediaDevicesRequest::filterDeviceList(Vector<Ref<MediaDeviceInfo>>& devices)
 {
 #if !PLATFORM(COCOA)
     UNUSED_PARAM(devices);
@@ -92,7 +95,7 @@ void MediaDevicesRequest::filterDeviceList(Vector<RefPtr<MediaDeviceInfo>>& devi
 
     int cameraCount = 0;
     int microphoneCount = 0;
-    devices.removeAllMatching([&](const RefPtr<MediaDeviceInfo>& device) -> bool {
+    devices.removeAllMatching([&](const Ref<MediaDeviceInfo>& device) -> bool {
         if (device->kind() == MediaDeviceInfo::Kind::Videoinput && ++cameraCount > defaultCameraCount)
             return true;
         if (device->kind() == MediaDeviceInfo::Kind::Audioinput && ++microphoneCount > defaultMicrophoneCount)
@@ -106,8 +109,8 @@ void MediaDevicesRequest::filterDeviceList(Vector<RefPtr<MediaDeviceInfo>>& devi
 
 void MediaDevicesRequest::start()
 {
-    RefPtr<MediaDevicesRequest> protectedThis = this;
-    auto completion = [this, protectedThis = WTFMove(protectedThis)] (const Vector<CaptureDevice>& captureDevices, const String& deviceIdentifierHashSalt, bool originHasPersistentAccess) mutable {
+    // This lambda keeps |this| alive until the request completes or is canceled.
+    auto completion = [this, protectedThis = makeRef(*this)] (const Vector<CaptureDevice>& captureDevices, const String& deviceIdentifierHashSalt, bool originHasPersistentAccess) mutable {
 
         m_enumerationRequest = nullptr;
 
@@ -117,7 +120,7 @@ void MediaDevicesRequest::start()
         Document& document = downcast<Document>(*scriptExecutionContext());
         document.setDeviceIDHashSalt(deviceIdentifierHashSalt);
 
-        Vector<RefPtr<MediaDeviceInfo>> devices;
+        Vector<Ref<MediaDeviceInfo>> devices;
         for (auto& deviceInfo : captureDevices) {
             auto label = emptyString();
             if (originHasPersistentAccess || document.hasHadActiveMediaStreamTrack())

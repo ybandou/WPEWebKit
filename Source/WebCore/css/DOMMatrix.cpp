@@ -26,14 +26,55 @@
 #include "config.h"
 #include "DOMMatrix.h"
 
-#include "ExceptionCode.h"
+#include "ScriptExecutionContext.h"
 #include <cmath>
 #include <limits>
 
 namespace WebCore {
 
+// https://drafts.fxtf.org/geometry/#dom-dommatrixreadonly-dommatrixreadonly
+ExceptionOr<Ref<DOMMatrix>> DOMMatrix::create(ScriptExecutionContext& scriptExecutionContext, std::optional<Variant<String, Vector<double>>>&& init)
+{
+    if (!init)
+        return adoptRef(*new DOMMatrix);
+
+    return WTF::switchOn(init.value(),
+        [&scriptExecutionContext](const String& init) -> ExceptionOr<Ref<DOMMatrix>> {
+            if (!scriptExecutionContext.isDocument())
+                return Exception { TypeError };
+
+            auto parseResult = parseStringIntoAbstractMatrix(init);
+            if (parseResult.hasException())
+                return parseResult.releaseException();
+            
+            return adoptRef(*new DOMMatrix(parseResult.returnValue().matrix, parseResult.returnValue().is2D ? Is2D::Yes : Is2D::No));
+        },
+        [](const Vector<double>& init) -> ExceptionOr<Ref<DOMMatrix>> {
+            if (init.size() == 6) {
+                return adoptRef(*new DOMMatrix(TransformationMatrix {
+                    init[0], init[1], init[2], init[3], init[4], init[5]
+                }, Is2D::Yes));
+            }
+            if (init.size() == 16) {
+                return adoptRef(*new DOMMatrix(TransformationMatrix {
+                    init[0], init[1], init[2], init[3],
+                    init[4], init[5], init[6], init[7],
+                    init[8], init[9], init[10], init[11],
+                    init[12], init[13], init[14], init[15]
+                }, Is2D::No));
+            }
+            return Exception { TypeError };
+        }
+    );
+}
+
 DOMMatrix::DOMMatrix(const TransformationMatrix& matrix, Is2D is2D)
     : DOMMatrixReadOnly(matrix, is2D)
+{
+}
+
+DOMMatrix::DOMMatrix(TransformationMatrix&& matrix, Is2D is2D)
+    : DOMMatrixReadOnly(WTFMove(matrix), is2D)
 {
 }
 
@@ -41,6 +82,40 @@ DOMMatrix::DOMMatrix(const TransformationMatrix& matrix, Is2D is2D)
 ExceptionOr<Ref<DOMMatrix>> DOMMatrix::fromMatrix(DOMMatrixInit&& init)
 {
     return fromMatrixHelper<DOMMatrix>(WTFMove(init));
+}
+
+ExceptionOr<Ref<DOMMatrix>> DOMMatrix::fromFloat32Array(Ref<Float32Array>&& array32)
+{
+    if (array32->length() == 6)
+        return DOMMatrix::create(TransformationMatrix(array32->item(0), array32->item(1), array32->item(2), array32->item(3), array32->item(4), array32->item(5)), Is2D::Yes);
+
+    if (array32->length() == 16) {
+        return DOMMatrix::create(TransformationMatrix(
+            array32->item(0), array32->item(1), array32->item(2), array32->item(3),
+            array32->item(4), array32->item(5), array32->item(6), array32->item(7),
+            array32->item(8), array32->item(9), array32->item(10), array32->item(11),
+            array32->item(12), array32->item(13), array32->item(14), array32->item(15)
+        ), Is2D::No);
+    }
+
+    return Exception { TypeError };
+}
+
+ExceptionOr<Ref<DOMMatrix>> DOMMatrix::fromFloat64Array(Ref<Float64Array>&& array64)
+{
+    if (array64->length() == 6)
+        return DOMMatrix::create(TransformationMatrix(array64->item(0), array64->item(1), array64->item(2), array64->item(3), array64->item(4), array64->item(5)), Is2D::Yes);
+
+    if (array64->length() == 16) {
+        return DOMMatrix::create(TransformationMatrix(
+            array64->item(0), array64->item(1), array64->item(2), array64->item(3),
+            array64->item(4), array64->item(5), array64->item(6), array64->item(7),
+            array64->item(8), array64->item(9), array64->item(10), array64->item(11),
+            array64->item(12), array64->item(13), array64->item(14), array64->item(15)
+        ), Is2D::No);
+    }
+
+    return Exception { TypeError };
 }
 
 // https://drafts.fxtf.org/geometry/#dom-dommatrix-multiplyself

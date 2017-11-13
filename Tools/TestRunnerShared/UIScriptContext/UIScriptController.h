@@ -92,6 +92,8 @@ public:
 
     void keyboardAccessoryBarNext();
     void keyboardAccessoryBarPrevious();
+
+    void applyAutocorrection(JSStringRef newString, JSStringRef oldString, JSValueRef callback);
     
     void dismissFormAccessoryView();
     void selectFormAccessoryPickerRow(long);
@@ -149,7 +151,7 @@ public:
     JSObjectRef textSelectionCaretRect() const;
     JSObjectRef inputViewBounds() const;
 
-    void insertText(JSStringRef, int location, int length);
+    void replaceTextAtRange(JSStringRef, int location, int length);
     void removeAllDynamicDictionaries();
     
     JSRetainPtr<JSStringRef> scrollingTreeAsText() const;

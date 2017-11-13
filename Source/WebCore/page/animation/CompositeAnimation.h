@@ -28,10 +28,10 @@
 
 #pragma once
 
+#include "CSSAnimationController.h"
 #include "ImplicitAnimation.h"
 #include "KeyframeAnimation.h"
 #include <wtf/HashMap.h>
-#include <wtf/Noncopyable.h>
 #include <wtf/text/AtomicString.h>
 
 namespace WebCore {
@@ -53,9 +53,9 @@ public:
 
     ~CompositeAnimation();
     
-    void clearRenderer();
+    void clearElement();
 
-    bool animate(RenderElement&, const RenderStyle* currentStyle, const RenderStyle& targetStyle, std::unique_ptr<RenderStyle>& blendedStyle);
+    AnimationUpdate animate(Element&, const RenderStyle* currentStyle, const RenderStyle& targetStyle);
     std::unique_ptr<RenderStyle> getAnimatedStyle() const;
     bool computeExtentOfTransformAnimation(LayoutRect&) const;
 
@@ -84,11 +84,13 @@ public:
     bool hasScrollTriggeredAnimation() const { return m_hasScrollTriggeredAnimation; }
 #endif
 
+    bool hasAnimationThatDependsOnLayout() const { return m_hasAnimationThatDependsOnLayout; }
+
 private:
     CompositeAnimation(CSSAnimationControllerPrivate&);
 
-    void updateTransitions(RenderElement*, const RenderStyle* currentStyle, const RenderStyle* targetStyle);
-    void updateKeyframeAnimations(RenderElement*, const RenderStyle* currentStyle, const RenderStyle* targetStyle);
+    void updateTransitions(Element&, const RenderStyle* currentStyle, const RenderStyle& targetStyle);
+    void updateKeyframeAnimations(Element&, const RenderStyle* currentStyle, const RenderStyle& targetStyle);
     
     typedef HashMap<int, RefPtr<ImplicitAnimation>> CSSPropertyTransitionsMap;
     typedef HashMap<AtomicStringImpl*, RefPtr<KeyframeAnimation>> AnimationNameMap;
@@ -98,6 +100,7 @@ private:
     AnimationNameMap m_keyframeAnimations;
     Vector<AtomicStringImpl*> m_keyframeAnimationOrderMap;
     bool m_suspended;
+    bool m_hasAnimationThatDependsOnLayout { false };
 #if ENABLE(CSS_ANIMATIONS_LEVEL_2)
     bool m_hasScrollTriggeredAnimation { false };
 #endif

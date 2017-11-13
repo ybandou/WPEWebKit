@@ -33,10 +33,9 @@
 #include "config.h"
 #include "Performance.h"
 
-#if ENABLE(WEB_TIMING)
-
 #include "Document.h"
 #include "DocumentLoader.h"
+#include "Event.h"
 #include "EventNames.h"
 #include "Frame.h"
 #include "PerformanceEntry.h"
@@ -70,7 +69,7 @@ void Performance::contextDestroyed()
     ContextDestructionObserver::contextDestroyed();
 }
 
-double Performance::now() const
+DOMHighResTimeStamp Performance::now() const
 {
     Seconds now = MonotonicTime::now() - m_timeOrigin;
     return reduceTimeResolution(now).milliseconds();
@@ -81,6 +80,12 @@ Seconds Performance::reduceTimeResolution(Seconds seconds)
     double resolution = (100_us).seconds();
     double reduced = std::floor(seconds.seconds() / resolution) * resolution;
     return Seconds(reduced);
+}
+
+DOMHighResTimeStamp Performance::relativeTimeFromTimeOriginInReducedResolution(MonotonicTime timestamp) const
+{
+    Seconds seconds = timestamp - m_timeOrigin;
+    return reduceTimeResolution(seconds).milliseconds();
 }
 
 PerformanceNavigation* Performance::navigation()
@@ -232,6 +237,13 @@ void Performance::clearMeasures(const String& measureName)
     m_userTiming->clearMeasures(measureName);
 }
 
+void Performance::removeAllObservers()
+{
+    for (auto& observer : m_observers)
+        observer->disassociate();
+    m_observers.clear();
+}
+
 void Performance::registerPerformanceObserver(PerformanceObserver& observer)
 {
     m_observers.add(&observer);
@@ -267,5 +279,3 @@ void Performance::queueEntry(PerformanceEntry& entry)
 }
 
 } // namespace WebCore
-
-#endif // ENABLE(WEB_TIMING)

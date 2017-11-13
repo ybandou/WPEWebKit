@@ -23,7 +23,6 @@
 #pragma once
 
 #include "ExecutableInfo.h"
-#include "ExceptionHelpers.h"
 #include "Lexer.h"
 #include "ModuleScopeData.h"
 #include "Nodes.h"
@@ -226,6 +225,9 @@ public:
     void setSourceParseMode(SourceParseMode mode)
     {
         switch (mode) {
+        case SourceParseMode::AsyncGeneratorBodyMode:
+            setIsAsyncGeneratorFunctionBody();
+            break;
         case SourceParseMode::AsyncArrowFunctionBodyMode:
             setIsAsyncArrowFunctionBody();
             break;
@@ -243,6 +245,11 @@ public:
             setIsGeneratorFunction();
             break;
 
+        case SourceParseMode::AsyncGeneratorWrapperMethodMode:
+        case SourceParseMode::AsyncGeneratorWrapperFunctionMode:
+            setIsAsyncGeneratorFunction();
+            break;
+    
         case SourceParseMode::NormalFunctionMode:
         case SourceParseMode::GetterMode:
         case SourceParseMode::SetterMode:
@@ -702,6 +709,8 @@ private:
         m_isGeneratorBoundary = false;
         m_isArrowFunctionBoundary = false;
         m_isArrowFunction = false;
+        m_isAsyncFunction = false;
+        m_isAsyncFunctionBoundary = false;
     }
 
     void setIsGeneratorFunction()
@@ -735,6 +744,23 @@ private:
     {
         setIsFunction();
         m_isAsyncFunction = true;
+    }
+
+    void setIsAsyncGeneratorFunction()
+    {
+        setIsFunction();
+        m_isAsyncFunction = true;
+        m_isGenerator = true;
+    }
+
+    void setIsAsyncGeneratorFunctionBody()
+    {
+        setIsFunction();
+        m_hasArguments = false;
+        m_isGenerator = true;
+        m_isGeneratorBoundary = true;
+        m_isAsyncFunction = true;
+        m_isAsyncFunctionBoundary = true;
     }
 
     void setIsAsyncFunctionBody()
@@ -1150,7 +1176,7 @@ private:
 
     void popScopeInternal(ScopeRef& scope, bool shouldTrackClosedVariables)
     {
-        ASSERT_UNUSED(scope, scope.index() == m_scopeStack.size() - 1);
+        EXCEPTION_ASSERT_UNUSED(scope, scope.index() == m_scopeStack.size() - 1);
         ASSERT(m_scopeStack.size() > 1);
         m_scopeStack[m_scopeStack.size() - 2].collectFreeVariables(&m_scopeStack.last(), shouldTrackClosedVariables);
         
@@ -1496,6 +1522,7 @@ private:
     template <class TreeBuilder> TreeSourceElements parseSourceElements(TreeBuilder&, SourceElementsMode);
     template <class TreeBuilder> TreeSourceElements parseGeneratorFunctionSourceElements(TreeBuilder&, const Identifier& name, SourceElementsMode);
     template <class TreeBuilder> TreeSourceElements parseAsyncFunctionSourceElements(TreeBuilder&, SourceParseMode, bool isArrowFunctionBodyExpression, SourceElementsMode);
+    template <class TreeBuilder> TreeSourceElements parseAsyncGeneratorFunctionSourceElements(TreeBuilder&, SourceParseMode, bool isArrowFunctionBodyExpression, SourceElementsMode);
     template <class TreeBuilder> TreeStatement parseStatementListItem(TreeBuilder&, const Identifier*& directive, unsigned* directiveLiteralLength);
     template <class TreeBuilder> TreeStatement parseStatement(TreeBuilder&, const Identifier*& directive, unsigned* directiveLiteralLength = 0);
     enum class ExportType { Exported, NotExported };
@@ -1542,7 +1569,7 @@ private:
     template <class TreeBuilder> ALWAYS_INLINE TreeArguments parseArguments(TreeBuilder&);
     template <class TreeBuilder> ALWAYS_INLINE TreeExpression parseArgument(TreeBuilder&, ArgumentType&);
     template <class TreeBuilder> TreeProperty parseProperty(TreeBuilder&, bool strict);
-    template <class TreeBuilder> TreeExpression parsePropertyMethod(TreeBuilder& context, const Identifier* methodName, bool isGenerator, bool isAsyncMethod);
+    template <class TreeBuilder> TreeExpression parsePropertyMethod(TreeBuilder& context, const Identifier* methodName, SourceParseMode);
     template <class TreeBuilder> TreeProperty parseGetterSetter(TreeBuilder&, bool strict, PropertyNode::Type, unsigned getterOrSetterStartOffset, ConstructorKind, bool isClassProperty, bool isStaticMethod);
     template <class TreeBuilder> ALWAYS_INLINE TreeFunctionBody parseFunctionBody(TreeBuilder&, SyntaxChecker&, const JSTokenLocation&, int, int functionKeywordStart, int functionNameStart, int parametersStart, ConstructorKind, SuperBinding, FunctionBodyType, unsigned, SourceParseMode);
     template <class TreeBuilder> ALWAYS_INLINE bool parseFormalParameters(TreeBuilder&, TreeFormalParameterList, bool isArrowFunction, bool isMethod, unsigned&);
@@ -1552,8 +1579,11 @@ private:
     template <class TreeBuilder> TreeExpression parseArrowFunctionExpression(TreeBuilder&, bool isAsync);
     template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern createBindingPattern(TreeBuilder&, DestructuringKind, ExportType, const Identifier&, JSToken, AssignmentContext, const Identifier** duplicateIdentifier);
     template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern createAssignmentElement(TreeBuilder&, TreeExpression&, const JSTextPosition&, const JSTextPosition&);
+    template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern parseObjectRestBindingOrAssignmentElement(TreeBuilder& context, DestructuringKind, ExportType, const Identifier** duplicateIdentifier, AssignmentContext bindingContext);
     template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern parseBindingOrAssignmentElement(TreeBuilder& context, DestructuringKind, ExportType, const Identifier** duplicateIdentifier, bool* hasDestructuringPattern, AssignmentContext bindingContext, int depth);
+    template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern parseObjectRestAssignmentElement(TreeBuilder& context);
     template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern parseAssignmentElement(TreeBuilder& context, DestructuringKind, ExportType, const Identifier** duplicateIdentifier, bool* hasDestructuringPattern, AssignmentContext bindingContext, int depth);
+    template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern parseObjectRestElement(TreeBuilder&, DestructuringKind, ExportType, const Identifier** duplicateIdentifier = nullptr, AssignmentContext = AssignmentContext::DeclarationStatement);
     template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern parseDestructuringPattern(TreeBuilder&, DestructuringKind, ExportType, const Identifier** duplicateIdentifier = nullptr, bool* hasDestructuringPattern = nullptr, AssignmentContext = AssignmentContext::DeclarationStatement, int depth = 0);
     template <class TreeBuilder> NEVER_INLINE TreeDestructuringPattern tryParseDestructuringPatternExpression(TreeBuilder&, AssignmentContext);
     template <class TreeBuilder> NEVER_INLINE TreeExpression parseDefaultValueForDestructuringPattern(TreeBuilder&);
@@ -1784,6 +1814,7 @@ private:
 
     ParserState m_parserState;
     
+    bool m_useObjectRestSpread;
     bool m_hasStackOverflow;
     String m_errorMessage;
     JSToken m_token;
@@ -1808,23 +1839,6 @@ private:
     RefPtr<ModuleScopeData> m_moduleScopeData;
     DebuggerParseData* m_debuggerParseData;
     CallOrApplyDepthScope* m_callOrApplyDepthScope { nullptr };
-
-    struct DepthManager {
-        DepthManager(int* depth)
-        : m_originalDepth(*depth)
-        , m_depth(depth)
-        {
-        }
-        
-        ~DepthManager()
-        {
-            *m_depth = m_originalDepth;
-        }
-        
-    private:
-        int m_originalDepth;
-        int* m_depth;
-    };
 };
 
 

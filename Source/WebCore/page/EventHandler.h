@@ -256,7 +256,7 @@ public:
     
     WEBCORE_EXPORT void didStartDrag();
     WEBCORE_EXPORT void dragCancelled();
-    WEBCORE_EXPORT void dragSourceEndedAt(const PlatformMouseEvent&, DragOperation);
+    WEBCORE_EXPORT void dragSourceEndedAt(const PlatformMouseEvent&, DragOperation, MayExtendDragSession = MayExtendDragSession::No);
 #endif
 
     void focusDocumentView();
@@ -323,7 +323,7 @@ public:
 private:
 #if ENABLE(DRAG_SUPPORT)
     static DragState& dragState();
-    static const double TextDragDelay;
+    static const Seconds TextDragDelay;
     Ref<DataTransfer> createDraggingDataTransfer() const;
 #endif
 
@@ -405,6 +405,7 @@ private:
     void clearDragState();
 
     bool dispatchDragSrcEvent(const AtomicString& eventType, const PlatformMouseEvent&);
+    bool dispatchDragStartEvent(HasNonDefaultPasteboardData&);
 
     bool dragHysteresisExceeded(const FloatPoint&) const;
     bool dragHysteresisExceeded(const IntPoint&) const;
@@ -563,7 +564,7 @@ private:
     IntPoint m_lastKnownMousePosition;
     IntPoint m_lastKnownMouseGlobalPosition;
     IntPoint m_mouseDownPos; // In our view's coords.
-    double m_mouseDownTimestamp { 0 };
+    WallTime m_mouseDownTimestamp;
     PlatformMouseEvent m_mouseDown;
 
 #if PLATFORM(COCOA)

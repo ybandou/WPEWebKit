@@ -48,6 +48,7 @@
 #include "EventNames.h"
 #include "FocusController.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "FrameTree.h"
 #include "FrameView.h"
 #include "GraphicsContext.h"
@@ -64,7 +65,6 @@
 #include "InsertListCommand.h"
 #include "InsertTextCommand.h"
 #include "KeyboardEvent.h"
-#include "KillRing.h"
 #include "Logging.h"
 #include "MainFrame.h"
 #include "ModifySelectionListLevel.h"
@@ -83,9 +83,9 @@
 #include "Settings.h"
 #include "ShadowRoot.h"
 #include "SimplifyMarkupCommand.h"
-#include "Sound.h"
 #include "SpellChecker.h"
 #include "SpellingCorrectionCommand.h"
+#include "StaticPasteboard.h"
 #include "StyleProperties.h"
 #include "TelephoneNumberDetector.h"
 #include "Text.h"
@@ -97,6 +97,8 @@
 #include "UserTypingGestureIndicator.h"
 #include "VisibleUnits.h"
 #include "markup.h"
+#include <pal/system/Sound.h>
+#include <pal/text/KillRing.h>
 #include <wtf/unicode/CharacterNames.h>
 
 #if PLATFORM(MAC)
@@ -182,6 +184,44 @@ void ClearTextCommand::CreateAndApply(const RefPtr<Frame> frame)
 using namespace HTMLNames;
 using namespace WTF;
 using namespace Unicode;
+
+TemporarySelectionChange::TemporarySelectionChange(Frame& frame, std::optional<VisibleSelection> temporarySelection, TemporarySelectionOptions options)
+    : m_frame(frame)
+    , m_options(options)
+    , m_wasIgnoringSelectionChanges(frame.editor().ignoreSelectionChanges())
+#if PLATFORM(IOS)
+    , m_appearanceUpdatesWereEnabled(frame.selection().isUpdateAppearanceEnabled())
+#endif
+{
+#if PLATFORM(IOS)
+    if (options & TemporarySelectionOptionEnableAppearanceUpdates)
+        frame.selection().setUpdateAppearanceEnabled(true);
+#endif
+
+    if (options & TemporarySelectionOptionIgnoreSelectionChanges)
+        frame.editor().setIgnoreSelectionChanges(true);
+
+    if (temporarySelection) {
+        m_selectionToRestore = frame.selection().selection();
+        frame.selection().setSelection(temporarySelection.value());
+    }
+}
+
+TemporarySelectionChange::~TemporarySelectionChange()
+{
+    if (m_selectionToRestore)
+        m_frame->selection().setSelection(m_selectionToRestore.value());
+
+    if (m_options & TemporarySelectionOptionIgnoreSelectionChanges) {
+        auto revealSelection = m_options & TemporarySelectionOptionRevealSelection ? Editor::RevealSelection::Yes : Editor::RevealSelection::No;
+        m_frame->editor().setIgnoreSelectionChanges(m_wasIgnoringSelectionChanges, revealSelection);
+    }
+
+#if PLATFORM(IOS)
+    if (m_options & TemporarySelectionOptionEnableAppearanceUpdates)
+        m_frame->selection().setUpdateAppearanceEnabled(m_appearanceUpdatesWereEnabled);
+#endif
+}
 
 // When an event handler has moved the selection outside of a text control
 // we should use the target control's selection for this editing operation.
@@ -274,6 +314,46 @@ bool Editor::canEditRichly() const
     return m_frame.selection().selection().isContentRichlyEditable();
 }
 
+// Returns whether caller should continue with "the default processing", which is the same as
+// the event handler NOT setting the return value to false
+// https://w3c.github.io/clipboard-apis/#fire-a-clipboard-event
+static bool dispatchClipboardEvent(RefPtr<Element>&& target, const AtomicString& eventType)
+{
+    // FIXME: Move the target selection code here.
+    if (!target)
+        return true;
+
+    DataTransfer::StoreMode storeMode;
+    if (eventType == eventNames().pasteEvent)
+        storeMode = DataTransfer::StoreMode::Readonly;
+    else if (eventType == eventNames().copyEvent || eventType == eventNames().cutEvent)
+        storeMode = DataTransfer::StoreMode::ReadWrite;
+    else {
+        ASSERT(eventType == eventNames().beforecutEvent || eventType == eventNames().beforecopyEvent || eventType == eventNames().beforepasteEvent);
+        storeMode = DataTransfer::StoreMode::Invalid;
+    }
+
+    auto dataTransfer = DataTransfer::createForCopyAndPaste(storeMode);
+
+    ClipboardEvent::Init init;
+    init.bubbles = true;
+    init.cancelable = true;
+    init.clipboardData = dataTransfer.ptr();
+    auto event = ClipboardEvent::create(eventType, init, Event::IsTrusted::Yes);
+
+    target->dispatchEvent(event);
+    bool noDefaultProcessing = event->defaultPrevented();
+    if (noDefaultProcessing && storeMode == DataTransfer::StoreMode::ReadWrite) {
+        auto pasteboard = Pasteboard::createForCopyAndPaste();
+        pasteboard->clear();
+        downcast<StaticPasteboard>(dataTransfer->pasteboard()).commitToPasteboard(*pasteboard);
+    }
+
+    dataTransfer->makeInvalidForSecurity();
+
+    return !noDefaultProcessing;
+}
+
 // WinIE uses onbeforecut and onbeforepaste to enables the cut and paste menu items.  They
 // also send onbeforecopy, apparently for symmetry, but it doesn't affect the menu items.
 // We need to use onbeforecopy as a real menu enabler because we allow elements that are not
@@ -281,17 +361,22 @@ bool Editor::canEditRichly() const
 
 bool Editor::canDHTMLCut()
 {
-    return !m_frame.selection().selection().isInPasswordField() && !dispatchCPPEvent(eventNames().beforecutEvent, DataTransferAccessPolicy::Numb);
+    if (m_frame.selection().selection().isInPasswordField())
+        return false;
+
+    return !dispatchClipboardEvent(findEventTargetFromSelection(), eventNames().beforecutEvent);
 }
 
 bool Editor::canDHTMLCopy()
 {
-    return !m_frame.selection().selection().isInPasswordField() && !dispatchCPPEvent(eventNames().beforecopyEvent, DataTransferAccessPolicy::Numb);
+    if (m_frame.selection().selection().isInPasswordField())
+        return false;
+    return !dispatchClipboardEvent(findEventTargetFromSelection(), eventNames().beforecopyEvent);
 }
 
 bool Editor::canDHTMLPaste()
 {
-    return !dispatchCPPEvent(eventNames().beforepasteEvent, DataTransferAccessPolicy::Numb);
+    return !dispatchClipboardEvent(findEventTargetFromSelection(), eventNames().beforepasteEvent);
 }
 
 bool Editor::canCut() const
@@ -424,7 +509,7 @@ void Editor::clearText()
 
 void Editor::pasteAsPlainText(const String& pastingText, bool smartReplace)
 {
-    Node* target = findEventTargetFromSelection();
+    Element* target = findEventTargetFromSelection();
     if (!target)
         return;
     target->dispatchEvent(TextEvent::createForPlainTextPaste(document().domWindow(), pastingText, smartReplace));
@@ -432,7 +517,7 @@ void Editor::pasteAsPlainText(const String& pastingText, bool smartReplace)
 
 void Editor::pasteAsFragment(Ref<DocumentFragment>&& pastingFragment, bool smartReplace, bool matchStyle, MailBlockquoteHandling respectsMailBlockquote)
 {
-    Node* target = findEventTargetFromSelection();
+    Element* target = findEventTargetFromSelection();
     if (!target)
         return;
     target->dispatchEvent(TextEvent::createForFragmentPaste(document().domWindow(), WTFMove(pastingFragment), smartReplace, matchStyle, respectsMailBlockquote));
@@ -559,7 +644,7 @@ bool Editor::tryDHTMLCopy()
     if (m_frame.selection().selection().isInPasswordField())
         return false;
 
-    return !dispatchCPPEvent(eventNames().copyEvent, DataTransferAccessPolicy::Writable);
+    return !dispatchClipboardEvent(findEventTargetFromSelection(), eventNames().copyEvent);
 }
 
 bool Editor::tryDHTMLCut()
@@ -567,12 +652,12 @@ bool Editor::tryDHTMLCut()
     if (m_frame.selection().selection().isInPasswordField())
         return false;
     
-    return !dispatchCPPEvent(eventNames().cutEvent, DataTransferAccessPolicy::Writable);
+    return !dispatchClipboardEvent(findEventTargetFromSelection(), eventNames().cutEvent);
 }
 
 bool Editor::tryDHTMLPaste()
 {
-    return !dispatchCPPEvent(eventNames().pasteEvent, DataTransferAccessPolicy::Readable);
+    return !dispatchClipboardEvent(findEventTargetFromSelection(), eventNames().pasteEvent);
 }
 
 bool Editor::shouldInsertText(const String& text, Range* range, EditorInsertAction action) const
@@ -736,38 +821,9 @@ void Editor::clearLastEditCommand()
     m_lastEditCommand = nullptr;
 }
 
-// Returns whether caller should continue with "the default processing", which is the same as 
-// the event handler NOT setting the return value to false
-bool Editor::dispatchCPPEvent(const AtomicString& eventType, DataTransferAccessPolicy policy)
+Element* Editor::findEventTargetFrom(const VisibleSelection& selection) const
 {
-    Node* target = findEventTargetFromSelection();
-    if (!target)
-        return true;
-
-    auto dataTransfer = DataTransfer::createForCopyAndPaste(policy);
-
-    ClipboardEvent::Init init;
-    init.bubbles = true;
-    init.cancelable = true;
-    init.clipboardData = dataTransfer.ptr();
-    auto event = ClipboardEvent::create(eventType, init, Event::IsTrusted::Yes);
-    target->dispatchEvent(event);
-    bool noDefaultProcessing = event->defaultPrevented();
-    if (noDefaultProcessing && policy == DataTransferAccessPolicy::Writable) {
-        auto pasteboard = Pasteboard::createForCopyAndPaste();
-        pasteboard->clear();
-        pasteboard->writePasteboard(dataTransfer->pasteboard());
-    }
-
-    // invalidate dataTransfer here for security
-    dataTransfer->setAccessPolicy(DataTransferAccessPolicy::Numb);
-    
-    return !noDefaultProcessing;
-}
-
-Node* Editor::findEventTargetFrom(const VisibleSelection& selection) const
-{
-    Node* target = selection.start().element();
+    Element* target = selection.start().element();
     if (!target)
         target = document().bodyOrFrameset();
     if (!target)
@@ -776,7 +832,7 @@ Node* Editor::findEventTargetFrom(const VisibleSelection& selection) const
     return target;
 }
 
-Node* Editor::findEventTargetFromSelection() const
+Element* Editor::findEventTargetFromSelection() const
 {
     return findEventTargetFrom(m_frame.selection().selection());
 }
@@ -877,8 +933,9 @@ void Editor::applyParagraphStyleToSelection(StyleProperties* style, EditAction e
 
 bool Editor::selectionStartHasStyle(CSSPropertyID propertyID, const String& value) const
 {
-    return EditingStyle::create(propertyID, value)->triStateOfStyle(
-        EditingStyle::styleAtSelectionStart(m_frame.selection().selection(), propertyID == CSSPropertyBackgroundColor).get());
+    if (auto editingStyle = EditingStyle::styleAtSelectionStart(m_frame.selection().selection(), propertyID == CSSPropertyBackgroundColor))
+        return editingStyle->hasStyle(propertyID, value);
+    return false;
 }
 
 TriState Editor::selectionHasStyle(CSSPropertyID propertyID, const String& value) const
@@ -1042,7 +1099,7 @@ void Editor::reappliedEditing(EditCommandComposition& composition)
 
 Editor::Editor(Frame& frame)
     : m_frame(frame)
-    , m_killRing(std::make_unique<KillRing>())
+    , m_killRing(std::make_unique<PAL::KillRing>())
     , m_spellChecker(std::make_unique<SpellChecker>(frame))
     , m_alternativeTextController(std::make_unique<AlternativeTextController>(frame))
     , m_editorUIUpdateTimer(*this, &Editor::editorUIUpdateTimerFired)
@@ -1195,7 +1252,7 @@ void Editor::cut()
     if (tryDHTMLCut())
         return; // DHTML did the whole operation
     if (!canCut()) {
-        systemBeep();
+        PAL::systemBeep();
         return;
     }
 
@@ -1207,7 +1264,7 @@ void Editor::copy()
     if (tryDHTMLCopy())
         return; // DHTML did the whole operation
     if (!canCopy()) {
-        systemBeep();
+        PAL::systemBeep();
         return;
     }
 
@@ -1303,7 +1360,7 @@ void Editor::pasteAsPlainText()
 void Editor::performDelete()
 {
     if (!canDelete()) {
-        systemBeep();
+        PAL::systemBeep();
         return;
     }
 
@@ -1694,12 +1751,30 @@ void Editor::confirmComposition(const String& text)
     setComposition(text, ConfirmComposition);
 }
 
+class SetCompositionScope {
+public:
+    SetCompositionScope(Frame& frame)
+        : m_frame(frame)
+        , m_typingGestureIndicator(frame)
+    {
+        m_frame->editor().setIgnoreSelectionChanges(true);
+    }
+
+    ~SetCompositionScope()
+    {
+        m_frame->editor().setIgnoreSelectionChanges(false);
+        if (auto* editorClient = m_frame->editor().client())
+            editorClient->didUpdateComposition();
+    }
+
+    Ref<Frame> m_frame;
+    UserTypingGestureIndicator m_typingGestureIndicator;
+};
+
 void Editor::setComposition(const String& text, SetCompositionMode mode)
 {
     ASSERT(mode == ConfirmComposition || mode == CancelComposition);
-    UserTypingGestureIndicator typingGestureIndicator(m_frame);
-
-    setIgnoreSelectionChanges(true);
+    SetCompositionScope setCompositionScope(m_frame);
 
     if (mode == CancelComposition)
         ASSERT(text == emptyString());
@@ -1709,10 +1784,8 @@ void Editor::setComposition(const String& text, SetCompositionMode mode)
     m_compositionNode = nullptr;
     m_customCompositionUnderlines.clear();
 
-    if (m_frame.selection().isNone()) {
-        setIgnoreSelectionChanges(false);
+    if (m_frame.selection().isNone())
         return;
-    }
 
     // Always delete the current composition before inserting the finalized composition text if we're confirming our composition.
     // Our default behavior (if the beforeinput event is not prevented) is to insert the finalized composition text back in.
@@ -1729,17 +1802,11 @@ void Editor::setComposition(const String& text, SetCompositionMode mode)
         // An open typing command that disagrees about current selection would cause issues with typing later on.
         TypingCommand::closeTyping(&m_frame);
     }
-
-    setIgnoreSelectionChanges(false);
 }
 
 void Editor::setComposition(const String& text, const Vector<CompositionUnderline>& underlines, unsigned selectionStart, unsigned selectionEnd)
 {
-    Ref<Frame> protection(m_frame);
-
-    UserTypingGestureIndicator typingGestureIndicator(m_frame);
-
-    setIgnoreSelectionChanges(true);
+    SetCompositionScope setCompositionScope(m_frame);
 
     // Updates styles before setting selection for composition to prevent
     // inserting the previous composition text into text nodes oddly.
@@ -1748,10 +1815,8 @@ void Editor::setComposition(const String& text, const Vector<CompositionUnderlin
 
     selectComposition();
 
-    if (m_frame.selection().isNone()) {
-        setIgnoreSelectionChanges(false);
+    if (m_frame.selection().isNone())
         return;
-    }
 
     String originalText = selectedText();
     bool isStartingToRecomposeExistingRange = !text.isEmpty() && selectionStart < selectionEnd && !hasComposition();
@@ -1841,8 +1906,6 @@ void Editor::setComposition(const String& text, const Vector<CompositionUnderlin
             m_frame.selection().setSelectedRange(selectedRange.get(), DOWNSTREAM, false);
         }
     }
-
-    setIgnoreSelectionChanges(false);
 
 #if PLATFORM(IOS)        
     client()->stopDelayingAndCoalescingContentChangeNotifications();
@@ -2743,11 +2806,16 @@ void Editor::updateMarkersForWordsAffectedByEditing(bool doNotRemoveIfSelectionA
     for (auto* marker : markers)
         m_alternativeTextController->removeDictationAlternativesForMarker(*marker);
 
-#if PLATFORM(IOS)
-    document().markers().removeMarkers(wordRange.ptr(), DocumentMarker::Spelling | DocumentMarker::CorrectionIndicator | DocumentMarker::SpellCheckingExemption | DocumentMarker::DictationAlternatives | DocumentMarker::DictationPhraseWithAlternatives, DocumentMarkerController::RemovePartiallyOverlappingMarker);
-#else
-    document().markers().removeMarkers(wordRange.ptr(), DocumentMarker::Spelling | DocumentMarker::Grammar | DocumentMarker::CorrectionIndicator | DocumentMarker::SpellCheckingExemption | DocumentMarker::DictationAlternatives, DocumentMarkerController::RemovePartiallyOverlappingMarker);
+    OptionSet<DocumentMarker::MarkerType> markerTypesToRemove {
+        DocumentMarker::CorrectionIndicator,
+        DocumentMarker::DictationAlternatives,
+        DocumentMarker::SpellCheckingExemption,
+        DocumentMarker::Spelling,
+#if !PLATFORM(IOS)
+        DocumentMarker::Grammar,
 #endif
+    };
+    document().markers().removeMarkers(wordRange.ptr(), markerTypesToRemove, DocumentMarkerController::RemovePartiallyOverlappingMarker);
     document().markers().clearDescriptionOnMarkersIntersectingRange(wordRange, DocumentMarker::Replacement);
 }
 
@@ -3749,17 +3817,6 @@ const Font* Editor::fontForSelection(bool& hasMultipleFonts) const
     }
 
     return font;
-}
-
-Ref<DocumentFragment> Editor::createFragmentForImageAndURL(const String& url)
-{
-    auto imageElement = HTMLImageElement::create(*m_frame.document());
-    imageElement->setAttributeWithoutSynchronization(HTMLNames::srcAttr, url);
-
-    auto fragment = document().createDocumentFragment();
-    fragment->appendChild(imageElement);
-
-    return fragment;
 }
 
 } // namespace WebCore

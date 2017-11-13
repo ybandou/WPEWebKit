@@ -23,11 +23,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CacheValidation_h
-#define CacheValidation_h
+#pragma once
 
 #include "PlatformExportMacros.h"
-#include "SessionID.h"
+#include <chrono>
+#include <pal/SessionID.h>
 #include <wtf/Optional.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
@@ -70,12 +70,10 @@ struct CacheControlDirectives {
 };
 WEBCORE_EXPORT CacheControlDirectives parseCacheControlDirectives(const HTTPHeaderMap&);
 
-WEBCORE_EXPORT Vector<std::pair<String, String>> collectVaryingRequestHeaders(const ResourceRequest&, const ResourceResponse&, SessionID = SessionID::defaultSessionID());
-WEBCORE_EXPORT bool verifyVaryingRequestHeaders(const Vector<std::pair<String, String>>& varyingRequestHeaders, const ResourceRequest&, SessionID = SessionID::defaultSessionID());
+WEBCORE_EXPORT Vector<std::pair<String, String>> collectVaryingRequestHeaders(const ResourceRequest&, const ResourceResponse&, PAL::SessionID = PAL::SessionID::defaultSessionID());
+WEBCORE_EXPORT bool verifyVaryingRequestHeaders(const Vector<std::pair<String, String>>& varyingRequestHeaders, const ResourceRequest&, PAL::SessionID = PAL::SessionID::defaultSessionID());
 
 WEBCORE_EXPORT bool isStatusCodeCacheableByDefault(int statusCode);
 WEBCORE_EXPORT bool isStatusCodePotentiallyCacheable(int statusCode);
 
 }
-
-#endif

@@ -79,6 +79,8 @@ public:
 
     WEBCORE_EXPORT bool complete() const;
 
+    WEBCORE_EXPORT void decode(Ref<DeferredPromise>&&);
+
 #if PLATFORM(IOS)
     bool willRespondToMouseClickEvents() override;
 #endif
@@ -97,7 +99,7 @@ public:
 protected:
     HTMLImageElement(const QualifiedName&, Document&, HTMLFormElement* = 0);
 
-    void didMoveToNewDocument(Document& oldDocument) override;
+    void didMoveToNewDocument(Document& oldDocument, Document& newDocument) override;
 
 private:
     void parseAttribute(const QualifiedName&, const AtomicString&) override;

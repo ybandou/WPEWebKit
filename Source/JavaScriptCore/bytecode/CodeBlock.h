@@ -33,15 +33,14 @@
 #include "ByValInfo.h"
 #include "BytecodeConventions.h"
 #include "CallLinkInfo.h"
-#include "CallReturnOffsetToBytecodeOffset.h"
 #include "CodeBlockHash.h"
 #include "CodeOrigin.h"
 #include "CodeType.h"
 #include "CompactJITCodeMap.h"
+#include "CompilationResult.h"
 #include "ConcurrentJSLock.h"
 #include "DFGCommon.h"
 #include "DFGExitProfile.h"
-#include "DeferredCompilationCallback.h"
 #include "DirectEvalCodeCache.h"
 #include "EvalExecutable.h"
 #include "ExecutionCounter.h"
@@ -69,7 +68,6 @@
 #include "VirtualRegister.h"
 #include "Watchpoint.h"
 #include <wtf/Bag.h>
-#include <wtf/FastBitVector.h>
 #include <wtf/FastMalloc.h>
 #include <wtf/RefCountedArray.h>
 #include <wtf/RefPtr.h>
@@ -403,19 +401,20 @@ public:
         ASSERT(m_argumentValueProfiles.size() == static_cast<unsigned>(m_numParameters));
         return m_argumentValueProfiles.size();
     }
-    ValueProfile* valueProfileForArgument(unsigned argumentIndex)
+    ValueProfile& valueProfileForArgument(unsigned argumentIndex)
     {
-        ValueProfile* result = &m_argumentValueProfiles[argumentIndex];
-        ASSERT(result->m_bytecodeOffset == -1);
+        ValueProfile& result = m_argumentValueProfiles[argumentIndex];
+        ASSERT(result.m_bytecodeOffset == -1);
         return result;
     }
 
     unsigned numberOfValueProfiles() { return m_valueProfiles.size(); }
-    ValueProfile* valueProfile(int index) { return &m_valueProfiles[index]; }
-    ValueProfile* valueProfileForBytecodeOffset(int bytecodeOffset);
+    ValueProfile& valueProfile(int index) { return m_valueProfiles[index]; }
+    ValueProfile& valueProfileForBytecodeOffset(int bytecodeOffset);
+    ValueProfile* tryGetValueProfileForBytecodeOffset(int bytecodeOffset);
     SpeculatedType valueProfilePredictionForBytecodeOffset(const ConcurrentJSLocker& locker, int bytecodeOffset)
     {
-        if (ValueProfile* valueProfile = valueProfileForBytecodeOffset(bytecodeOffset))
+        if (ValueProfile* valueProfile = tryGetValueProfileForBytecodeOffset(bytecodeOffset))
             return valueProfile->computeUpdatedPrediction(locker);
         return SpecNone;
     }
@@ -424,7 +423,7 @@ public:
     {
         return numberOfArgumentValueProfiles() + numberOfValueProfiles();
     }
-    ValueProfile* getFromAllValueProfiles(unsigned index)
+    ValueProfile& getFromAllValueProfiles(unsigned index)
     {
         if (index < numberOfArgumentValueProfiles())
             return valueProfileForArgument(index);
@@ -535,7 +534,7 @@ public:
     {
         unsigned result = m_constantRegisters.size();
         m_constantRegisters.append(WriteBarrier<Unknown>());
-        m_constantRegisters.last().set(m_globalObject->vm(), this, v);
+        m_constantRegisters.last().set(*m_vm, this, v);
         m_constantsSourceCodeRepresentation.append(SourceCodeRepresentation::Other);
         return result;
     }
@@ -892,6 +891,26 @@ public:
 
     CallSiteIndex newExceptionHandlingCallSiteIndex(CallSiteIndex originalCallSite);
 
+    void ensureCatchLivenessIsComputedForBytecodeOffset(unsigned bytecodeOffset)
+    {
+        if (!!m_instructions[bytecodeOffset + 3].u.pointer) {
+#if !ASSERT_DISABLED
+            ConcurrentJSLocker locker(m_lock);
+            bool found = false;
+            for (auto& profile : m_catchProfiles) {
+                if (profile.get() == m_instructions[bytecodeOffset + 3].u.pointer) {
+                    found = true;
+                    break;
+                }
+            }
+            ASSERT(found);
+#endif
+            return;
+        }
+
+        ensureCatchLivenessIsComputedForBytecodeOffsetSlow(bytecodeOffset);
+    }
+
 #if ENABLE(JIT)
     void setPCToCodeOriginMap(std::unique_ptr<PCToCodeOriginMap>&&);
     std::optional<CodeOrigin> findPC(void* pc);
@@ -920,12 +939,14 @@ private:
 
     void updateAllPredictionsAndCountLiveness(unsigned& numberOfLiveNonArgumentValueProfiles, unsigned& numberOfSamplesInProfiles);
 
-    bool setConstantRegisters(const Vector<WriteBarrier<Unknown>>& constants, const Vector<SourceCodeRepresentation>& constantsSourceCodeRepresentation);
+    void setConstantIdentifierSetRegisters(VM&, const Vector<ConstantIndentifierSetEntry>& constants);
+
+    void setConstantRegisters(const Vector<WriteBarrier<Unknown>>& constants, const Vector<SourceCodeRepresentation>& constantsSourceCodeRepresentation);
 
     void replaceConstant(int index, JSValue value)
     {
         ASSERT(isConstantRegisterIndex(index) && static_cast<size_t>(index - FirstConstantRegisterIndex) < m_constantRegisters.size());
-        m_constantRegisters[index - FirstConstantRegisterIndex].set(m_globalObject->vm(), this, value);
+        m_constantRegisters[index - FirstConstantRegisterIndex].set(*m_vm, this, value);
     }
 
     bool shouldVisitStrongly(const ConcurrentJSLocker&);
@@ -952,6 +973,7 @@ private:
     }
 
     void insertBasicBlockBoundariesForControlFlowProfiler(RefCountedArray<Instruction>&);
+    void ensureCatchLivenessIsComputedForBytecodeOffsetSlow(unsigned);
 
     WriteBarrier<UnlinkedCodeBlock> m_unlinkedCode;
     int m_numParameters;
@@ -1002,6 +1024,7 @@ private:
 #endif
     RefCountedArray<ValueProfile> m_argumentValueProfiles;
     RefCountedArray<ValueProfile> m_valueProfiles;
+    Vector<std::unique_ptr<ValueProfileAndOperandBuffer>> m_catchProfiles;
     SegmentedVector<RareCaseProfile, 8> m_rareCaseProfiles;
     RefCountedArray<ArrayAllocationProfile> m_arrayAllocationProfiles;
     ArrayProfileVector m_arrayProfiles;

@@ -103,6 +103,7 @@ public:
     const VisiblePosition& caretPosition() { return m_position; }
     void setCaretPosition(const VisiblePosition&);
     void clear() { setCaretPosition(VisiblePosition()); }
+    WEBCORE_EXPORT IntRect caretRectInRootViewCoordinates() const;
 
     void nodeWillBeRemoved(Node&);
 
@@ -125,11 +126,12 @@ public:
         DoNotSetFocus = 1 << 4,
         DictationTriggered = 1 << 5,
         RevealSelection = 1 << 6,
+        IsUserTriggered = 1 << 7,
     };
     typedef unsigned SetSelectionOptions; // Union of values in SetSelectionOption and EUserTriggered
     static inline SetSelectionOptions defaultSetSelectionOptions(EUserTriggered userTriggered = NotUserTriggered)
     {
-        return CloseTyping | ClearTypingStyle | (userTriggered ? (RevealSelection | FireSelectEvent) : 0);
+        return CloseTyping | ClearTypingStyle | (userTriggered ? (RevealSelection | FireSelectEvent | IsUserTriggered) : 0);
     }
 
     WEBCORE_EXPORT explicit FrameSelection(Frame* = nullptr);
@@ -151,6 +153,7 @@ public:
     void prepareForDestruction();
 
     void updateAppearanceAfterLayout();
+    void scheduleAppearanceUpdateAfterStyleChange();
     void setNeedsSelectionUpdate();
 
     bool contains(const LayoutPoint&) const;
@@ -234,6 +237,7 @@ public:
     void setCaretBlinks(bool caretBlinks = true);
     WEBCORE_EXPORT void setCaretColor(const Color&);
     WEBCORE_EXPORT static VisibleSelection wordSelectionContainingCaretSelection(const VisibleSelection&);
+    bool isUpdateAppearanceEnabled() const { return m_updateAppearanceEnabled; }
     void setUpdateAppearanceEnabled(bool enabled) { m_updateAppearanceEnabled = enabled; }
     void suppressScrolling() { ++m_scrollingSuppressCount; }
     void restoreScrolling()
@@ -315,6 +319,9 @@ private:
 
     void caretBlinkTimerFired();
 
+    void updateAppearanceAfterLayoutOrStyleChange();
+    void appearanceUpdateTimerFired();
+
     void setCaretVisibility(CaretVisibility);
     bool recomputeCaretRect();
     void invalidateCaretRect();
@@ -334,6 +341,7 @@ private:
     RefPtr<EditingStyle> m_typingStyle;
 
     Timer m_caretBlinkTimer;
+    Timer m_appearanceUpdateTimer;
     // The painted bounds of the caret in absolute coordinates
     IntRect m_absCaretBounds;
     bool m_caretInsidePositionFixed : 1;

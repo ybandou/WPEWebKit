@@ -29,13 +29,13 @@
 #if ENABLE(WIRELESS_PLAYBACK_TARGET) && !PLATFORM(IOS)
 
 #import "Logging.h"
-#import <WebCore/AVFoundationSPI.h>
-#import <WebCore/AVKitSPI.h>
 #import <WebCore/FloatRect.h>
 #import <WebCore/MediaPlaybackTargetMac.h>
-#import <WebCore/SoftLinking.h>
 #import <objc/runtime.h>
+#import <pal/spi/cocoa/AVKitSPI.h>
+#import <pal/spi/mac/AVFoundationSPI.h>
 #import <wtf/MainThread.h>
+#import <wtf/SoftLinking.h>
 
 typedef AVOutputContext AVOutputContextType;
 typedef AVOutputDeviceMenuController AVOutputDeviceMenuControllerType;

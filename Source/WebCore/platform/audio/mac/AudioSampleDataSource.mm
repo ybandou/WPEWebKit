@@ -31,11 +31,11 @@
 #include "CAAudioStreamDescription.h"
 #include "CARingBuffer.h"
 #include "Logging.h"
-#include "MediaTimeAVFoundation.h"
 #include <AudioToolbox/AudioConverter.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 #include <mutex>
+#include <pal/avfoundation/MediaTimeAVFoundation.h>
 #include <syslog.h>
 #include <wtf/CurrentTime.h>
 #include <wtf/StringPrintStream.h>
@@ -192,7 +192,7 @@ void AudioSampleDataSource::pushSamples(const AudioStreamBasicDescription& sampl
     ASSERT(m_ringBuffer);
     
     WebAudioBufferList list(*m_inputDescription, sampleBuffer);
-    pushSamplesInternal(list, toMediaTime(CMSampleBufferGetPresentationTimeStamp(sampleBuffer)), CMSampleBufferGetNumSamples(sampleBuffer));
+    pushSamplesInternal(list, PAL::toMediaTime(CMSampleBufferGetPresentationTimeStamp(sampleBuffer)), CMSampleBufferGetNumSamples(sampleBuffer));
 }
 
 void AudioSampleDataSource::pushSamples(const MediaTime& sampleTime, const PlatformAudioData& audioData, size_t sampleCount)
@@ -269,12 +269,7 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t&
 #endif
 
         if (framesAvailable < sampleCount) {
-            int64_t delta = static_cast<int64_t>(timeStamp) - static_cast<int64_t>(endFrame);
-            if (delta > 0)
-                m_outputSampleOffset -= std::min<int64_t>(delta, sampleCount);
-        }
-
-        if (!framesAvailable) {
+            m_outputSampleOffset -= sampleCount - framesAvailable;
             AudioSampleBufferList::zeroABL(buffer, byteCount);
             return false;
         }

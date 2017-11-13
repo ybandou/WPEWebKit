@@ -26,6 +26,8 @@
 #import "config.h"
 
 #import <WebCore/WebCoreNSURLExtras.h>
+#import <wtf/Vector.h>
+#import <wtf/text/WTFString.h>
 
 namespace TestWebKitAPI {
 
@@ -68,6 +70,49 @@ TEST(WebCore, URLExtras)
 
     EXPECT_STREQ("http://site.com", userVisibleString(literalURL("http://site.com")));
     EXPECT_STREQ("http://%77ebsite.com", userVisibleString(literalURL("http://%77ebsite.com")));
+}
+    
+TEST(WebCore, URLExtras_Spoof)
+{
+    Vector<String> punycodedSpoofHosts = {
+        "xn--cfa45g", // U+0131, U+0307
+        "xn--tma03b", // U+0237, U+0307
+        "xn--tma03bxga", // U+0237, U+034F, U+034F, U+0307
+        "xn--tma03bl01e", // U+0237, U+200B, U+0307
+        "xn--a-egb", // a, U+034F
+        "xn--a-qgn", // a, U+200B
+        "xn--a-mgn", // a, U+2009
+        "xn--u7f", // U+1D04
+        "xn--57f", // U+1D0F
+        "xn--i38a", // U+A731
+        "xn--j8f", // U+1D1C
+        "xn--n8f", // U+1D20
+        "xn--o8f", // U+1D21
+        "xn--p8f", // U+1D22
+        "xn--0na", // U+0261
+        "xn--cn-ded", // U+054D
+        "xn--ews-nfe.org", // U+054D
+        "xn--yotube-qkh", // U+0578
+        "xn--cla-7fe.edu", // U+0578
+    };
+    for (const String& host : punycodedSpoofHosts) {
+        auto url = makeString("http://", host, "/").utf8();
+        EXPECT_STREQ(url.data(), userVisibleString(literalURL(url.data())));
+    }
+}
+
+TEST(WebCore, URLExtras_NotSpoofed)
+{
+    // Valid mixtures of Armenian and other scripts
+    EXPECT_STREQ("https://en.wikipedia.org/wiki/.\u0570\u0561\u0575", userVisibleString(literalURL("https://en.wikipedia.org/wiki/.\u0570\u0561\u0575")));
+    EXPECT_STREQ("https://\u0573\u0574\u0578.\u0570\u0561\u0575", userVisibleString(literalURL("https://\u0573\u0574\u0578.\u0570\u0561\u0575")));
+    EXPECT_STREQ("https://\u0573-1-\u0574\u0578.\u0570\u0561\u0575", userVisibleString(literalURL("https://\u0573-1-\u0574\u0578.\u0570\u0561\u0575")));
+    EXPECT_STREQ("https://2\u0573_\u0574\u0578.\u0570\u0561\u0575", userVisibleString(literalURL("https://2\u0573_\u0574\u0578.\u0570\u0561\u0575")));
+    EXPECT_STREQ("https://\u0573_\u0574\u05783.\u0570\u0561\u0575", userVisibleString(literalURL("https://\u0573_\u0574\u05783.\u0570\u0561\u0575")));
+    EXPECT_STREQ("https://got\u0551\u0535\u0543.com", userVisibleString(literalURL("https://got\u0551\u0535\u0543.com")));
+    EXPECT_STREQ("https://\u0551\u0535\u0543fans.net", userVisibleString(literalURL("https://\u0551\u0535\u0543fans.net")));
+    EXPECT_STREQ("https://\u0551\u0535or\u0575\u0543.biz", userVisibleString(literalURL("https://\u0551\u0535or\u0575\u0543.biz")));
+    EXPECT_STREQ("https://\u0551\u0535and!$^&*()-~+={}or<>,.?\u0575\u0543.biz", userVisibleString(literalURL("https://\u0551\u0535and!$^&*()-~+={}or<>,.?\u0575\u0543.biz")));
 }
 
 TEST(WebCore, URLExtras_DivisionSign)
@@ -152,3 +197,4 @@ TEST(WebCore, URLExtras_Nil)
 }
 
 } // namespace TestWebKitAPI
+

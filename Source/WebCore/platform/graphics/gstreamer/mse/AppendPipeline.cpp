@@ -25,14 +25,13 @@
 
 #include "AudioTrackPrivateGStreamer.h"
 #include "GRefPtrGStreamer.h"
+#include "GStreamerEMEUtilities.h"
 #include "GStreamerMediaDescription.h"
 #include "GStreamerMediaSample.h"
-#include "GStreamerUtilities.h"
 #include "InbandTextTrackPrivateGStreamer.h"
 #include "MediaDescription.h"
 #include "SourceBufferPrivateGStreamer.h"
 #include "VideoTrackPrivateGStreamer.h"
-
 #include <gst/app/gstappsink.h>
 #include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
@@ -40,6 +39,7 @@
 #include <gst/video/video.h>
 #include <wtf/Condition.h>
 #include <wtf/glib/GLibUtilities.h>
+#include <wtf/glib/RunLoopSourcePriority.h>
 
 GST_DEBUG_CATEGORY_EXTERN(webkit_mse_debug);
 #define GST_CAT_DEFAULT webkit_mse_debug
@@ -93,7 +93,7 @@ static void appendPipelineApplicationMessageCallback(GstBus*, GstMessage* messag
     appendPipeline->handleApplicationMessage(message);
 }
 
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
+#if ENABLE(ENCRYPTED_MEDIA)
 static void appendPipelineElementMessageCallback(GstBus*, GstMessage* message, AppendPipeline* appendPipeline)
 {
     appendPipeline->handleElementMessage(message);
@@ -121,12 +121,12 @@ AppendPipeline::AppendPipeline(Ref<MediaSourceClientGStreamerMSE> mediaSourceCli
     m_pipeline = gst_pipeline_new(nullptr);
 
     m_bus = adoptGRef(gst_pipeline_get_bus(GST_PIPELINE(m_pipeline.get())));
-    gst_bus_add_signal_watch_full(m_bus.get(), G_PRIORITY_HIGH + 30);
+    gst_bus_add_signal_watch_full(m_bus.get(), RunLoopSourcePriority::RunLoopDispatcher);
     gst_bus_enable_sync_message_emission(m_bus.get());
 
     g_signal_connect(m_bus.get(), "sync-message::need-context", G_CALLBACK(appendPipelineNeedContextMessageCallback), this);
     g_signal_connect(m_bus.get(), "message::application", G_CALLBACK(appendPipelineApplicationMessageCallback), this);
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
+#if ENABLE(ENCRYPTED_MEDIA)
     g_signal_connect(m_bus.get(), "message::element", G_CALLBACK(appendPipelineElementMessageCallback), this);
 #endif
 
@@ -172,6 +172,7 @@ AppendPipeline::~AppendPipeline()
 {
     ASSERT(WTF::isMainThread());
 
+    GST_TRACE("Destroying AppendPipeline (%p)", this);
     {
         LockHolder locker(m_newSampleLock);
         setAppendState(AppendState::Invalid);
@@ -183,8 +184,6 @@ AppendPipeline::~AppendPipeline()
         m_playerPrivate = nullptr;
         m_padAddRemoveCondition.notifyOne();
     }
-
-    GST_TRACE("Destroying AppendPipeline (%p)", this);
 
     // FIXME: Maybe notify appendComplete here?
 
@@ -229,33 +228,6 @@ AppendPipeline::~AppendPipeline()
     m_demuxerSrcPadCaps = nullptr;
 };
 
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA)
-void AppendPipeline::dispatchPendingDecryptionKey()
-{
-    ASSERT(m_decryptor);
-    ASSERT(m_pendingKey);
-    ASSERT(m_appendState == AppendState::KeyNegotiation);
-    GST_TRACE("dispatching key to append pipeline %p", this);
-    gst_element_send_event(m_pipeline.get(), gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM_OOB,
-        gst_structure_new("drm-cipher", "key", GST_TYPE_BUFFER, m_pendingKey.get(), nullptr)));
-    m_pendingKey.clear();
-    setAppendState(AppendState::Ongoing);
-}
-
-void AppendPipeline::dispatchDecryptionKey(GstBuffer* buffer)
-{
-    if (m_appendState == AppendState::KeyNegotiation) {
-        GST_TRACE("append pipeline %p in key negotiation", this);
-        m_pendingKey = buffer;
-        if (m_decryptor)
-            dispatchPendingDecryptionKey();
-        else
-            GST_TRACE("no decryptor yet, waiting for it");
-    } else
-        GST_TRACE("append pipeline %p not in key negotiation", this);
-}
-#endif
-
 void AppendPipeline::clearPlayerPrivate()
 {
     ASSERT(WTF::isMainThread());
@@ -288,9 +260,6 @@ void AppendPipeline::handleNeedContextSyncMessage(GstMessage* message)
     const gchar* contextType = nullptr;
     gst_message_parse_context_type(message, &contextType);
     GST_TRACE("context type: %s", contextType);
-    if (!g_strcmp0(contextType, "drm-preferred-decryption-system-id")
-        && m_appendState != AppendPipeline::AppendState::KeyNegotiation)
-        setAppendState(AppendPipeline::AppendState::KeyNegotiation);
 
     // MediaPlayerPrivateGStreamerBase will take care of setting up encryption.
     if (m_playerPrivate)
@@ -321,6 +290,14 @@ void AppendPipeline::handleApplicationMessage(GstMessage* message)
         return;
     }
 
+    if (gst_structure_has_name(structure, "transition-main-thread")) {
+        GST_TRACE("Received transition-main-thread in main thread");
+        AppendState nextState;
+        gst_structure_get(structure, "transition", G_TYPE_INT, &nextState, nullptr);
+        transitionTo(nextState);
+        return;
+    }
+
     if (gst_structure_has_name(structure, "appsink-caps-changed")) {
         appsinkCapsChanged();
         return;
@@ -342,21 +319,18 @@ void AppendPipeline::handleApplicationMessage(GstMessage* message)
     ASSERT_NOT_REACHED();
 }
 
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
+#if ENABLE(ENCRYPTED_MEDIA)
 void AppendPipeline::handleElementMessage(GstMessage* message)
 {
     ASSERT(WTF::isMainThread());
 
     const GstStructure* structure = gst_message_get_structure(message);
     GST_TRACE("%s message from %s", gst_structure_get_name(structure), GST_MESSAGE_SRC_NAME(message));
-    if (m_playerPrivate && gst_structure_has_name(structure, "drm-key-needed")) {
-        if (m_appendState != AppendPipeline::AppendState::KeyNegotiation)
-            setAppendState(AppendPipeline::AppendState::KeyNegotiation);
-
-        GST_DEBUG("sending drm-key-needed message from %s to the player", GST_MESSAGE_SRC_NAME(message));
+    if (m_playerPrivate && gst_structure_has_name(structure, "protection_event")) {
+        GST_DEBUG("sending protection_event message from %s to the player", GST_MESSAGE_SRC_NAME(message));
         GRefPtr<GstEvent> event;
         gst_structure_get(structure, "event", GST_TYPE_EVENT, &event.outPtr(), nullptr);
-        m_playerPrivate->handleProtectionEvent(event.get(), getPipeline(GST_ELEMENT(message->src)));
+        m_playerPrivate->handleProtectionEvent(event.get());
     }
 }
 #endif
@@ -588,16 +562,9 @@ void AppendPipeline::parseDemuxerSrcPadCaps(GstCaps* demuxerSrcPadCaps)
     GstStructure* structure = gst_caps_get_structure(m_demuxerSrcPadCaps.get(), 0);
     bool sizeConfigured = false;
 
-#if GST_CHECK_VERSION(1, 5, 3) && (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA))
+#if GST_CHECK_VERSION(1, 5, 3) && ENABLE(ENCRYPTED_MEDIA)
     if (gst_structure_has_name(structure, "application/x-cenc")) {
         // Any previous decryptor should have been removed from the pipeline by disconnectFromAppSinkFromStreamingThread()
-        ASSERT(!m_decryptor);
-
-        m_decryptor = WebCore::createGstDecryptor(gst_structure_get_string(structure, "protection-system"));
-        if (!m_decryptor) {
-            GST_ERROR("decryptor not found for caps: %" GST_PTR_FORMAT, m_demuxerSrcPadCaps.get());
-            return;
-        }
 
         const gchar* originalMediaType = gst_structure_get_string(structure, "original-media-type");
 
@@ -673,8 +640,8 @@ void AppendPipeline::appsinkCapsChanged()
 
     if (m_appsinkCaps != caps) {
         m_appsinkCaps = WTFMove(caps);
-        if (m_playerPrivate && previousCapsWereNull)
-            m_playerPrivate->trackDetected(this, m_oldTrack, m_track);
+        if (m_playerPrivate)
+            m_playerPrivate->trackDetected(this, m_track, previousCapsWereNull);
         didReceiveInitializationSegment();
         gst_element_set_state(m_pipeline.get(), GST_STATE_PLAYING);
     }
@@ -734,7 +701,7 @@ void AppendPipeline::appsinkNewSample(GstSample* sample)
 
         // If we're beyond the duration, ignore this sample and the remaining ones.
         MediaTime duration = m_mediaSourceClient->duration();
-        if (duration.isValid() && !duration.indefiniteTime() && mediaSample->presentationTime() > duration) {
+        if (duration.isValid() && !duration.isIndefinite() && mediaSample->presentationTime() > duration) {
             GST_DEBUG("Detected sample (%f) beyond the duration (%f), declaring LastSample", mediaSample->presentationTime().toFloat(), duration.toFloat());
             setAppendState(AppendState::LastSample);
             m_flowReturn = GST_FLOW_OK;
@@ -751,6 +718,7 @@ void AppendPipeline::appsinkNewSample(GstSample* sample)
         }
 
         m_sourceBufferPrivate->didReceiveSample(*mediaSample);
+
         setAppendState(AppendState::Sampling);
         m_flowReturn = GST_FLOW_OK;
         m_newSampleCondition.notifyOne();
@@ -897,6 +865,7 @@ GstFlowReturn AppendPipeline::pushNewBuffer(GstBuffer* buffer)
     } else {
         setAppendState(AppendPipeline::AppendState::Ongoing);
         GST_TRACE("pushing new buffer %p", buffer);
+
         result = gst_app_src_push_buffer(GST_APP_SRC(appsrc()), buffer);
     }
 
@@ -983,7 +952,7 @@ void AppendPipeline::connectDemuxerSrcPadToAppsinkFromAnyThread(GstPad* demuxerS
         GstStructure* structure = gst_structure_new("demuxer-connect-to-appsink", "demuxer-src-pad", G_TYPE_OBJECT, demuxerSrcPad, nullptr);
         GstMessage* message = gst_message_new_application(GST_OBJECT(m_demux.get()), structure);
         gst_bus_post(m_bus.get(), message);
-        GST_TRACE("demuxer-connect-to-appsink message posted to bus");
+        GST_TRACE("demuxer-connect-to-appsink message posted to bus, waiting...");
 
         m_padAddRemoveCondition.wait(m_padAddRemoveLock);
     }
@@ -993,39 +962,34 @@ void AppendPipeline::connectDemuxerSrcPadToAppsinkFromAnyThread(GstPad* demuxerS
         || (m_streamType == WebCore::MediaSourceStreamTypeGStreamer::Video)
         || (m_streamType == WebCore::MediaSourceStreamTypeGStreamer::Text);
 
+    GST_TRACE("isData = %s", boolForPrinting(isData));
+
     if (isData) {
         // FIXME: Only add appsink one time. This method can be called several times.
         GRefPtr<GstObject> parent = adoptGRef(gst_element_get_parent(m_appsink.get()));
         if (!parent)
             gst_bin_add(GST_BIN(m_pipeline.get()), m_appsink.get());
 
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA)
-        if (m_decryptor) {
-            gst_object_ref(m_decryptor.get());
-            gst_bin_add(GST_BIN(m_pipeline.get()), m_decryptor.get());
-
-            GRefPtr<GstPad> decryptorSinkPad = adoptGRef(gst_element_get_static_pad(m_decryptor.get(), "sink"));
-            gst_pad_link(demuxerSrcPad, decryptorSinkPad.get());
-
-            GRefPtr<GstPad> decryptorSrcPad = adoptGRef(gst_element_get_static_pad(m_decryptor.get(), "src"));
-            gst_pad_link(decryptorSrcPad.get(), appsinkSinkPad.get());
-
-            gst_element_sync_state_with_parent(m_appsink.get());
-            gst_element_sync_state_with_parent(m_decryptor.get());
-
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA)
-            if (m_pendingKey)
-                dispatchPendingDecryptionKey();
-#endif
-        } else {
-#endif
-            gst_pad_link(demuxerSrcPad, appsinkSinkPad.get());
-            gst_element_sync_state_with_parent(m_appsink.get());
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA)
-        }
-#endif
+        gst_pad_link(demuxerSrcPad, appsinkSinkPad.get());
+        gst_element_sync_state_with_parent(m_appsink.get());
         gst_element_set_state(m_pipeline.get(), GST_STATE_PAUSED);
     }
+}
+
+void AppendPipeline::transitionTo(AppendState nextState)
+{
+    ASSERT(WTF::isMainThread());
+
+    LockHolder locker(m_appendStateTransitionLock);
+
+    if (m_appendState == AppendState::Invalid || m_appendState == nextState || !m_playerPrivate) {
+        m_appendStateTransitionCondition.notifyOne();
+        return;
+    }
+
+    setAppendState(nextState);
+
+    m_appendStateTransitionCondition.notifyOne();
 }
 
 void AppendPipeline::connectDemuxerSrcPadToAppsink(GstPad* demuxerSrcPad)
@@ -1056,8 +1020,6 @@ void AppendPipeline::connectDemuxerSrcPadToAppsink(GstPad* demuxerSrcPad)
     if (m_initialDuration > m_mediaSourceClient->duration()
         || (m_mediaSourceClient->duration().isInvalid() && m_initialDuration > MediaTime::zeroTime()))
         m_mediaSourceClient->durationChanged(m_initialDuration);
-
-    m_oldTrack = m_track;
 
     parseDemuxerSrcPadCaps(gst_caps_ref(caps.get()));
 
@@ -1111,15 +1073,7 @@ void AppendPipeline::disconnectDemuxerSrcPadFromAppsinkFromAnyThread(GstPad* dem
 
     GST_DEBUG("Disconnecting appsink");
 
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA)
-    if (m_decryptor) {
-        gst_element_unlink(m_decryptor.get(), m_appsink.get());
-        gst_element_unlink(m_demux.get(), m_decryptor.get());
-        gst_element_set_state(m_decryptor.get(), GST_STATE_NULL);
-        gst_bin_remove(GST_BIN(m_pipeline.get()), m_decryptor.get());
-    } else
-#endif
-        gst_element_unlink(m_demux.get(), m_appsink.get());
+    gst_element_unlink(m_demux.get(), m_appsink.get());
 }
 
 static void appendPipelineAppsinkCapsChanged(GObject* appsinkPad, GParamSpec*, AppendPipeline* appendPipeline)

@@ -35,6 +35,7 @@
 
 #include "RealtimeMediaSourceSupportedConstraints.h"
 #include <cstdlib>
+#include <wtf/Function.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
@@ -220,7 +221,7 @@ public:
         return true;
     }
 
-    ValueType find(std::function<bool(ValueType)> function) const
+    ValueType find(const WTF::Function<bool(ValueType)>& function) const
     {
         if (m_min && function(m_min.value()))
             return m_min.value();
@@ -525,7 +526,7 @@ public:
     double fitnessDistance(const String&) const;
     double fitnessDistance(const Vector<String>&) const;
 
-    const String& find(std::function<bool(const String&)>) const;
+    const String& find(const WTF::Function<bool(const String&)>&) const;
 
     bool isEmpty() const { return m_exact.isEmpty() && m_ideal.isEmpty(); }
     bool isMandatory() const { return !m_exact.isEmpty(); }
@@ -572,8 +573,8 @@ private:
 
 class MediaTrackConstraintSetMap {
 public:
-    WEBCORE_EXPORT void forEach(std::function<void(const MediaConstraint&)>) const;
-    void filter(std::function<bool(const MediaConstraint&)>) const;
+    WEBCORE_EXPORT void forEach(WTF::Function<void(const MediaConstraint&)>&&) const;
+    void filter(const WTF::Function<bool(const MediaConstraint&)>&) const;
     bool isEmpty() const;
     WEBCORE_EXPORT size_t size() const;
 
@@ -615,35 +616,36 @@ public:
         encoder << m_groupId;
     }
 
-    template <class Decoder> static bool decode(Decoder& decoder, MediaTrackConstraintSetMap& map)
+    template <class Decoder> static std::optional<MediaTrackConstraintSetMap> decode(Decoder& decoder)
     {
+        MediaTrackConstraintSetMap map;
         if (!decoder.decode(map.m_width))
-            return false;
+            return std::nullopt;
         if (!decoder.decode(map.m_height))
-            return false;
+            return std::nullopt;
         if (!decoder.decode(map.m_sampleRate))
-            return false;
+            return std::nullopt;
         if (!decoder.decode(map.m_sampleSize))
-            return false;
+            return std::nullopt;
 
         if (!decoder.decode(map.m_aspectRatio))
-            return false;
+            return std::nullopt;
         if (!decoder.decode(map.m_frameRate))
-            return false;
+            return std::nullopt;
         if (!decoder.decode(map.m_volume))
-            return false;
+            return std::nullopt;
 
         if (!decoder.decode(map.m_echoCancellation))
-            return false;
+            return std::nullopt;
 
         if (!decoder.decode(map.m_facingMode))
-            return false;
+            return std::nullopt;
         if (!decoder.decode(map.m_deviceId))
-            return false;
+            return std::nullopt;
         if (!decoder.decode(map.m_groupId))
-            return false;
+            return std::nullopt;
 
-        return true;
+        return WTFMove(map);
     }
 
 private:
@@ -806,7 +808,7 @@ private:
 
 struct MediaConstraints {
     void setDefaultVideoConstraints();
-    bool isConstraintSet(std::function<bool(const MediaTrackConstraintSetMap&)>&&);
+    bool isConstraintSet(const WTF::Function<bool(const MediaTrackConstraintSetMap&)>&);
 
     MediaTrackConstraintSetMap mandatoryConstraints;
     Vector<MediaTrackConstraintSetMap> advancedConstraints;

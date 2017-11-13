@@ -26,11 +26,13 @@
 #include "config.h"
 #include "ProfilerDatabase.h"
 
+#include "CatchScope.h"
 #include "CodeBlock.h"
 #include "JSONObject.h"
 #include "ObjectConstructor.h"
 #include "JSCInlines.h"
 #include <wtf/CurrentTime.h>
+#include <wtf/FilePrintStream.h>
 
 namespace JSC { namespace Profiler {
 
@@ -109,7 +111,7 @@ JSValue Database::toJS(ExecState* exec) const
         bytecodes->putDirectIndex(exec, i, value);
         RETURN_IF_EXCEPTION(scope, { });
     }
-    result->putDirect(vm, exec->propertyNames().bytecodes, bytecodes);
+    result->putDirect(vm, vm.propertyNames->bytecodes, bytecodes);
     
     JSArray* compilations = constructEmptyArray(exec, 0);
     RETURN_IF_EXCEPTION(scope, { });
@@ -119,7 +121,7 @@ JSValue Database::toJS(ExecState* exec) const
         compilations->putDirectIndex(exec, i, value);
         RETURN_IF_EXCEPTION(scope, { });
     }
-    result->putDirect(vm, exec->propertyNames().compilations, compilations);
+    result->putDirect(vm, vm.propertyNames->compilations, compilations);
     
     JSArray* events = constructEmptyArray(exec, 0);
     RETURN_IF_EXCEPTION(scope, { });
@@ -129,7 +131,7 @@ JSValue Database::toJS(ExecState* exec) const
         events->putDirectIndex(exec, i, value);
         RETURN_IF_EXCEPTION(scope, { });
     }
-    result->putDirect(vm, exec->propertyNames().events, events);
+    result->putDirect(vm, vm.propertyNames->events, events);
     
     return result;
 }

@@ -46,6 +46,7 @@
 #include "CSSVariableParser.h"
 #include "Document.h"
 #include "Element.h"
+#include "MediaList.h"
 #include "MediaQueryParser.h"
 #include "StyleProperties.h"
 #include "StyleRuleImport.h"
@@ -279,7 +280,7 @@ CSSSelectorList CSSParserImpl::parsePageSelector(CSSParserTokenRange range, Styl
 
     std::unique_ptr<CSSParserSelector> selector;
     if (!typeSelector.isNull() && pseudo.isNull())
-        selector = std::unique_ptr<CSSParserSelector>(new CSSParserSelector(QualifiedName(nullAtom, typeSelector, styleSheet->defaultNamespace())));
+        selector = std::unique_ptr<CSSParserSelector>(new CSSParserSelector(QualifiedName(nullAtom(), typeSelector, styleSheet->defaultNamespace())));
     else {
         selector = std::unique_ptr<CSSParserSelector>(new CSSParserSelector);
         if (!pseudo.isNull()) {
@@ -288,7 +289,7 @@ CSSSelectorList CSSParserImpl::parsePageSelector(CSSParserTokenRange range, Styl
                 return CSSSelectorList();
         }
         if (!typeSelector.isNull())
-            selector->prependTagSelector(QualifiedName(nullAtom, typeSelector, styleSheet->defaultNamespace()));
+            selector->prependTagSelector(QualifiedName(nullAtom(), typeSelector, styleSheet->defaultNamespace()));
     }
 
     selector->setForPage();
@@ -451,10 +452,6 @@ RefPtr<StyleRuleBase> CSSParserImpl::consumeAtRule(CSSParserTokenRange& range, A
         return consumeKeyframesRule(false, prelude, block);
     case CSSAtRulePage:
         return consumePageRule(prelude, block);
-#if ENABLE(CSS_REGIONS)
-    case CSSAtRuleWebkitRegion:
-        return consumeRegionRule(prelude, block);
-#endif
     default:
         return nullptr; // Parse error, unrecognised at-rule with block
     }
@@ -562,7 +559,7 @@ RefPtr<StyleRuleMedia> CSSParserImpl::consumeMediaRule(CSSParserTokenRange prelu
 
 RefPtr<StyleRuleSupports> CSSParserImpl::consumeSupportsRule(CSSParserTokenRange prelude, CSSParserTokenRange block)
 {
-    CSSSupportsParser::SupportsResult supported = CSSSupportsParser::supportsCondition(prelude, *this);
+    CSSSupportsParser::SupportsResult supported = CSSSupportsParser::supportsCondition(prelude, *this, CSSSupportsParser::ForAtRule);
     if (supported == CSSSupportsParser::Invalid)
         return nullptr; // Parse error, invalid @supports condition
 
@@ -675,32 +672,6 @@ RefPtr<StyleRulePage> CSSParserImpl::consumePageRule(CSSParserTokenRange prelude
     page->wrapperAdoptSelectorList(selectorList);
     return page;
 }
-
-#if ENABLE(CSS_REGIONS)
-RefPtr<StyleRuleRegion> CSSParserImpl::consumeRegionRule(CSSParserTokenRange prelude, CSSParserTokenRange block)
-{
-    CSSSelectorList selectorList = CSSSelectorParser::parseSelector(prelude, m_context, m_styleSheet.get());
-    if (!selectorList.isValid())
-        return nullptr; // Parse error, invalid selector list
-
-    if (m_observerWrapper) {
-        m_observerWrapper->observer().startRuleHeader(StyleRule::Region, m_observerWrapper->startOffset(prelude));
-        m_observerWrapper->observer().endRuleHeader(m_observerWrapper->endOffset(prelude));
-        m_observerWrapper->observer().startRuleBody(m_observerWrapper->previousTokenStartOffset(block));
-    }
-    
-    Vector<RefPtr<StyleRuleBase>> rules;
-    consumeRuleList(block, RegularRuleList, [&rules](RefPtr<StyleRuleBase> rule) {
-        rules.append(rule);
-    });
-    
-    if (m_observerWrapper)
-        m_observerWrapper->observer().endRuleBody(m_observerWrapper->endOffset(block));
-    
-    return StyleRuleRegion::create(selectorList, rules);
-
-}
-#endif
 
 // FIXME-NEWPARSER: Support "apply"
 /*void CSSParserImpl::consumeApplyRule(CSSParserTokenRange prelude)

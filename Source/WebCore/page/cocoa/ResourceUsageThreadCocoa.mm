@@ -28,18 +28,18 @@
 
 #if ENABLE(RESOURCE_USAGE)
 
-#include "MachVMSPI.h"
 #include <JavaScriptCore/GCActivityCallback.h>
 #include <heap/Heap.h>
 #include <mach/mach.h>
 #include <mach/vm_statistics.h>
+#include <pal/spi/cocoa/MachVMSPI.h>
 #include <runtime/VM.h>
 
 namespace WebCore {
 
 size_t vmPageSize()
 {
-#if PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000
+#if PLATFORM(IOS)
     return vm_kernel_page_size;
 #else
     static size_t cached = sysconf(_SC_PAGESIZE);

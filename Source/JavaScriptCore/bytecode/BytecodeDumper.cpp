@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2017 Yusuke Suzuki <utatane.tea@gmail.com>
+ * Copyright (C) 2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -251,7 +252,7 @@ const Identifier& BytecodeDumper<Block>::identifier(int index) const
 
 static CString regexpToSourceString(RegExp* regExp)
 {
-    char postfix[5] = { '/', 0, 0, 0, 0 };
+    char postfix[7] = { '/', 0, 0, 0, 0, 0, 0 };
     int index = 1;
     if (regExp->global())
         postfix[index++] = 'g';
@@ -259,10 +260,12 @@ static CString regexpToSourceString(RegExp* regExp)
         postfix[index++] = 'i';
     if (regExp->multiline())
         postfix[index] = 'm';
-    if (regExp->sticky())
-        postfix[index++] = 'y';
+    if (regExp->dotAll())
+        postfix[index++] = 's';
     if (regExp->unicode())
         postfix[index++] = 'u';
+    if (regExp->sticky())
+        postfix[index++] = 'y';
 
     return toCString("/", regExp->pattern().impl(), postfix);
 }
@@ -360,7 +363,7 @@ template<class Block>
 void BytecodeDumper<Block>::printGetByIdOp(PrintStream& out, int location, const typename Block::Instruction*& it)
 {
     const char* op;
-    switch (vm()->interpreter->getOpcodeID(*it)) {
+    switch (Interpreter::getOpcodeID(*it)) {
     case op_get_by_id:
         op = "get_by_id";
         break;
@@ -422,14 +425,14 @@ void BytecodeDumper<Block>::printGetByIdCacheStatus(PrintStream& out, int locati
 
     UNUSED_PARAM(ident); // tell the compiler to shut up in certain platform configurations.
 
-    if (vm()->interpreter->getOpcodeID(instruction[0]) == op_get_array_length)
+    if (Interpreter::getOpcodeID(instruction[0]) == op_get_array_length)
         out.printf(" llint(array_length)");
     else if (StructureID structureID = getStructureID(instruction[4])) {
         Structure* structure = vm()->heap.structureIDTable().get(structureID);
         out.printf(" llint(");
         dumpStructure(out, "struct", structure, ident);
         out.printf(")");
-        if (vm()->interpreter->getOpcodeID(instruction[0]) == op_get_by_id_proto_load)
+        if (Interpreter::getOpcodeID(instruction[0]) == op_get_by_id_proto_load)
             out.printf(" proto(%p)", getPointer(instruction[6]));
     }
 
@@ -611,7 +614,7 @@ void BytecodeDumper<Block>::dumpBytecode(PrintStream& out, const typename Block:
 {
     int location = it - begin;
     bool hasPrintedProfiling = false;
-    OpcodeID opcode = vm()->interpreter->getOpcodeID(*it);
+    OpcodeID opcode = Interpreter::getOpcodeID(*it);
     switch (opcode) {
     case op_enter: {
         printLocationAndOp(out, location, it, "enter");
@@ -1265,6 +1268,10 @@ void BytecodeDumper<Block>::dumpBytecode(PrintStream& out, const typename Block:
         printLocationAndOp(out, location, it, "check_traps");
         break;
     }
+    case op_nop: {
+        printLocationAndOp(out, location, it, "nop");
+        break;
+    }
     case op_log_shadow_chicken_prologue: {
         int r0 = (++it)->u.operand;
         printLocationAndOp(out, location, it, "log_shadow_chicken_prologue");
@@ -1326,6 +1333,14 @@ void BytecodeDumper<Block>::dumpBytecode(PrintStream& out, const typename Block:
         out.printf("%s, %s, f%d", registerName(r0).data(), registerName(r1).data(), f0);
         break;
     }
+    case op_new_async_generator_func: {
+        int r0 = (++it)->u.operand;
+        int r1 = (++it)->u.operand;
+        int f0 = (++it)->u.operand;
+        printLocationAndOp(out, location, it, "new_async_generator_func");
+        out.printf("%s, %s, f%d", registerName(r0).data(), registerName(r1).data(), f0);
+        break;
+    }
     case op_new_func_exp: {
         int r0 = (++it)->u.operand;
         int r1 = (++it)->u.operand;
@@ -1347,6 +1362,14 @@ void BytecodeDumper<Block>::dumpBytecode(PrintStream& out, const typename Block:
         int r1 = (++it)->u.operand;
         int f0 = (++it)->u.operand;
         printLocationAndOp(out, location, it, "new_async_func_exp");
+        out.printf("%s, %s, f%d", registerName(r0).data(), registerName(r1).data(), f0);
+        break;
+    }
+    case op_new_async_generator_func_exp: {
+        int r0 = (++it)->u.operand;
+        int r1 = (++it)->u.operand;
+        int f0 = (++it)->u.operand;
+        printLocationAndOp(out, location, it, "op_new_async_generator_func_exp");
         out.printf("%s, %s, f%d", registerName(r0).data(), registerName(r1).data(), f0);
         break;
     }
@@ -1533,8 +1556,9 @@ void BytecodeDumper<Block>::dumpBytecode(PrintStream& out, const typename Block:
     case op_catch: {
         int r0 = (++it)->u.operand;
         int r1 = (++it)->u.operand;
+        void* pointer = getPointer(*(++it));
         printLocationAndOp(out, location, it, "catch");
-        out.printf("%s, %s", registerName(r0).data(), registerName(r1).data());
+        out.printf("%s, %s, %p", registerName(r0).data(), registerName(r1).data(), pointer);
         break;
     }
     case op_throw: {
@@ -1562,6 +1586,18 @@ void BytecodeDumper<Block>::dumpBytecode(PrintStream& out, const typename Block:
         int line = (++it)->u.operand;
         printLocationAndOp(out, location, it, "assert");
         out.printf("%s, %d", registerName(condition).data(), line);
+        break;
+    }
+    case op_identity_with_profile: {
+        int r0 = (++it)->u.operand;
+        ++it; // Profile top half
+        ++it; // Profile bottom half
+        printLocationAndOp(out, location, it, "identity_with_profile");
+        out.printf("%s", registerName(r0).data());
+        break;
+    }
+    case op_unreachable: {
+        printLocationAndOp(out, location, it, "unreachable");
         break;
     }
     case op_end: {
@@ -1768,10 +1804,9 @@ void BytecodeDumper<Block>::dumpStringSwitchJumpTables(PrintStream& out)
 template<class Block>
 void BytecodeDumper<Block>::dumpBlock(Block* block, const typename Block::UnpackedInstructions& instructions, PrintStream& out, const StubInfoMap& stubInfos, const CallLinkInfoMap& callLinkInfos)
 {
-    VM& vm = *block->vm();
     size_t instructionCount = 0;
 
-    for (size_t i = 0; i < instructions.size(); i += opcodeLengths[vm.interpreter->getOpcodeID(instructions[i])])
+    for (size_t i = 0; i < instructions.size(); i += opcodeLengths[Interpreter::getOpcodeID(instructions[i])])
         ++instructionCount;
 
     out.print(*block);

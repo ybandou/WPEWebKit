@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,8 +33,8 @@
 #include "DFGJITCompiler.h"
 #include "DFGOSRExit.h"
 #include "DFGOSRExitJumpPlaceholder.h"
+#include "DFGRegisterBank.h"
 #include "DFGSilentRegisterSavePlan.h"
-#include "DFGValueSource.h"
 #include "JITMathIC.h"
 #include "JITOperations.h"
 #include "MarkedAllocator.h"
@@ -387,7 +387,7 @@ public:
     SilentRegisterSavePlan silentSavePlanForGPR(VirtualRegister spillMe, GPRReg source);
     SilentRegisterSavePlan silentSavePlanForFPR(VirtualRegister spillMe, FPRReg source);
     void silentSpill(const SilentRegisterSavePlan&);
-    void silentFill(const SilentRegisterSavePlan&, GPRReg canTrample);
+    void silentFill(const SilentRegisterSavePlan&);
 
     template<typename CollectionType>
     void silentSpill(const CollectionType& savePlans)
@@ -397,11 +397,10 @@ public:
     }
 
     template<typename CollectionType>
-    void silentFill(const CollectionType& savePlans, GPRReg exclude = InvalidGPRReg)
+    void silentFill(const CollectionType& savePlans)
     {
-        GPRReg canTrample = SpeculativeJIT::pickCanTrample(exclude);
         for (unsigned i = savePlans.size(); i--;)
-            silentFill(savePlans[i], canTrample);
+            silentFill(savePlans[i]);
     }
 
     template<typename CollectionType>
@@ -462,53 +461,12 @@ public:
         silentSpillAllRegisters(exclude.payloadGPR(), exclude.tagGPR());
 #endif
     }
-    
-    static GPRReg pickCanTrample(GPRReg exclude)
-    {
-        GPRReg result = GPRInfo::regT0;
-        if (result == exclude)
-            result = GPRInfo::regT1;
-        return result;
-    }
-    static GPRReg pickCanTrample(FPRReg)
-    {
-        return GPRInfo::regT0;
-    }
-    static GPRReg pickCanTrample(NoResultTag)
-    {
-        return GPRInfo::regT0;
-    }
 
-#if USE(JSVALUE64)
-    static GPRReg pickCanTrample(JSValueRegs exclude)
+    void silentFillAllRegisters()
     {
-        return pickCanTrample(exclude.payloadGPR());
-    }
-#else
-    static GPRReg pickCanTrample(JSValueRegs exclude)
-    {
-        GPRReg result = GPRInfo::regT0;
-        if (result == exclude.tagGPR()) {
-            result = GPRInfo::regT1;
-            if (result == exclude.payloadGPR())
-                result = GPRInfo::regT2;
-        } else if (result == exclude.payloadGPR()) {
-            result = GPRInfo::regT1;
-            if (result == exclude.tagGPR())
-                result = GPRInfo::regT2;
-        }
-        return result;
-    }
-#endif
-    
-    template<typename RegisterType>
-    void silentFillAllRegisters(RegisterType exclude)
-    {
-        GPRReg canTrample = pickCanTrample(exclude);
-        
         while (!m_plans.isEmpty()) {
             SilentRegisterSavePlan& plan = m_plans.last();
-            silentFill(plan, canTrample);
+            silentFill(plan);
             m_plans.removeLast();
         }
     }
@@ -786,6 +744,7 @@ public:
 
     void compileDeleteById(Node*);
     void compileDeleteByVal(Node*);
+    void compilePushWithScope(Node*);
     void compileTryGetById(Node*);
     void compileIn(Node*);
     
@@ -1003,6 +962,11 @@ public:
         m_jit.setupArgumentsWithExecState(arg1, arg2);
         return appendCallSetResult(operation, result);
     }
+    JITCompiler::Call callOperation(V_JITOperation_EJssUi operation, GPRReg arg1, uint32_t arg2)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, TrustedImm32(arg2));
+        return appendCall(operation);
+    }
     JITCompiler::Call callOperation(P_JITOperation_EO operation, GPRReg result, GPRReg object)
     {
         m_jit.setupArgumentsWithExecState(object);
@@ -1046,6 +1010,11 @@ public:
     JITCompiler::Call callOperation(Z_JITOperation_EOI operation, GPRReg result, GPRReg obj, GPRReg impl)
     {
         m_jit.setupArgumentsWithExecState(obj, impl);
+        return appendCallSetResult(operation, result);
+    }
+    JITCompiler::Call callOperation(Z_JITOperation_EBJssZ operation, GPRReg result, GPRReg butterfly, GPRReg string, GPRReg index)
+    {
+        m_jit.setupArgumentsWithExecState(butterfly, string, index);
         return appendCallSetResult(operation, result);
     }
     JITCompiler::Call callOperation(P_JITOperation_ESt operation, GPRReg result, RegisteredStructure structure)
@@ -1416,6 +1385,16 @@ public:
         return appendCallSetResult(operation, result);
     }
 
+    JITCompiler::Call callOperation(V_JITOperation_EJ operation, JSValueRegs arg1)
+    {
+#if USE(JSVALUE64)
+        m_jit.setupArgumentsWithExecState(arg1.gpr());
+#else
+        m_jit.setupArgumentsWithExecState(EABI_32BIT_DUMMY_ARG arg1.payloadGPR(), arg1.tagGPR());
+#endif
+        return appendCall(operation);
+    }
+
 #if USE(JSVALUE64)
     JITCompiler::Call callOperation(Z_JITOperation_EOJ operation, GPRReg result, GPRReg arg1, GPRReg arg2)
     {
@@ -1425,6 +1404,16 @@ public:
     JITCompiler::Call callOperation(C_JITOperation_ECJZ operation, GPRReg result, GPRReg arg1, GPRReg arg2, GPRReg arg3)
     {
         m_jit.setupArgumentsWithExecState(arg1, arg2, arg3);
+        return appendCallSetResult(operation, result);
+    }
+    JITCompiler::Call callOperation(C_JITOperation_ECJ operation, GPRReg result, GPRReg arg1, JSValueRegs arg2)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2.gpr());
+        return appendCallSetResult(operation, result);
+    }
+    JITCompiler::Call callOperation(C_JITOperation_ECO operation, GPRReg result, GPRReg arg1, GPRReg arg2)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2);
         return appendCallSetResult(operation, result);
     }
     JITCompiler::Call callOperation(J_JITOperation_EJMic operation, JSValueRegs result, JSValueRegs arg, TrustedImmPtr mathIC)
@@ -1544,7 +1533,7 @@ public:
         m_jit.setupArgumentsWithExecState(arg1);
         return appendCallSetResult(operation, result);
     }
-    JITCompiler::Call callOperation(J_JITOperation_EAZ operation, GPRReg result, GPRReg arg1, GPRReg arg2)
+    JITCompiler::Call callOperation(J_JITOperation_EOZ operation, GPRReg result, GPRReg arg1, GPRReg arg2)
     {
         m_jit.setupArgumentsWithExecState(arg1, arg2);
         return appendCallSetResult(operation, result);
@@ -1839,6 +1828,11 @@ public:
         m_jit.setupArgumentsWithExecState(arg1, arg2);
         return appendCallSetResult(operation, result);
     }
+    JITCompiler::Call callOperation(J_JITOperation_ECCZ operation, JSValueRegs result, GPRReg arg1, GPRReg arg2, GPRReg arg3)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2, arg3);
+        return appendCallSetResult(operation, result.payloadGPR());
+    }
     JITCompiler::Call callOperation(J_JITOperation_ECJ operation, GPRReg result, GPRReg arg1, GPRReg arg2)
     {
         m_jit.setupArgumentsWithExecState(arg1, arg2);
@@ -1896,6 +1890,11 @@ public:
         m_jit.setupArgumentsWithExecState(arg1, arg2, arg3);
         return appendCall(operation);
     }
+    JITCompiler::Call callOperation(V_JITOperation_ECCJ operation, GPRReg arg1, GPRReg arg2, JSValueRegs arg3)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2, arg3.payloadGPR());
+        return appendCall(operation);
+    }
 
     JITCompiler::Call callOperation(Z_JITOperation_EJ operation, GPRReg result, JSValueRegs arg1)
     {
@@ -1929,6 +1928,11 @@ public:
         m_jit.setupArgumentsWithExecState(arg1, TrustedImm32(arg2));
         return appendCallSetResult(operation, result);
     }
+    JITCompiler::Call callOperation(Z_JITOperation_EBJZ operation, GPRReg result, GPRReg arg1, JSValueRegs arg2, GPRReg arg3)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2.payloadGPR(), arg3);
+        return appendCallSetResult(operation, result);
+    }
     JITCompiler::Call callOperation(V_JITOperation_EZJZZZ operation, unsigned arg1, GPRReg arg2, unsigned arg3, GPRReg arg4, unsigned arg5)
     {
         m_jit.setupArgumentsWithExecState(TrustedImm32(arg1), arg2, TrustedImm32(arg3), arg4, TrustedImm32(arg5));
@@ -1949,6 +1953,17 @@ public:
         m_jit.setupArgumentsWithExecState(arg1.gpr());
         return appendCallSetResult(operation, result);
     }
+
+    JITCompiler::Call callCustomGetter(J_JITOperation_EJI function, JSValueRegs result, GPRReg arg1, UniquedStringImpl* uid)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, TrustedImmPtr(uid));
+        m_jit.storePtr(GPRInfo::callFrameRegister, &m_jit.vm()->topCallFrame);
+        m_jit.emitStoreCodeOrigin(m_currentNode->origin.semantic);
+        JITCompiler::Call call = m_jit.appendCall(function);
+        if (result.payloadGPR() != InvalidGPRReg)
+            m_jit.move(GPRInfo::returnValueGPR, result.payloadGPR());
+        return call;
+    }
 #else // USE(JSVALUE32_64)
     JITCompiler::Call callOperation(Z_JITOperation_EOJ operation, GPRReg result, GPRReg arg1, JSValueRegs arg2)
     {
@@ -1958,6 +1973,16 @@ public:
     JITCompiler::Call callOperation(C_JITOperation_ECJZ operation, GPRReg result, GPRReg arg1, JSValueRegs arg2, GPRReg arg3)
     {
         m_jit.setupArgumentsWithExecState(arg1, arg2.payloadGPR(), arg2.tagGPR(), arg3);
+        return appendCallSetResult(operation, result);
+    }
+    JITCompiler::Call callOperation(C_JITOperation_ECJ operation, GPRReg result, GPRReg arg1, JSValueRegs arg2)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2.payloadGPR(), arg2.tagGPR());
+        return appendCallSetResult(operation, result);
+    }
+    JITCompiler::Call callOperation(C_JITOperation_ECO operation, GPRReg result, GPRReg arg1, GPRReg arg2)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2);
         return appendCallSetResult(operation, result);
     }
     JITCompiler::Call callOperation(J_JITOperation_EJMic operation, JSValueRegs result, JSValueRegs arg, TrustedImmPtr mathIC)
@@ -2104,7 +2129,7 @@ public:
         m_jit.setupArgumentsWithExecState(arg1);
         return appendCallSetResult(operation, result.payloadGPR(), result.tagGPR());
     }
-    JITCompiler::Call callOperation(J_JITOperation_EAZ operation, JSValueRegs result, GPRReg arg1, GPRReg arg2)
+    JITCompiler::Call callOperation(J_JITOperation_EOZ operation, JSValueRegs result, GPRReg arg1, GPRReg arg2)
     {
         m_jit.setupArgumentsWithExecState(arg1, arg2);
         return appendCallSetResult(operation, result.payloadGPR(), result.tagGPR());
@@ -2381,16 +2406,15 @@ public:
         m_jit.setupArgumentsWithExecState(arg1, arg2);
         return appendCallSetResult(operation, result.payloadGPR(), result.tagGPR());
     }
+    JITCompiler::Call callOperation(J_JITOperation_ECCZ operation, JSValueRegs result, GPRReg arg1, GPRReg arg2, GPRReg arg3)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2, arg3);
+        return appendCallSetResult(operation, result.payloadGPR(), result.tagGPR());
+    }
 
     JITCompiler::Call callOperation(V_JITOperation_EOZD operation, GPRReg arg1, GPRReg arg2, FPRReg arg3)
     {
         m_jit.setupArgumentsWithExecState(arg1, arg2, EABI_32BIT_DUMMY_ARG arg3);
-        return appendCall(operation);
-    }
-
-    JITCompiler::Call callOperation(V_JITOperation_EJ operation, JSValueRegs arg1)
-    {
-        m_jit.setupArgumentsWithExecState(EABI_32BIT_DUMMY_ARG arg1.payloadGPR(), arg1.tagGPR());
         return appendCall(operation);
     }
 
@@ -2412,6 +2436,11 @@ public:
     JITCompiler::Call callOperation(V_JITOperation_ECJJ operation, GPRReg arg1, JSValueRegs arg2, JSValueRegs arg3)
     {
         m_jit.setupArgumentsWithExecState(arg1, arg2.payloadGPR(), arg2.tagGPR(), arg3.payloadGPR(), arg3.tagGPR());
+        return appendCall(operation);
+    }
+    JITCompiler::Call callOperation(V_JITOperation_ECCJ operation, GPRReg arg1, GPRReg arg2, JSValueRegs arg3)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2, EABI_32BIT_DUMMY_ARG arg3.payloadGPR(), arg3.tagGPR());
         return appendCall(operation);
     }
 
@@ -2462,6 +2491,11 @@ public:
         m_jit.setupArgumentsWithExecState(EABI_32BIT_DUMMY_ARG arg1.payloadGPR(), arg1.tagGPR(), TrustedImm32(arg2));
         return appendCallSetResult(operation, result);
     }
+    JITCompiler::Call callOperation(Z_JITOperation_EBJZ operation, GPRReg result, GPRReg arg1, JSValueRegs arg2, GPRReg arg3)
+    {
+        m_jit.setupArgumentsWithExecState(arg1, arg2.payloadGPR(), arg2.tagGPR(), arg3);
+        return appendCallSetResult(operation, result);
+    }
     JITCompiler::Call callOperation(V_JITOperation_EZJZZZ operation, unsigned arg1, JSValueRegs arg2, unsigned arg3, GPRReg arg4, unsigned arg5)
     {
         m_jit.setupArgumentsWithExecState(TrustedImm32(arg1), arg2.payloadGPR(), arg2.tagGPR(), TrustedImm32(arg3), arg4, TrustedImm32(arg5));
@@ -2481,6 +2515,16 @@ public:
     {
         m_jit.setupArgumentsWithExecState(EABI_32BIT_DUMMY_ARG arg1.payloadGPR(), arg1.tagGPR());
         return appendCallSetResult(operation, result);
+    }
+
+    JITCompiler::Call callCustomGetter(J_JITOperation_EJI function, JSValueRegs result, TrustedImm32 arg1Tag, GPRReg arg1Payload, UniquedStringImpl* uid)
+    {
+        m_jit.setupArgumentsWithExecState(EABI_32BIT_DUMMY_ARG arg1Payload, arg1Tag, TrustedImmPtr(uid));
+        m_jit.storePtr(GPRInfo::callFrameRegister, &m_jit.vm()->topCallFrame);
+        m_jit.emitStoreCodeOrigin(m_currentNode->origin.semantic);
+        JITCompiler::Call call = m_jit.appendCall(function);
+        m_jit.setupResults(result.payloadGPR(), result.tagGPR());
+        return call;
     }
 #endif // USE(JSVALUE32_64)
     
@@ -2742,8 +2786,9 @@ public:
     void emitSwitch(Node*);
     
     void compileToStringOrCallStringConstructor(Node*);
-    void compileToStringOrCallStringConstructorOnNumber(Node*);
     void compileNumberToStringWithRadix(Node*);
+    void compileNumberToStringWithValidRadixConstant(Node*);
+    void compileNumberToStringWithValidRadixConstant(Node*, int32_t radix);
     void compileNewStringObject(Node*);
     
     void compileNewTypedArray(Node*);
@@ -2764,6 +2809,11 @@ public:
     void compileCallDOMGetter(Node*);
     void compileCallDOM(Node*);
     void compileCheckSubClass(Node*);
+    void compileGetMapBucketHead(Node*);
+    void compileGetMapBucketNext(Node*);
+    void compileWeakMapGet(Node*);
+    void compileLoadKeyFromMapBucket(Node*);
+    void compileLoadValueFromMapBucket(Node*);
     
 #if USE(JSVALUE32_64)
     template<typename BaseOperandType, typename PropertyOperandType, typename ValueOperandType, typename TagType>
@@ -2790,6 +2840,7 @@ public:
     void compileGetScope(Node*);
     void compileSkipScope(Node*);
     void compileGetGlobalObject(Node*);
+    void compileGetGlobalThis(Node*);
 
     void compileGetArrayLength(Node*);
 
@@ -2844,6 +2895,10 @@ public:
     void compilePutByValForIntTypedArray(GPRReg base, GPRReg property, Node*, TypedArrayType);
     void compileGetByValOnFloatTypedArray(Node*, TypedArrayType);
     void compilePutByValForFloatTypedArray(GPRReg base, GPRReg property, Node*, TypedArrayType);
+    void compileGetByValForObjectWithString(Node*);
+    void compileGetByValForObjectWithSymbol(Node*);
+    void compilePutByValForCellWithString(Node*, Edge& child1, Edge& child2, Edge& child3);
+    void compilePutByValForCellWithSymbol(Node*, Edge& child1, Edge& child2, Edge& child3);
     // If this returns false it means that we terminated speculative execution.
     bool getIntTypedArrayStoreOperand(
         GPRTemporary& value,
@@ -2871,13 +2926,14 @@ public:
     void compileNewArrayWithSpread(Node*);
     void compileGetRestLength(Node*);
     void compileArraySlice(Node*);
+    void compileArrayIndexOf(Node*);
     void compileNotifyWrite(Node*);
     bool compileRegExpExec(Node*);
     void compileIsObjectOrNull(Node*);
     void compileIsFunction(Node*);
     void compileTypeOf(Node*);
-    void compileCheckStructure(Node*, GPRReg cellGPR, GPRReg tempGPR);
     void compileCheckStructure(Node*);
+    void emitStructureCheck(Node*, GPRReg cellGPR, GPRReg tempGPR);
     void compilePutAccessorById(Node*);
     void compilePutGetterSetterById(Node*);
     void compilePutAccessorByVal(Node*);
@@ -2895,6 +2951,8 @@ public:
     void compileDefineDataProperty(Node*);
     void compileDefineAccessorProperty(Node*);
     void compileToLowerCase(Node*);
+    void compileThrow(Node*);
+    void compileThrowStaticError(Node*);
 
     void moveTrueTo(GPRReg);
     void moveFalseTo(GPRReg);
@@ -2991,6 +3049,7 @@ public:
 #if USE(JSVALUE64)
     void convertAnyInt(Edge, GPRReg resultGPR);
     void speculateAnyInt(Edge);
+    void speculateInt32(Edge, JSValueRegs);
     void speculateDoubleRepAnyInt(Edge);
 #endif // USE(JSVALUE64)
     void speculateNumber(Edge);
@@ -2999,6 +3058,7 @@ public:
     void speculateBoolean(Edge);
     void speculateCell(Edge);
     void speculateCellOrOther(Edge);
+    void speculateObject(Edge, GPRReg cell);
     void speculateObject(Edge);
     void speculateArray(Edge, GPRReg cell);
     void speculateArray(Edge);
@@ -3014,6 +3074,10 @@ public:
     void speculateMapObject(Edge, GPRReg cell);
     void speculateSetObject(Edge);
     void speculateSetObject(Edge, GPRReg cell);
+    void speculateWeakMapObject(Edge);
+    void speculateWeakMapObject(Edge, GPRReg cell);
+    void speculateWeakSetObject(Edge);
+    void speculateWeakSetObject(Edge, GPRReg cell);
     void speculateObjectOrOther(Edge);
     void speculateString(Edge edge, GPRReg cell);
     void speculateStringIdentAndLoadStorage(Edge edge, GPRReg string, GPRReg storage);
@@ -3032,6 +3096,8 @@ public:
     void speculateSymbol(Edge);
     void speculateNotCell(Edge, JSValueRegs);
     void speculateNotCell(Edge);
+    void speculateOther(Edge, JSValueRegs, GPRReg temp);
+    void speculateOther(Edge, JSValueRegs);
     void speculateOther(Edge);
     void speculateMisc(Edge, JSValueRegs);
     void speculateMisc(Edge);
@@ -3045,6 +3111,8 @@ public:
     
     template<bool strict>
     GPRReg fillSpeculateInt32Internal(Edge, DataFormat& returnFormat);
+    
+    void cageTypedArrayStorage(GPRReg);
     
     // It is possible, during speculative generation, to reach a situation in which we
     // can statically determine a speculation will fail (for example, when two nodes

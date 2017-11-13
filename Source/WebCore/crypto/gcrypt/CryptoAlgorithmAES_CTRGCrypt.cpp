@@ -32,16 +32,44 @@
 
 #include "CryptoAlgorithmAesCtrParams.h"
 #include "CryptoKeyAES.h"
-#include "ExceptionCode.h"
-#include "ScriptExecutionContext.h"
 #include <pal/crypto/gcrypt/Handle.h>
 #include <pal/crypto/gcrypt/Utilities.h>
 
 namespace WebCore {
 
-using GCryptCipherOperation = gcry_error_t(gcry_cipher_hd_t, void*, size_t, const void*, size_t);
+// This is a helper function that resets the cipher object, sets the provided counter data,
+// and executes the encrypt or decrypt operation, retrieving and returning the output data.
+static std::optional<Vector<uint8_t>> callOperation(PAL::GCrypt::CipherOperation operation, gcry_cipher_hd_t handle, const Vector<uint8_t>& counter, const uint8_t* data, const size_t size)
+{
+    gcry_error_t error = gcry_cipher_reset(handle);
+    if (error != GPG_ERR_NO_ERROR) {
+        PAL::GCrypt::logError(error);
+        return std::nullopt;
+    }
 
-static std::optional<Vector<uint8_t>> gcryptAES_CTR(GCryptCipherOperation operation, const Vector<uint8_t>& key, const Vector<uint8_t>& counter, size_t counterLength, const Vector<uint8_t>& inputText)
+    error = gcry_cipher_setctr(handle, counter.data(), counter.size());
+    if (error != GPG_ERR_NO_ERROR) {
+        PAL::GCrypt::logError(error);
+        return std::nullopt;
+    }
+
+    error = gcry_cipher_final(handle);
+    if (error != GPG_ERR_NO_ERROR) {
+        PAL::GCrypt::logError(error);
+        return std::nullopt;
+    }
+
+    Vector<uint8_t> output(size);
+    error = operation(handle, output.data(), output.size(), data, size);
+    if (error != GPG_ERR_NO_ERROR) {
+        PAL::GCrypt::logError(error);
+        return std::nullopt;
+    }
+
+    return output;
+}
+
+static std::optional<Vector<uint8_t>> gcryptAES_CTR(PAL::GCrypt::CipherOperation operation, const Vector<uint8_t>& key, const Vector<uint8_t>& counter, size_t counterLength, const Vector<uint8_t>& inputText)
 {
     constexpr size_t blockSize = 16;
     auto algorithm = PAL::GCrypt::aesAlgorithmForKeySize(key.size() * 8);
@@ -63,47 +91,13 @@ static std::optional<Vector<uint8_t>> gcryptAES_CTR(GCryptCipherOperation operat
         return std::nullopt;
     }
 
-    // This is a helper functor that resets the cipher object, sets the provided counter data,
-    // and executes the encrypt or decrypt operation, retrieving and returning the output data.
-    auto callOperation =
-        [&handle, &operation](const Vector<uint8_t>& counter, const uint8_t* inputData, const size_t inputSize) -> std::optional<Vector<uint8_t>>
-        {
-            gcry_error_t error = gcry_cipher_reset(handle);
-            if (error != GPG_ERR_NO_ERROR) {
-                PAL::GCrypt::logError(error);
-                return std::nullopt;
-            }
-
-            error = gcry_cipher_setctr(handle, counter.data(), counter.size());
-            if (error != GPG_ERR_NO_ERROR) {
-                PAL::GCrypt::logError(error);
-                return std::nullopt;
-            }
-
-            error = gcry_cipher_final(handle);
-            if (error != GPG_ERR_NO_ERROR) {
-                PAL::GCrypt::logError(error);
-                return std::nullopt;
-            }
-
-            Vector<uint8_t> output(inputSize);
-            error = operation(handle, output.data(), output.size(), inputData, inputSize);
-            if (error != GPG_ERR_NO_ERROR) {
-                PAL::GCrypt::logError(error);
-                return std::nullopt;
-            }
-
-            return output;
-        };
-
     // Calculate the block count: ((inputText.size() + blockSize - 1) / blockSize), remainder discarded.
     PAL::GCrypt::Handle<gcry_mpi_t> blockCountMPI(gcry_mpi_new(0));
     {
         PAL::GCrypt::Handle<gcry_mpi_t> blockSizeMPI(gcry_mpi_set_ui(nullptr, blockSize));
-        PAL::GCrypt::Handle<gcry_mpi_t> blockSizeMaskMPI(gcry_mpi_set_ui(nullptr, blockSize - 1));
-        PAL::GCrypt::Handle<gcry_mpi_t> roundedUpSize(gcry_mpi_new(0));
+        PAL::GCrypt::Handle<gcry_mpi_t> roundedUpSize(gcry_mpi_set_ui(nullptr, inputText.size()));
 
-        gcry_mpi_add_ui(roundedUpSize, blockSizeMaskMPI, inputText.size());
+        gcry_mpi_add_ui(roundedUpSize, roundedUpSize, blockSize - 1);
         gcry_mpi_div(blockCountMPI, nullptr, roundedUpSize, blockSizeMPI, 0);
     }
 
@@ -114,7 +108,7 @@ static std::optional<Vector<uint8_t>> gcryptAES_CTR(GCryptCipherOperation operat
     gcry_mpi_mul_2exp(counterLimitMPI, counterLimitMPI, counterLength);
 
     // Counter values must not repeat for a given cipher text. If the counter limit (i.e.
-    // the number of unique counter values we could procude for the specified counter
+    // the number of unique counter values we could produce for the specified counter
     // length) is lower than the deduced block count, we bail.
     if (gcry_mpi_cmp(counterLimitMPI, blockCountMPI) < 0)
         return std::nullopt;
@@ -123,7 +117,7 @@ static std::optional<Vector<uint8_t>> gcryptAES_CTR(GCryptCipherOperation operat
     // use any part of the counter Vector<> as nonce. This allows us to directly encrypt or
     // decrypt all the provided data in a single step.
     if (counterLength == counter.size() * 8)
-        return callOperation(counter, inputText.data(), inputText.size());
+        return callOperation(operation, handle, counter, inputText.data(), inputText.size());
 
     // Scan the counter data into the MPI format. We'll do all the counter computations with
     // the MPI API.
@@ -150,7 +144,7 @@ static std::optional<Vector<uint8_t>> gcryptAES_CTR(GCryptCipherOperation operat
         // encrypt or decrypt the provided data in a single step since it's ensured that the
         // counter won't overflow.
         if (gcry_mpi_cmp(counterLeewayMPI, blockCountMPI) >= 0)
-            return callOperation(counter, inputText.data(), inputText.size());
+            return callOperation(operation, handle, counter, inputText.data(), inputText.size());
     }
 
     // From here onwards we're dealing with a counter of which the length doesn't match the
@@ -186,7 +180,7 @@ static std::optional<Vector<uint8_t>> gcryptAES_CTR(GCryptCipherOperation operat
 
         // Encrypt/decrypt this single block with the block-specific counter. Output for this
         // single block is appended to the general output vector.
-        auto blockOutput = callOperation(blockCounterData, inputText.data() + i, blockInputSize);
+        auto blockOutput = callOperation(operation, handle, blockCounterData, inputText.data() + i, blockInputSize);
         if (!blockOutput)
             return std::nullopt;
 
@@ -201,60 +195,20 @@ static std::optional<Vector<uint8_t>> gcryptAES_CTR(GCryptCipherOperation operat
     return output;
 }
 
-void CryptoAlgorithmAES_CTR::platformEncrypt(std::unique_ptr<CryptoAlgorithmParameters>&& parameters, Ref<CryptoKey>&& key, Vector<uint8_t>&& plainText, VectorCallback&& callback, ExceptionCallback&& exceptionCallback, ScriptExecutionContext& context, WorkQueue& workQueue)
+ExceptionOr<Vector<uint8_t>> CryptoAlgorithmAES_CTR::platformEncrypt(CryptoAlgorithmAesCtrParams& parameters, const CryptoKeyAES& key, const Vector<uint8_t>& plainText)
 {
-    context.ref();
-    workQueue.dispatch(
-        [parameters = WTFMove(parameters), key = WTFMove(key), plainText = WTFMove(plainText), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback), &context]() mutable {
-            auto& aesParameters = downcast<CryptoAlgorithmAesCtrParams>(*parameters);
-            auto& aesKey = downcast<CryptoKeyAES>(key.get());
-
-            auto output = gcryptAES_CTR(gcry_cipher_encrypt, aesKey.key(), aesParameters.counterVector(), aesParameters.length, plainText);
-            if (!output) {
-                // We should only dereference callbacks after being back to the Document/Worker threads.
-                context.postTask(
-                    [callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) {
-                        exceptionCallback(OperationError);
-                        context.deref();
-                    });
-                return;
-            }
-
-            // We should only dereference callbacks after being back to the Document/Worker threads.
-            context.postTask(
-                [output = WTFMove(*output), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) mutable {
-                    callback(WTFMove(output));
-                    context.deref();
-                });
-        });
+    auto output = gcryptAES_CTR(gcry_cipher_encrypt, key.key(), parameters.counterVector(), parameters.length, plainText);
+    if (!output)
+        return Exception { OperationError };
+    return WTFMove(*output);
 }
 
-void CryptoAlgorithmAES_CTR::platformDecrypt(std::unique_ptr<CryptoAlgorithmParameters>&& parameters, Ref<CryptoKey>&& key, Vector<uint8_t>&& cipherText, VectorCallback&& callback, ExceptionCallback&& exceptionCallback, ScriptExecutionContext& context, WorkQueue& workQueue)
+ExceptionOr<Vector<uint8_t>> CryptoAlgorithmAES_CTR::platformDecrypt(CryptoAlgorithmAesCtrParams& parameters, const CryptoKeyAES& key, const Vector<uint8_t>& cipherText)
 {
-    context.ref();
-    workQueue.dispatch(
-        [parameters = WTFMove(parameters), key = WTFMove(key), cipherText = WTFMove(cipherText), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback), &context]() mutable {
-            auto& aesParameters = downcast<CryptoAlgorithmAesCtrParams>(*parameters);
-            auto& aesKey = downcast<CryptoKeyAES>(key.get());
-
-            auto output = gcryptAES_CTR(gcry_cipher_decrypt, aesKey.key(), aesParameters.counterVector(), aesParameters.length, cipherText);
-            if (!output) {
-                // We should only dereference callbacks after being back to the Document/Worker threads.
-                context.postTask(
-                    [callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) {
-                        exceptionCallback(OperationError);
-                        context.deref();
-                    });
-                return;
-            }
-
-            // We should only dereference callbacks after being back to the Document/Worker threads.
-            context.postTask(
-                [output = WTFMove(*output), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) mutable {
-                    callback(WTFMove(output));
-                    context.deref();
-                });
-        });
+    auto output = gcryptAES_CTR(gcry_cipher_decrypt, key.key(), parameters.counterVector(), parameters.length, cipherText);
+    if (!output)
+        return Exception { OperationError };
+    return WTFMove(*output);
 }
 
 } // namespace WebCore

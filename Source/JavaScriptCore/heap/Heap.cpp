@@ -62,6 +62,7 @@
 #include "StopIfNecessaryTimer.h"
 #include "SweepingScope.h"
 #include "SynchronousStopTheWorldMutatorScheduler.h"
+#include "TypeProfiler.h"
 #include "TypeProfilerLog.h"
 #include "UnlinkedCodeBlock.h"
 #include "VM.h"
@@ -72,11 +73,13 @@
 #include <bmalloc/bmalloc.h>
 #endif
 #include <wtf/CurrentTime.h>
+#include <wtf/ListDump.h>
 #include <wtf/MainThread.h>
 #include <wtf/ParallelVectorIterator.h>
 #include <wtf/ProcessID.h>
 #include <wtf/RAMSize.h>
 #include <wtf/SimpleStats.h>
+#include <wtf/Threading.h>
 
 #if USE(FOUNDATION)
 #if __has_include(<objc/objc-internal.h>)
@@ -137,7 +140,7 @@ bool isValidSharedInstanceThreadState(VM* vm)
 
 bool isValidThreadState(VM* vm)
 {
-    if (vm->atomicStringTable() != wtfThreadData().atomicStringTable())
+    if (vm->atomicStringTable() != WTF::Thread::current().atomicStringTable())
         return false;
 
     if (vm->isSharedInstance() && !isValidSharedInstanceThreadState(vm))
@@ -265,7 +268,6 @@ Heap::Heap(VM* vm, HeapType heapType)
     , m_sizeAfterLastEdenCollect(0)
     , m_sizeBeforeLastEdenCollect(0)
     , m_bytesAllocatedThisCycle(0)
-    , m_webAssemblyFastMemoriesAllocatedThisCycle(0)
     , m_bytesAbandonedSinceLastFullCollect(0)
     , m_maxEdenSize(m_minBytesPerCycle)
     , m_maxHeapSize(m_minBytesPerCycle)
@@ -289,9 +291,6 @@ Heap::Heap(VM* vm, HeapType heapType)
     // schedule the timer if we've never done a collection.
     , m_lastFullGCLength(0.01)
     , m_lastEdenGCLength(0.01)
-#if USE(CF)
-    , m_runLoop(CFRunLoopGetCurrent())
-#endif // USE(CF)
     , m_fullActivityCallback(GCActivityCallback::createFullTimer(this))
     , m_edenActivityCallback(GCActivityCallback::createEdenTimer(this))
     , m_sweeper(adoptRef(new IncrementalSweeper(this)))
@@ -437,6 +436,8 @@ void Heap::lastChanceToFinalize()
 
     sweepAllLogicallyEmptyWeakBlocks();
     
+    m_objectSpace.freeMemory();
+    
     if (Options::logGC())
         dataLog((MonotonicTime::now() - before).milliseconds(), "ms]\n");
 }
@@ -485,23 +486,6 @@ void Heap::deprecatedReportExtraMemorySlowCase(size_t size)
     checkedNewSize += size;
     m_deprecatedExtraMemorySize = UNLIKELY(checkedNewSize.hasOverflowed()) ? std::numeric_limits<size_t>::max() : checkedNewSize.unsafeGet();
     reportExtraMemoryAllocatedSlowCase(size);
-}
-
-void Heap::reportWebAssemblyFastMemoriesAllocated(size_t count)
-{
-    didAllocateWebAssemblyFastMemories(count);
-    collectIfNecessaryOrDefer();
-}
-
-bool Heap::webAssemblyFastMemoriesThisCycleAtThreshold() const
-{
-    // WebAssembly fast memories use large amounts of virtual memory and we
-    // don't know how many can exist in this process. We keep track of the most
-    // fast memories that have existed at any point in time. The GC uses this
-    // top watermark as an indication of whether recent allocations should cause
-    // a collection: get too close and we may be close to the actual limit.
-    size_t fastMemoryThreshold = std::max<size_t>(1, Wasm::Memory::maxFastMemoryCount() / 2);
-    return m_webAssemblyFastMemoriesAllocatedThisCycle > fastMemoryThreshold;
 }
 
 bool Heap::overCriticalMemoryThreshold(MemoryThresholdCallType memoryThresholdCallType)
@@ -1622,7 +1606,7 @@ NEVER_INLINE void Heap::resumeThePeriphery()
                 slotVisitorsToUpdate.takeLast();
             }
         }
-        std::this_thread::yield();
+        WTF::Thread::yield();
     }
     
     for (SlotVisitor* slotVisitor : slotVisitorsToUpdate)
@@ -1998,10 +1982,10 @@ void Heap::finalize()
     }
     
     {
-        SweepingScope helpingGCScope(*this);
+        SweepingScope sweepingScope(*this);
         deleteUnmarkedCompiledCode();
         deleteSourceProviderCaches();
-        sweepLargeAllocations();
+        sweepInFinalize();
     }
     
     if (HasOwnPropertyCache* cache = vm()->hasOwnPropertyCache())
@@ -2024,7 +2008,7 @@ Heap::Ticket Heap::requestCollection(GCRequest request)
     stopIfNecessary();
     
     ASSERT(vm()->currentThreadIsHoldingAPILock());
-    RELEASE_ASSERT(vm()->atomicStringTable() == wtfThreadData().atomicStringTable());
+    RELEASE_ASSERT(vm()->atomicStringTable() == WTF::Thread::current().atomicStringTable());
     
     LockHolder locker(*m_threadLock);
     // We may be able to steal the conn. That only works if the collector is definitely not running
@@ -2052,9 +2036,15 @@ void Heap::waitForCollection(Ticket ticket)
         });
 }
 
-void Heap::sweepLargeAllocations()
+void Heap::sweepInFinalize()
 {
     m_objectSpace.sweepLargeAllocations();
+    
+    auto sweepBlock = [&] (MarkedBlock::Handle* handle) {
+        handle->sweep(nullptr);
+    };
+    
+    vm()->eagerlySweptDestructibleObjectSpace.forEachMarkedBlock(sweepBlock);
 }
 
 void Heap::suspendCompilerThreads()
@@ -2161,7 +2151,6 @@ void Heap::updateAllocationLimits()
     if (verbose) {
         dataLog("\n");
         dataLog("bytesAllocatedThisCycle = ", m_bytesAllocatedThisCycle, "\n");
-        dataLog("webAssemblyFastMemoriesAllocatedThisCycle = ", m_webAssemblyFastMemoriesAllocatedThisCycle, "\n");
     }
     
     // Calculate our current heap size threshold for the purpose of figuring out when we should
@@ -2244,7 +2233,6 @@ void Heap::updateAllocationLimits()
     if (verbose)
         dataLog("sizeAfterLastCollect = ", m_sizeAfterLastCollect, "\n");
     m_bytesAllocatedThisCycle = 0;
-    m_webAssemblyFastMemoriesAllocatedThisCycle = 0;
 
     if (Options::logGC())
         dataLog("=> ", currentHeapSize / 1024, "kb, ");
@@ -2318,11 +2306,6 @@ void Heap::didAllocate(size_t bytes)
     performIncrement(bytes);
 }
 
-void Heap::didAllocateWebAssemblyFastMemories(size_t count)
-{
-    m_webAssemblyFastMemoriesAllocatedThisCycle += count;
-}
-
 bool Heap::isValidAllocation(size_t)
 {
     if (!isValidThreadState(m_vm))
@@ -2375,7 +2358,7 @@ bool Heap::shouldDoFullCollection()
         return true;
 
     if (!m_currentRequest.scope)
-        return m_shouldDoFullCollection || webAssemblyFastMemoriesThisCycleAtThreshold() || overCriticalMemoryThreshold();
+        return m_shouldDoFullCollection || overCriticalMemoryThreshold();
     return *m_currentRequest.scope == CollectionScope::Full;
 }
 
@@ -2533,8 +2516,7 @@ void Heap::collectIfNecessaryOrDefer(GCDeferralContext* deferralContext)
             bytesAllowedThisCycle = std::min(m_maxEdenSizeWhenCritical, bytesAllowedThisCycle);
 #endif
 
-        if (!webAssemblyFastMemoriesThisCycleAtThreshold()
-            && m_bytesAllocatedThisCycle <= bytesAllowedThisCycle)
+        if (m_bytesAllocatedThisCycle <= bytesAllowedThisCycle)
             return;
     }
 
@@ -2589,16 +2571,6 @@ void Heap::didFreeBlock(size_t capacity)
     UNUSED_PARAM(capacity);
 #endif
 }
-
-#if USE(CF)
-void Heap::setRunLoop(CFRunLoopRef runLoop)
-{
-    m_runLoop = runLoop;
-    m_fullActivityCallback->setRunLoop(runLoop);
-    m_edenActivityCallback->setRunLoop(runLoop);
-    m_sweeper->setRunLoop(runLoop);
-}
-#endif // USE(CF)
 
 void Heap::addCoreConstraints()
 {

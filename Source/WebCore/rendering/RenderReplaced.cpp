@@ -35,7 +35,6 @@
 #include "RenderFlowThread.h"
 #include "RenderImage.h"
 #include "RenderLayer.h"
-#include "RenderNamedFlowFragment.h"
 #include "RenderTheme.h"
 #include "RenderView.h"
 #include "RenderedDocumentMarker.h"
@@ -159,11 +158,13 @@ void RenderReplaced::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
     SetLayoutNeededForbiddenScope scope(this);
 #endif
 
-    GraphicsContextStateSaver savedGraphicsContext(paintInfo.context());
+    GraphicsContextStateSaver savedGraphicsContext(paintInfo.context(), false);
     if (element() && element()->parentOrShadowHostElement()) {
         auto* parentContainer = element()->parentOrShadowHostElement();
-        if (draggedContentContainsReplacedElement(document().markers().markersFor(parentContainer, DocumentMarker::DraggedContent), *element()))
+        if (draggedContentContainsReplacedElement(document().markers().markersFor(parentContainer, DocumentMarker::DraggedContent), *element())) {
+            savedGraphicsContext.save();
             paintInfo.context().setAlpha(0.25);
+        }
     }
 
     LayoutPoint adjustedPaintOffset = paintOffset + location();
@@ -243,11 +244,6 @@ bool RenderReplaced::shouldPaint(PaintInfo& paintInfo, const LayoutPoint& paintO
     if (style().visibility() != VISIBLE)
         return false;
     
-    RenderNamedFlowFragment* namedFlowFragment = currentRenderNamedFlowFragment();
-    // Check our region range to make sure we need to be painting in this region.
-    if (namedFlowFragment && !namedFlowFragment->flowThread()->objectShouldFragmentInFlowRegion(this, namedFlowFragment))
-        return false;
-
     LayoutPoint adjustedPaintOffset = paintOffset + location();
 
     // Early exit if the element touches the edges.

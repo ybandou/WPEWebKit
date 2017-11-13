@@ -34,7 +34,6 @@
 #include <wtf/Forward.h>
 #include <wtf/HashSet.h>
 #include <wtf/Optional.h>
-#include <wtf/Vector.h>
 #include <wtf/text/StringHash.h>
 #include <wtf/text/WTFString.h>
 
@@ -51,12 +50,10 @@ enum class XSSProtectionDisposition {
     BlockEnabled,
 };
 
-#if ENABLE(NOSNIFF)
 enum ContentTypeOptionsDisposition {
     ContentTypeOptionsNone,
     ContentTypeOptionsNosniff
 };
-#endif
 
 enum XFrameOptionsDisposition {
     XFrameOptionsNone,
@@ -85,9 +82,7 @@ XFrameOptionsDisposition parseXFrameOptionsHeader(const String&);
 // -1 could be set to one of the return parameters to indicate the value is not specified.
 WEBCORE_EXPORT bool parseRange(const String&, long long& rangeOffset, long long& rangeEnd, long long& rangeSuffixLength);
 
-#if ENABLE(NOSNIFF)
 ContentTypeOptionsDisposition parseContentTypeOptionsHeader(const String& header);
-#endif
 
 // Parsing Complete HTTP Messages.
 enum HTTPVersion { Unknown, HTTP_1_0, HTTP_1_1 };
@@ -114,6 +109,11 @@ inline bool isHTTPSpace(UChar character)
 inline String stripLeadingAndTrailingHTTPSpaces(const String& string)
 {
     return string.stripWhiteSpace(isHTTPSpace);
+}
+
+inline StringView stripLeadingAndTrailingHTTPSpaces(StringView string)
+{
+    return string.stripLeadingAndTrailingMatchedCharacters(isHTTPSpace);
 }
 
 }

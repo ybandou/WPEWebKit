@@ -27,6 +27,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma once
 
 #include "Exception.h"
+#include <wtf/CrossThreadCopier.h>
 #include <wtf/Expected.h>
 
 namespace WebCore {
@@ -40,8 +41,9 @@ public:
     bool hasException() const;
     const Exception& exception() const;
     Exception&& releaseException();
+    const ReturnType& returnValue() const;
     ReturnType&& releaseReturnValue();
-
+    
 private:
     Expected<ReturnType, Exception> m_value;
 };
@@ -54,8 +56,9 @@ public:
     bool hasException() const;
     const Exception& exception() const;
     Exception&& releaseException();
+    const ReturnReferenceType& returnValue() const;
     ReturnReferenceType& releaseReturnValue();
-
+    
 private:
     ExceptionOr<ReturnReferenceType*> m_value;
 };
@@ -95,14 +98,19 @@ template<typename ReturnType> inline bool ExceptionOr<ReturnType>::hasException(
     return !m_value.hasValue();
 }
 
+template<typename ReturnType> inline const Exception& ExceptionOr<ReturnType>::exception() const
+{
+    return m_value.error();
+}
+
 template<typename ReturnType> inline Exception&& ExceptionOr<ReturnType>::releaseException()
 {
     return WTFMove(m_value.error());
 }
 
-template<typename ReturnType> inline const Exception& ExceptionOr<ReturnType>::exception() const
+template<typename ReturnType> inline const ReturnType& ExceptionOr<ReturnType>::returnValue() const
 {
-    return m_value.error();
+    return m_value.value();
 }
 
 template<typename ReturnType> inline ReturnType&& ExceptionOr<ReturnType>::releaseReturnValue()
@@ -133,6 +141,11 @@ template<typename ReturnReferenceType> inline const Exception& ExceptionOr<Retur
 template<typename ReturnReferenceType> inline Exception&& ExceptionOr<ReturnReferenceType&>::releaseException()
 {
     return m_value.releaseException();
+}
+
+template<typename ReturnReferenceType> inline const ReturnReferenceType& ExceptionOr<ReturnReferenceType&>::returnValue() const
+{
+    return *m_value.returnValue();
 }
 
 template<typename ReturnReferenceType> inline ReturnReferenceType& ExceptionOr<ReturnReferenceType&>::releaseReturnValue()
@@ -167,4 +180,16 @@ inline ExceptionOr<void> isolatedCopy(ExceptionOr<void>&& value)
     return { };
 }
 
+}
+
+namespace WTF {
+template<typename T> struct CrossThreadCopierBase<false, false, WebCore::ExceptionOr<T> > {
+    typedef WebCore::ExceptionOr<T> Type;
+    static Type copy(const Type& source)
+    {
+        if (source.hasException())
+            return crossThreadCopy(source.exception());
+        return crossThreadCopy(source.returnValue());
+    }
+};
 }

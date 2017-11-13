@@ -30,15 +30,11 @@
 #include "ElementRuleCollector.h"
 
 #include "CSSDefaultStyleSheets.h"
-#include "CSSRule.h"
 #include "CSSRuleList.h"
 #include "CSSSelector.h"
-#include "CSSSelectorList.h"
 #include "CSSValueKeywords.h"
 #include "HTMLElement.h"
 #include "HTMLSlotElement.h"
-#include "NodeRenderStyle.h"
-#include "RenderRegion.h"
 #include "SVGElement.h"
 #include "SelectorCompiler.h"
 #include "SelectorFilter.h"
@@ -52,18 +48,22 @@ namespace WebCore {
 
 static const StyleProperties& leftToRightDeclaration()
 {
-    static NeverDestroyed<Ref<MutableStyleProperties>> leftToRightDecl(MutableStyleProperties::create());
-    if (leftToRightDecl.get()->isEmpty())
-        leftToRightDecl.get()->setProperty(CSSPropertyDirection, CSSValueLtr);
-    return leftToRightDecl.get();
+    static auto& declaration = [] () -> const StyleProperties& {
+        auto properties = MutableStyleProperties::create();
+        properties->setProperty(CSSPropertyDirection, CSSValueLtr);
+        return properties.leakRef();
+    }();
+    return declaration;
 }
 
 static const StyleProperties& rightToLeftDeclaration()
 {
-    static NeverDestroyed<Ref<MutableStyleProperties>> rightToLeftDecl(MutableStyleProperties::create());
-    if (rightToLeftDecl.get()->isEmpty())
-        rightToLeftDecl.get()->setProperty(CSSPropertyDirection, CSSValueRtl);
-    return rightToLeftDecl.get();
+    static auto& declaration = [] () -> const StyleProperties& {
+        auto properties = MutableStyleProperties::create();
+        properties->setProperty(CSSPropertyDirection, CSSValueRtl);
+        return properties.leakRef();
+    }();
+    return declaration;
 }
 
 class MatchRequest {
@@ -163,22 +163,6 @@ void ElementRuleCollector::collectMatchingRules(const MatchRequest& matchRequest
     collectMatchingRulesForList(matchRequest.ruleSet->universalRules(), matchRequest, ruleRange);
 }
 
-void ElementRuleCollector::collectMatchingRulesForRegion(const MatchRequest& matchRequest, StyleResolver::RuleRange& ruleRange)
-{
-    if (!m_regionForStyling)
-        return;
-
-    unsigned size = matchRequest.ruleSet->regionSelectorsAndRuleSets().size();
-    for (unsigned i = 0; i < size; ++i) {
-        const CSSSelector* regionSelector = matchRequest.ruleSet->regionSelectorsAndRuleSets().at(i).selector;
-        if (checkRegionSelector(regionSelector, m_regionForStyling->generatingElement())) {
-            RuleSet* regionRules = matchRequest.ruleSet->regionSelectorsAndRuleSets().at(i).ruleSet.get();
-            ASSERT(regionRules);
-            collectMatchingRules(MatchRequest(regionRules, matchRequest.includeEmptyRules), ruleRange);
-        }
-    }
-}
-
 void ElementRuleCollector::sortAndTransferMatchedRules()
 {
     if (m_matchedRules.isEmpty())
@@ -207,7 +191,6 @@ void ElementRuleCollector::matchAuthorRules(bool includeEmptyRules)
     {
         MatchRequest matchRequest(&m_authorStyle, includeEmptyRules);
         collectMatchingRules(matchRequest, ruleRange);
-        collectMatchingRulesForRegion(matchRequest, ruleRange);
     }
 
     auto* parent = m_element.parentElement();
@@ -326,7 +309,6 @@ void ElementRuleCollector::matchUserRules(bool includeEmptyRules)
     MatchRequest matchRequest(m_userStyle, includeEmptyRules);
     StyleResolver::RuleRange ruleRange = m_result.ranges.userRuleRange();
     collectMatchingRules(matchRequest, ruleRange);
-    collectMatchingRulesForRegion(matchRequest, ruleRange);
 
     sortAndTransferMatchedRules();
 }

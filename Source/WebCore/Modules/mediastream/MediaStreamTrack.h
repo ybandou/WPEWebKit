@@ -32,18 +32,26 @@
 #include "ActiveDOMObject.h"
 #include "DoubleRange.h"
 #include "EventTarget.h"
+#include "GenericTaskQueue.h"
 #include "JSDOMPromiseDeferred.h"
 #include "LongRange.h"
+#include "MediaProducer.h"
 #include "MediaStreamTrackPrivate.h"
 #include "MediaTrackConstraints.h"
 
 namespace WebCore {
 
 class AudioSourceProvider;
+class Document;
 
 struct MediaTrackConstraints;
 
-class MediaStreamTrack : public RefCounted<MediaStreamTrack>, public ActiveDOMObject, public EventTargetWithInlineData, private MediaStreamTrackPrivate::Observer {
+class MediaStreamTrack :
+    public RefCounted<MediaStreamTrack>,
+    public ActiveDOMObject,
+    public EventTargetWithInlineData,
+    private MediaProducer,
+    private MediaStreamTrackPrivate::Observer {
 public:
     class Observer {
     public:
@@ -57,7 +65,7 @@ public:
     virtual bool isCanvas() const { return false; }
 
     const AtomicString& kind() const;
-    const String& id() const;
+    WEBCORE_EXPORT const String& id() const;
     const String& label() const;
 
     bool enabled() const;
@@ -70,7 +78,7 @@ public:
 
     bool ended() const;
 
-    Ref<MediaStreamTrack> clone();
+    virtual RefPtr<MediaStreamTrack> clone();
 
     enum class StopMode { Silently, PostEvent };
     void stopTrack(StopMode = StopMode::Silently);
@@ -90,7 +98,7 @@ public:
         String deviceId;
         String groupId;
     };
-    WEBCORE_EXPORT TrackSettings getSettings() const;
+    TrackSettings getSettings(Document&) const;
 
     struct TrackCapabilities {
         std::optional<LongRange> width;
@@ -110,10 +118,14 @@ public:
     const MediaTrackConstraints& getConstraints() const { return m_constraints; }
     void applyConstraints(const std::optional<MediaTrackConstraints>&, DOMPromiseDeferred<void>&&);
 
-    RealtimeMediaSource& source() { return m_private->source(); }
+    RealtimeMediaSource& source() const { return m_private->source(); }
     MediaStreamTrackPrivate& privateTrack() { return m_private.get(); }
 
     AudioSourceProvider* audioSourceProvider();
+
+    // MediaProducer
+    void pageMutedStateDidChange() final;
+    MediaProducer::MediaStateFlags mediaState() const final;
 
     void addObserver(Observer&);
     void removeObserver(Observer&);
@@ -121,13 +133,20 @@ public:
     using RefCounted::ref;
     using RefCounted::deref;
 
+    // ActiveDOMObject API.
+    bool hasPendingActivity() const final;
+
 protected:
     MediaStreamTrack(ScriptExecutionContext&, Ref<MediaStreamTrackPrivate>&&);
+
+    ScriptExecutionContext* scriptExecutionContext() const final { return ActiveDOMObject::scriptExecutionContext(); }
 
 private:
     explicit MediaStreamTrack(MediaStreamTrack&);
 
     void configureTrackRendering();
+
+    Document* document() const;
 
     // ActiveDOMObject API.
     void stop() final;
@@ -138,15 +157,15 @@ private:
     void refEventTarget() final { ref(); }
     void derefEventTarget() final { deref(); }
     EventTargetInterface eventTargetInterface() const final { return MediaStreamTrackEventTargetInterfaceType; }
-    ScriptExecutionContext* scriptExecutionContext() const final { return ActiveDOMObject::scriptExecutionContext(); }
 
     // MediaStreamTrackPrivate::Observer
+    void trackStarted(MediaStreamTrackPrivate&) final;
     void trackEnded(MediaStreamTrackPrivate&) final;
     void trackMutedChanged(MediaStreamTrackPrivate&) final;
     void trackSettingsChanged(MediaStreamTrackPrivate&) final;
     void trackEnabledChanged(MediaStreamTrackPrivate&) final;
 
-    WeakPtr<MediaStreamTrack> createWeakPtr() { return m_weakPtrFactory.createWeakPtr(); }
+    WeakPtr<MediaStreamTrack> createWeakPtr() { return m_weakPtrFactory.createWeakPtr(*this); }
 
     Vector<Observer*> m_observers;
     Ref<MediaStreamTrackPrivate> m_private;
@@ -154,6 +173,7 @@ private:
     MediaTrackConstraints m_constraints;
     std::optional<DOMPromiseDeferred<void>> m_promise;
     WeakPtrFactory<MediaStreamTrack> m_weakPtrFactory;
+    GenericTaskQueue<ScriptExecutionContext> m_taskQueue;
 
     bool m_ended { false };
 };

@@ -890,7 +890,7 @@ Ref<HTMLElement> createHTMLElement(Document& document, const QualifiedName& name
 
 Ref<HTMLElement> createHTMLElement(Document& document, const AtomicString& tagName)
 {
-    return createHTMLElement(document, QualifiedName(nullAtom, tagName, xhtmlNamespaceURI));
+    return createHTMLElement(document, QualifiedName(nullAtom(), tagName, xhtmlNamespaceURI));
 }
 
 bool isTabSpanNode(const Node* node)
@@ -1090,6 +1090,16 @@ int indexForVisiblePosition(Node& node, const VisiblePosition& visiblePosition, 
 {
     auto range = Range::create(node.document(), firstPositionInNode(&node), visiblePosition.deepEquivalent().parentAnchoredEquivalent());
     return TextIterator::rangeLength(range.ptr(), forSelectionPreservation);
+}
+
+VisiblePosition visiblePositionForPositionWithOffset(const VisiblePosition& position, int offset)
+{
+    RefPtr<ContainerNode> root;
+    unsigned startIndex = indexForVisiblePosition(position, root);
+    if (!root)
+        return { };
+
+    return visiblePositionForIndex(startIndex + offset, root.get());
 }
 
 VisiblePosition visiblePositionForIndex(int index, ContainerNode* scope)

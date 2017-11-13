@@ -191,6 +191,8 @@ interface UIScriptController {
     void keyboardAccessoryBarNext();
     void keyboardAccessoryBarPrevious();
 
+    void applyAutocorrection(DOMString newString, DOMString oldString, object callback);
+
     // Returned object is a dictionary with the passed in string as a key for returned object
     object contentsOfUserInterfaceItem(DOMString interfaceItem);
 
@@ -224,7 +226,7 @@ interface UIScriptController {
     readonly attribute object textSelectionCaretRect; // An object with 'left', 'top', 'width', 'height' properties.
     readonly attribute object inputViewBounds;
 
-    void insertText(DOMString text, long location, long length);
+    void replaceTextAtRange(DOMString text, long location, long length);
     void removeAllDynamicDictionaries();
 
     readonly attribute DOMString scrollingTreeAsText;

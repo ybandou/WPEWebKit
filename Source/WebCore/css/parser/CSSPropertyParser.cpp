@@ -51,8 +51,6 @@
 #include "CSSGridAutoRepeatValue.h"
 #include "CSSGridLineNamesValue.h"
 #include "CSSGridTemplateAreasValue.h"
-#include "CSSInheritedValue.h"
-#include "CSSInitialValue.h"
 #include "CSSLineBoxContainValue.h"
 #include "CSSParserFastPaths.h"
 #include "CSSParserIdioms.h"
@@ -60,11 +58,9 @@
 #include "CSSPrimitiveValueMappings.h"
 #include "CSSPropertyParserHelpers.h"
 #include "CSSReflectValue.h"
-#include "CSSRevertValue.h"
 #include "CSSShadowValue.h"
 #include "CSSTimingFunctionValue.h"
 #include "CSSUnicodeRangeValue.h"
-#include "CSSUnsetValue.h"
 #include "CSSVariableParser.h"
 #include "CSSVariableReferenceValue.h"
 #include "Counter.h"
@@ -294,11 +290,6 @@ static bool isLegacyBreakProperty(CSSPropertyID propertyID)
     case CSSPropertyWebkitColumnBreakAfter:
     case CSSPropertyWebkitColumnBreakBefore:
     case CSSPropertyWebkitColumnBreakInside:
-#if ENABLE(CSS_REGIONS)
-    case CSSPropertyWebkitRegionBreakAfter:
-    case CSSPropertyWebkitRegionBreakBefore:
-    case CSSPropertyWebkitRegionBreakInside:
-#endif
         return true;
     default:
         break;
@@ -479,13 +470,14 @@ static RefPtr<CSSFontFeatureValue> consumeFontFeatureTag(CSSParserTokenRange& ra
     }
 
     int tagValue = 1;
-    // Feature tag values could follow: <integer> | on | off
-    if (range.peek().type() == NumberToken && range.peek().numericValueType() == IntegerValueType && range.peek().numericValue() >= 0) {
-        tagValue = clampTo<int>(range.consumeIncludingWhitespace().numericValue());
-        if (tagValue < 0)
+    if (!range.atEnd() && range.peek().type() != CommaToken) {
+        // Feature tag values could follow: <integer> | on | off
+        if (auto primitiveValue = consumeInteger(range, 0))
+            tagValue = primitiveValue->intValue();
+        else if (range.peek().id() == CSSValueOn || range.peek().id() == CSSValueOff)
+            tagValue = range.consumeIncludingWhitespace().id() == CSSValueOn;
+        else
             return nullptr;
-    } else if (range.peek().id() == CSSValueOn || range.peek().id() == CSSValueOff) {
-        tagValue = range.consumeIncludingWhitespace().id() == CSSValueOn;
     }
     return CSSFontFeatureValue::create(WTFMove(tag), tagValue);
 }
@@ -523,10 +515,13 @@ static RefPtr<CSSValue> consumeFontVariationTag(CSSParserTokenRange& range)
         tag[i] = character;
     }
     
-    if (range.atEnd() || range.peek().type() != NumberToken)
+    if (range.atEnd())
         return nullptr;
 
-    float tagValue = range.consumeIncludingWhitespace().numericValue();
+    double tagValue = 0;
+    auto success = consumeNumberRaw(range, tagValue);
+    if (!success)
+        return nullptr;
     
     return CSSFontVariationValue::create(tag, tagValue);
 }
@@ -1603,7 +1598,7 @@ static RefPtr<CSSValue> consumeAnimationValue(CSSPropertyID property, CSSParserT
         return consumeIdent<CSSValueNormal, CSSValueAlternate, CSSValueReverse, CSSValueAlternateReverse>(range);
     case CSSPropertyAnimationDuration:
     case CSSPropertyTransitionDuration:
-        return consumeTime(range, context.mode, ValueRangeNonNegative, UnitlessQuirk::Allow);
+        return consumeTime(range, context.mode, ValueRangeNonNegative, UnitlessQuirk::Forbid);
     case CSSPropertyAnimationFillMode:
         return consumeIdent<CSSValueNone, CSSValueForwards, CSSValueBackwards, CSSValueBoth>(range);
     case CSSPropertyAnimationIterationCount:
@@ -1809,6 +1804,13 @@ static RefPtr<CSSValue> consumeTextEmphasisStyle(CSSParserTokenRange& range)
     if (shape)
         return shape;
     return nullptr;
+}
+
+static RefPtr<CSSPrimitiveValue> consumeCaretColor(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    if (range.peek().id() == CSSValueAuto)
+        return consumeIdent(range);
+    return consumeColor(range, cssParserMode);
 }
 
 static RefPtr<CSSValue> consumeOutlineColor(CSSParserTokenRange& range, CSSParserMode cssParserMode)
@@ -3491,18 +3493,6 @@ static RefPtr<CSSValue> consumeGridTemplateAreas(CSSParserTokenRange& range)
     return CSSGridTemplateAreasValue::create(gridAreaMap, rowCount, columnCount);
 }
 
-#if ENABLE(CSS_REGIONS)
-static RefPtr<CSSValue> consumeFlowProperty(CSSParserTokenRange& range)
-{
-    RefPtr<CSSValue> result;
-    if (range.peek().id() == CSSValueNone)
-        result = consumeIdent(range);
-    else
-        result = consumeCustomIdent(range);
-    return result;
-}
-#endif
-
 static RefPtr<CSSValue> consumeLineBoxContain(CSSParserTokenRange& range)
 {
     if (range.peek().id() == CSSValueNone)
@@ -4020,6 +4010,8 @@ RefPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID property, CSS
     case CSSPropertyLightingColor:
     case CSSPropertyColumnRuleColor:
         return consumeColor(m_range, m_context.mode);
+    case CSSPropertyCaretColor:
+        return consumeCaretColor(m_range, m_context.mode);
     case CSSPropertyColor:
     case CSSPropertyBackgroundColor:
         return consumeColor(m_range, m_context.mode, inQuirksMode());
@@ -4071,6 +4063,8 @@ RefPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID property, CSS
         return consumeLineWidth(m_range, m_context.mode, UnitlessQuirk::Forbid);
     case CSSPropertyTransform:
         return consumeTransform(m_range, m_context.mode);
+    case CSSPropertyTransformBox:
+        return consumeIdent<CSSValueBorderBox, CSSValueViewBox, CSSValueFillBox>(m_range);
     case CSSPropertyTransformOriginX:
     case CSSPropertyPerspectiveOriginX:
         return consumePositionX(m_range, m_context.mode);
@@ -4242,11 +4236,6 @@ RefPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID property, CSS
         if (!m_context.cssGridLayoutEnabled)
             return nullptr;
         return consumeGridAutoFlow(m_range);
-#if ENABLE(CSS_REGIONS)
-    case CSSPropertyWebkitFlowInto:
-    case CSSPropertyWebkitFlowFrom:
-        return consumeFlowProperty(m_range);
-#endif
     case CSSPropertyWebkitLineGrid:
         return consumeLineGrid(m_range);
     case CSSPropertyWebkitInitialLetter:
@@ -4291,6 +4280,11 @@ static RefPtr<CSSValueList> consumeFontFaceUnicodeRange(CSSParserTokenRange& ran
     } while (consumeCommaIncludingWhitespace(range));
 
     return values;
+}
+
+static RefPtr<CSSPrimitiveValue> consumeFontFaceFontDisplay(CSSParserTokenRange& range)
+{
+    return consumeIdent<CSSValueAuto, CSSValueBlock, CSSValueSwap, CSSValueFallback, CSSValueOptional>(range);
 }
 
 static RefPtr<CSSValue> consumeFontFaceSrcURI(CSSParserTokenRange& range, const CSSParserContext& context)
@@ -4365,6 +4359,9 @@ bool CSSPropertyParser::parseFontFaceDescriptor(CSSPropertyID propId)
         break;
     case CSSPropertyUnicodeRange:
         parsedValue = consumeFontFaceUnicodeRange(m_range);
+        break;
+    case CSSPropertyFontDisplay:
+        parsedValue = consumeFontFaceFontDisplay(m_range);
         break;
     case CSSPropertyFontWeight:
 #if ENABLE(VARIATION_FONTS)
@@ -4982,19 +4979,6 @@ static inline CSSValueID mapFromColumnBreakBetween(CSSValueID value)
     return CSSValueInvalid;
 }
 
-#if ENABLE(CSS_REGIONS)
-static inline CSSValueID mapFromRegionBreakBetween(CSSValueID value)
-{
-    if (value == CSSValueAlways)
-        return CSSValueRegion;
-    if (value == CSSValueAuto)
-        return value;
-    if (value == CSSValueAvoid)
-        return CSSValueAvoidRegion;
-    return CSSValueInvalid;
-}
-#endif
-
 static inline CSSValueID mapFromColumnRegionOrPageBreakInside(CSSValueID value)
 {
     if (value == CSSValueAuto || value == CSSValueAvoid)
@@ -5008,15 +4992,7 @@ static inline CSSPropertyID mapFromLegacyBreakProperty(CSSPropertyID property)
         return CSSPropertyBreakAfter;
     if (property == CSSPropertyPageBreakBefore || property == CSSPropertyWebkitColumnBreakBefore)
         return CSSPropertyBreakBefore;
-#if ENABLE(CSS_REGIONS)
-    if (property == CSSPropertyWebkitRegionBreakAfter)
-        return CSSPropertyBreakAfter;
-    if (property == CSSPropertyWebkitRegionBreakBefore)
-        return CSSPropertyBreakBefore;
-    ASSERT(property == CSSPropertyPageBreakInside || property == CSSPropertyWebkitColumnBreakInside || property == CSSPropertyWebkitRegionBreakInside);
-#else
     ASSERT(property == CSSPropertyPageBreakInside || property == CSSPropertyWebkitColumnBreakInside);
-#endif
     return CSSPropertyBreakInside;
 }
 
@@ -5040,13 +5016,6 @@ bool CSSPropertyParser::consumeLegacyBreakProperty(CSSPropertyID property, bool 
     case CSSPropertyWebkitColumnBreakBefore:
         value = mapFromColumnBreakBetween(value);
         break;
-#if ENABLE(CSS_REGIONS)
-    case CSSPropertyWebkitRegionBreakAfter:
-    case CSSPropertyWebkitRegionBreakBefore:
-        value = mapFromRegionBreakBetween(value);
-        break;
-    case CSSPropertyWebkitRegionBreakInside:
-#endif
     case CSSPropertyPageBreakInside:
     case CSSPropertyWebkitColumnBreakInside:
         value = mapFromColumnRegionOrPageBreakInside(value);
@@ -5390,7 +5359,7 @@ static RefPtr<CSSValue> consumeImplicitGridAutoFlow(CSSParserTokenRange& range, 
 
 bool CSSPropertyParser::consumeGridShorthand(bool important)
 {
-    ASSERT(shorthandForProperty(CSSPropertyGrid).length() == 8);
+    ASSERT(shorthandForProperty(CSSPropertyGrid).length() == 6);
 
     CSSParserTokenRange rangeCopy = m_range;
 
@@ -5401,8 +5370,6 @@ bool CSSPropertyParser::consumeGridShorthand(bool important)
         addProperty(CSSPropertyGridAutoFlow, CSSPropertyGrid, CSSValuePool::singleton().createImplicitInitialValue(), important);
         addProperty(CSSPropertyGridAutoColumns, CSSPropertyGrid, CSSValuePool::singleton().createImplicitInitialValue(), important);
         addProperty(CSSPropertyGridAutoRows, CSSPropertyGrid, CSSValuePool::singleton().createImplicitInitialValue(), important);
-        addProperty(CSSPropertyGridColumnGap, CSSPropertyGrid, CSSValuePool::singleton().createImplicitInitialValue(), important);
-        addProperty(CSSPropertyGridRowGap, CSSPropertyGrid, CSSValuePool::singleton().createImplicitInitialValue(), important);
         return true;
     }
 
@@ -5467,8 +5434,6 @@ bool CSSPropertyParser::consumeGridShorthand(bool important)
     addProperty(CSSPropertyGridAutoFlow, CSSPropertyGrid, gridAutoFlow.releaseNonNull(), important);
     addProperty(CSSPropertyGridAutoColumns, CSSPropertyGrid, autoColumnsValue.releaseNonNull(), important);
     addProperty(CSSPropertyGridAutoRows, CSSPropertyGrid, autoRowsValue.releaseNonNull(), important);
-    addProperty(CSSPropertyGridColumnGap, CSSPropertyGrid, CSSValuePool::singleton().createImplicitInitialValue(), important);
-    addProperty(CSSPropertyGridRowGap, CSSPropertyGrid, CSSValuePool::singleton().createImplicitInitialValue(), important);
     
     return true;
 }

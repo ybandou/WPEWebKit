@@ -39,8 +39,8 @@
 #include <wtf/Platform.h>
 #include <wtf/Vector.h>
 #include <JavaScriptCore/JavaScriptCore.h>
-#include <WebKit/WebKit.h>
-#include <WebKit/WebKitCOMAPI.h>
+#include <WebKitLegacy/WebKit.h>
+#include <WebKitLegacy/WebKitCOMAPI.h>
 #include <comutil.h>
 #include <stdio.h>
 
@@ -658,8 +658,8 @@ HRESULT UIDelegate::webViewDidInvalidate(_In_opt_ IWebView* /*sender*/)
 }
 
 HRESULT UIDelegate::setStatusText(_In_opt_ IWebView*, _In_ BSTR text)
-{ 
-    if (gTestRunner->dumpStatusCallbacks())
+{
+    if (!done && gTestRunner->dumpStatusCallbacks())
         fprintf(testResult, "UI DELEGATE STATUS CALLBACK: setStatusText:%S\n", text ? text : L"");
     return S_OK;
 }

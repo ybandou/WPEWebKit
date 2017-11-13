@@ -28,19 +28,17 @@
 #include <wtf/HashMap.h>
 #include <wtf/text/AtomicString.h>
 #include <wtf/text/AtomicStringHash.h>
-#include <wtf/text/CString.h>
 
 namespace WebCore {
 
 enum AddRuleFlags {
     RuleHasNoSpecialState         = 0,
     RuleHasDocumentSecurityOrigin = 1,
-    RuleIsInRegionRule            = 1 << 1,
 };
     
 enum PropertyWhitelistType {
     PropertyWhitelistNone   = 0,
-    PropertyWhitelistRegion,
+    PropertyWhitelistMarker,
 #if ENABLE(VIDEO_TRACK)
     PropertyWhitelistCue
 #endif
@@ -51,7 +49,6 @@ class ContainerNode;
 class MediaQueryEvaluator;
 class Node;
 class StyleResolver;
-class StyleRuleRegion;
 class StyleSheetContents;
 
 enum class MatchBasedOnRuleHash : unsigned {
@@ -167,7 +164,6 @@ public:
     void addRule(StyleRule*, unsigned selectorIndex, AddRuleFlags);
     void addPageRule(StyleRulePage*);
     void addToRuleSet(const AtomicString& key, AtomRuleMap&, const RuleData&);
-    void addRegionRule(StyleRuleRegion*, bool hasDocumentSecurityOrigin);
     void shrinkToFit();
     void disableAutoShrinkToFit() { m_autoShrinkToFitEnabled = false; }
 
@@ -187,7 +183,6 @@ public:
     const RuleDataVector* universalRules() const { return &m_universalRules; }
 
     const Vector<StyleRulePage*>& pageRules() const { return m_pageRules; }
-    const Vector<RuleSetSelectorPair>& regionSelectorsAndRuleSets() const { return m_regionSelectorsAndRuleSets; }
 
     unsigned ruleCount() const { return m_ruleCount; }
 
@@ -215,7 +210,6 @@ private:
     bool m_hasHostPseudoClassRulesMatchingInShadowTree { false };
     bool m_autoShrinkToFitEnabled { true };
     RuleFeatureSet m_features;
-    Vector<RuleSetSelectorPair> m_regionSelectorsAndRuleSets;
 };
 
 inline const RuleSet::RuleDataVector* RuleSet::tagRules(const AtomicString& key, bool isHTMLName) const

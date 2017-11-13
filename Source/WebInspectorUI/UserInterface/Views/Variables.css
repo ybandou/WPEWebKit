@@ -52,14 +52,19 @@
     --button-background-color: white;
     --button-background-color-pressed: hsl(0, 0%, 85%);
 
-    --panel-background-color: hsl(0, 0%, 94%);
+    --panel-background-color: hsl(0, 0%, 93%);
     --panel-background-color-light: hsl(0, 0%, 96%);
 
     --console-secondary-text-color: hsla(0, 0%, 0%, 0.33);
     --console-prompt-min-height: 30px;
 
-    --text-color-gray-medium: hsl(0, 0%, 50%);
+    --sidebar-no-results-message-font-size: 16px;
+
+    --text-color-gray-medium: hsl(0, 0%, 52%);
     --error-text-color: hsl(0, 86%, 47%);
+
+    --value-changed-highlight: hsla(83, 100%, 48%, 0.4);
+    --value-visual-highlight: hsla(60, 100%, 50%, 0.4);
 
     --breakpoint-fill-color: hsl(212, 45%, 54%);
     --breakpoint-stroke-color: hsl(212, 45%, 48%);
@@ -75,6 +80,7 @@
     --syntax-highlight-string-color: hsl(1, 79%, 42%);
     --syntax-highlight-regexp-color: hsl(20, 100%, 44%);
     --syntax-highlight-symbol-color: hsl(172, 45%, 45%);
+    --syntax-highlight-comment-color: hsl(119, 100%, 22%);
 
     --syntax-highlight-regex-group-color: var(--text-color-gray-medium);
 
@@ -91,6 +97,7 @@
 
     --even-zebra-stripe-row-background-color: white;
     --odd-zebra-stripe-row-background-color: hsl(0, 0%, 95%);
+    --transparent-stripe-background-gradient: linear-gradient(to bottom, transparent, transparent 50%, hsla(0, 0%, 0%, 0.03) 50%, hsla(0, 0%, 0%, 0.03)) top left / 100% 40px;
 
     --toolbar-height: 36px;
     --tab-bar-height: 24px;

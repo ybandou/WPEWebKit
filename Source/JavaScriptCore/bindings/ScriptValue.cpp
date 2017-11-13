@@ -31,6 +31,7 @@
 #include "ScriptValue.h"
 
 #include "APICast.h"
+#include "CatchScope.h"
 #include "InspectorValues.h"
 #include "JSCInlines.h"
 #include "JSLock.h"
@@ -78,7 +79,7 @@ static RefPtr<InspectorValue> jsToInspectorValue(ExecState& scriptState, JSValue
         }
         auto inspectorObject = InspectorObject::create();
         auto& object = *value.getObject();
-        PropertyNameArray propertyNames(&scriptState, PropertyNameMode::Strings);
+        PropertyNameArray propertyNames(&scriptState.vm(), PropertyNameMode::Strings, PrivateSymbolMode::Exclude);
         object.methodTable()->getOwnPropertyNames(&object, &scriptState, propertyNames, EnumerationMode());
         for (auto& name : propertyNames) {
             auto inspectorValue = jsToInspectorValue(scriptState, object.get(&scriptState, name), maxDepth);

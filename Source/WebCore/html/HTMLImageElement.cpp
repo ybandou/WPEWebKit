@@ -33,6 +33,7 @@
 #include "HTMLPictureElement.h"
 #include "HTMLSourceElement.h"
 #include "HTMLSrcsetParser.h"
+#include "Logging.h"
 #include "MIMETypeRegistry.h"
 #include "MediaList.h"
 #include "MediaQueryEvaluator.h"
@@ -162,13 +163,14 @@ ImageCandidate HTMLImageElement::bestFitSourceFromPictureElement()
             String type = typeAttribute.string();
             type.truncate(type.find(';'));
             type = stripLeadingAndTrailingHTMLSpaces(type);
-            if (!type.isEmpty() && !MIMETypeRegistry::isSupportedImageMIMEType(type) && !equalLettersIgnoringASCIICase(type, "image/svg+xml"))
+            if (!type.isEmpty() && !MIMETypeRegistry::isSupportedImageOrSVGMIMEType(type))
                 continue;
         }
 
         auto* documentElement = document().documentElement();
         MediaQueryEvaluator evaluator { document().printing() ? "print" : "screen", document(), documentElement ? documentElement->computedStyle() : nullptr };
-        auto* queries = source.mediaQuerySet();
+        auto* queries = source.parsedMediaAttribute();
+        LOG(MediaQueries, "HTMLImageElement %p bestFitSourceFromPictureElement evaluating media queries", this);
         auto evaluation = !queries || evaluator.evaluate(*queries, picture->viewportDependentResults());
         if (picture->hasViewportDependentResults())
             document().addViewportDependentPicture(*picture);
@@ -176,7 +178,7 @@ ImageCandidate HTMLImageElement::bestFitSourceFromPictureElement()
             continue;
 
         auto sourceSize = SizesAttributeParser(source.attributeWithoutSynchronization(sizesAttr).string(), document()).length();
-        auto candidate = bestFitSourceForImageAttributes(document().deviceScaleFactor(), nullAtom, srcset, sourceSize);
+        auto candidate = bestFitSourceForImageAttributes(document().deviceScaleFactor(), nullAtom(), srcset, sourceSize);
         if (!candidate.isEmpty())
             return candidate;
     }
@@ -536,6 +538,11 @@ bool HTMLImageElement::complete() const
     return m_imageLoader.imageComplete();
 }
 
+void HTMLImageElement::decode(Ref<DeferredPromise>&& promise)
+{
+    return m_imageLoader.decode(WTFMove(promise));
+}
+
 void HTMLImageElement::addSubresourceAttributeURLs(ListHashSet<URL>& urls) const
 {
     HTMLElement::addSubresourceAttributeURLs(urls);
@@ -545,10 +552,10 @@ void HTMLImageElement::addSubresourceAttributeURLs(ListHashSet<URL>& urls) const
     addSubresourceURL(urls, document().completeURL(attributeWithoutSynchronization(usemapAttr)));
 }
 
-void HTMLImageElement::didMoveToNewDocument(Document& oldDocument)
+void HTMLImageElement::didMoveToNewDocument(Document& oldDocument, Document& newDocument)
 {
     m_imageLoader.elementDidMoveToNewDocument();
-    HTMLElement::didMoveToNewDocument(oldDocument);
+    HTMLElement::didMoveToNewDocument(oldDocument, newDocument);
 }
 
 bool HTMLImageElement::isServerMap() const

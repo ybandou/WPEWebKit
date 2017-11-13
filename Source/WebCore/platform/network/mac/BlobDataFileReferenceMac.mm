@@ -29,7 +29,8 @@
 #if ENABLE(FILE_REPLACEMENT)
 
 #include "FileMetadata.h"
-#include "SoftLinking.h"
+#include "FileSystem.h"
+#include <wtf/SoftLinking.h>
 #include <wtf/text/CString.h>
 
 #if USE(APPLE_INTERNAL_SDK)
@@ -79,9 +80,8 @@ void BlobDataFileReference::generateReplacementFile()
 
     m_replacementShouldBeGenerated = false;
     if (!m_replacementPath.isNull()) {
-        FileMetadata metadata;
-        if (getFileMetadata(m_replacementPath, metadata))
-            m_size = metadata.length;
+        if (auto metadata = fileMetadataFollowingSymlinks(m_replacementPath))
+            m_size = metadata.value().length;
     }
 
     revokeFileAccess();

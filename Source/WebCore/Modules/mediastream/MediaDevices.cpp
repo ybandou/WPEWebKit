@@ -47,7 +47,6 @@ namespace WebCore {
 inline MediaDevices::MediaDevices(Document& document)
     : ContextDestructionObserver(&document)
     , m_scheduledEventTimer(*this, &MediaDevices::scheduledEventTimerFired)
-    , m_weakPtrFactory(this)
 {
     m_deviceChangedToken = RealtimeMediaSourceCenter::singleton().addDevicesChangedObserver([weakThis = createWeakPtr(), this]() {
 
@@ -95,7 +94,7 @@ ExceptionOr<void> MediaDevices::getUserMedia(const StreamConstraints& constraint
 {
     auto* document = this->document();
     if (!document)
-        return Exception { INVALID_STATE_ERR };
+        return Exception { InvalidStateError };
 
     auto audioConstraints = createMediaConstraints(constraints.audio);
     auto videoConstraints = createMediaConstraints(constraints.video);

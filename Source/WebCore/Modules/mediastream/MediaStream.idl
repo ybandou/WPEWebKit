@@ -23,11 +23,13 @@
  */
 
 [
+    ActiveDOMObject,
     Conditional=MEDIA_STREAM,
     Constructor,
     Constructor(MediaStream stream),
     Constructor(sequence<MediaStreamTrack> tracks),
     ConstructorCallWith=ScriptExecutionContext,
+    ExportToWrappedFunction,
     PrivateIdentifier,
     PublicIdentifier
 ] interface MediaStream : EventTarget {
@@ -48,10 +50,5 @@
 
     attribute EventHandler onaddtrack;
     attribute EventHandler onremovetrack;
-
-    // FIXME 169871: legacy or remove?
-    attribute EventHandler onactive;
-    // FIXME 169871: legacy or remove?
-    attribute EventHandler oninactive;
 };
 

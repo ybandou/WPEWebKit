@@ -49,11 +49,7 @@ class TestGroup extends LabeledObject {
         return request ? request.test() : null;
     }
 
-    platform()
-    {
-        const request = this._lastRequest();
-        return request ? request.platform() : null;
-    }
+    platform() { return this._platform; }
 
     _lastRequest()
     {
@@ -210,7 +206,7 @@ class TestGroup extends LabeledObject {
         const revisionSets = this._revisionSetsFromCommitSets(commitSets);
         const params = {task: task.id(), name: groupName, platform: platform.id(), test: test.id(), repetitionCount, revisionSets};
         return PrivilegedAPI.sendRequest('create-test-group', params).then((data) => {
-            return this.fetchForTask(task.id(), true);
+            return this.fetchForTask(data['taskId'], true);
         });
     }
 
@@ -223,7 +219,7 @@ class TestGroup extends LabeledObject {
             name: name,
             repetitionCount: repetitionCount,
             revisionSets: revisionSets,
-        }).then((data) => this.fetchForTask(task.id(), true));
+        }).then((data) => this.fetchForTask(data['taskId'], true));
     }
 
     static _revisionSetsFromCommitSets(commitSets)
@@ -235,6 +231,7 @@ class TestGroup extends LabeledObject {
                 const patchFile = commitSet.patchForRepository(repository);
                 revisionSet[repository.id()] = {
                     revision: commitSet.revisionForRepository(repository),
+                    ownerRevision: commitSet.ownerRevisionForRepository(repository),
                     patch: patchFile ? patchFile.id() : null,
                 };
             }

@@ -30,9 +30,7 @@
 
 #include "CryptoAlgorithmAesCbcCfbParams.h"
 #include "CryptoKeyAES.h"
-#include "ExceptionCode.h"
 #include "NotImplemented.h"
-#include "ScriptExecutionContext.h"
 #include <pal/crypto/gcrypt/Handle.h>
 #include <pal/crypto/gcrypt/Utilities.h>
 
@@ -40,10 +38,12 @@ namespace WebCore {
 
 static std::optional<Vector<uint8_t>> gcryptEncrypt(const Vector<uint8_t>& key, const Vector<uint8_t>& iv, Vector<uint8_t>&& plainText)
 {
+    // Determine the AES algorithm for the given key size.
     auto algorithm = PAL::GCrypt::aesAlgorithmForKeySize(key.size() * 8);
     if (!algorithm)
         return std::nullopt;
 
+    // Create a new GCrypt cipher object for the AES algorithm and the CBC cipher mode.
     PAL::GCrypt::Handle<gcry_cipher_hd_t> handle;
     gcry_error_t error = gcry_cipher_open(&handle, *algorithm, GCRY_CIPHER_MODE_CBC, 0);
     if (error != GPG_ERR_NO_ERROR) {
@@ -51,23 +51,24 @@ static std::optional<Vector<uint8_t>> gcryptEncrypt(const Vector<uint8_t>& key, 
         return std::nullopt;
     }
 
+    // Use the given key for this cipher object.
     error = gcry_cipher_setkey(handle, key.data(), key.size());
     if (error != GPG_ERR_NO_ERROR) {
         PAL::GCrypt::logError(error);
         return std::nullopt;
     }
 
+    // Use the given IV for this cipher object.
     error = gcry_cipher_setiv(handle, iv.data(), iv.size());
     if (error != GPG_ERR_NO_ERROR) {
         PAL::GCrypt::logError(error);
         return std::nullopt;
     }
 
+    // Use the PKCS#7 padding.
     {
-        // PKCS#7
-        size_t size = plainText.size();
-
         // Round up the size value to the next multiple of the cipher's block length to get the padded size.
+        size_t size = plainText.size();
         size_t paddedSize = roundUpToMultipleOf(gcry_cipher_get_algo_blklen(*algorithm), size + 1);
 
         // Padded size should be bigger than size, but bail if the value doesn't fit into a byte.
@@ -76,16 +77,18 @@ static std::optional<Vector<uint8_t>> gcryptEncrypt(const Vector<uint8_t>& key, 
             return std::nullopt;
         uint8_t paddingValue = paddedSize - size;
 
-        plainText.resize(paddedSize);
+        plainText.grow(paddedSize);
         std::memset(plainText.data() + size, paddingValue, paddingValue);
     }
 
+    // Finalize the cipher object before performing the encryption.
     error = gcry_cipher_final(handle);
     if (error != GPG_ERR_NO_ERROR) {
         PAL::GCrypt::logError(error);
         return std::nullopt;
     }
 
+    // Perform the encryption and retrieve the encrypted output.
     Vector<uint8_t> output(plainText.size());
     error = gcry_cipher_encrypt(handle, output.data(), output.size(), plainText.data(), plainText.size());
     if (error != GPG_ERR_NO_ERROR) {
@@ -98,10 +101,12 @@ static std::optional<Vector<uint8_t>> gcryptEncrypt(const Vector<uint8_t>& key, 
 
 static std::optional<Vector<uint8_t>> gcryptDecrypt(const Vector<uint8_t>& key, const Vector<uint8_t>& iv, const Vector<uint8_t>& cipherText)
 {
+    // Determine the AES algorithm for the given key size.
     auto algorithm = PAL::GCrypt::aesAlgorithmForKeySize(key.size() * 8);
     if (!algorithm)
         return std::nullopt;
 
+    // Create a new GCrypt cipher object for the AES algorithm and the CBC cipher mode.
     PAL::GCrypt::Handle<gcry_cipher_hd_t> handle;
     gcry_error_t error = gcry_cipher_open(&handle, *algorithm, GCRY_CIPHER_MODE_CBC, 0);
     if (error != GPG_ERR_NO_ERROR) {
@@ -109,24 +114,28 @@ static std::optional<Vector<uint8_t>> gcryptDecrypt(const Vector<uint8_t>& key, 
         return std::nullopt;
     }
 
+    // Use the given key for this cipher object.
     error = gcry_cipher_setkey(handle, key.data(), key.size());
     if (error != GPG_ERR_NO_ERROR) {
         PAL::GCrypt::logError(error);
         return std::nullopt;
     }
 
+    // Use the given IV for this cipher object.
     error = gcry_cipher_setiv(handle, iv.data(), iv.size());
     if (error != GPG_ERR_NO_ERROR) {
         PAL::GCrypt::logError(error);
         return std::nullopt;
     }
 
+    // Finalize the cipher object before performing the decryption.
     error = gcry_cipher_final(handle);
     if (error != GPG_ERR_NO_ERROR) {
         PAL::GCrypt::logError(error);
         return std::nullopt;
     }
 
+    // Perform the decryption and retrieve the decrypted output.
     Vector<uint8_t> output(cipherText.size());
     error = gcry_cipher_decrypt(handle, output.data(), output.size(), cipherText.data(), cipherText.size());
     if (error != GPG_ERR_NO_ERROR) {
@@ -134,91 +143,43 @@ static std::optional<Vector<uint8_t>> gcryptDecrypt(const Vector<uint8_t>& key, 
         return std::nullopt;
     }
 
+    // Remove the PKCS#7 padding from the decrypted output.
     {
-        // PKCS#7
+        // The padding value can be retrieved from the last byte.
         uint8_t paddingValue = output.last();
         if (paddingValue > gcry_cipher_get_algo_blklen(*algorithm))
             return std::nullopt;
 
+        // Padding value mustn't be greater than the size of the padded output.
         size_t size = output.size();
         if (paddingValue > size)
             return std::nullopt;
 
+        // Bail if the last `paddingValue` bytes don't have the value of `paddingValue`.
         if (std::count(output.end() - paddingValue, output.end(), paddingValue) != paddingValue)
             return std::nullopt;
 
-        output.resize(size - paddingValue);
+        // Shrink the output Vector object to drop the PKCS#7 padding.
+        output.shrink(size - paddingValue);
     }
 
     return output;
 }
 
-void CryptoAlgorithmAES_CBC::platformEncrypt(std::unique_ptr<CryptoAlgorithmParameters>&& parameters, Ref<CryptoKey>&& key, Vector<uint8_t>&& plainText, VectorCallback&& callback, ExceptionCallback&& exceptionCallback, ScriptExecutionContext& context, WorkQueue& workQueue)
+ExceptionOr<Vector<uint8_t>> CryptoAlgorithmAES_CBC::platformEncrypt(CryptoAlgorithmAesCbcCfbParams& parameters, const CryptoKeyAES& key, const Vector<uint8_t>& plainText)
 {
-    context.ref();
-    workQueue.dispatch(
-        [parameters = WTFMove(parameters), key = WTFMove(key), plainText = WTFMove(plainText), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback), &context]() mutable {
-            auto& aesParameters = downcast<CryptoAlgorithmAesCbcCfbParams>(*parameters);
-            auto& aesKey = downcast<CryptoKeyAES>(key.get());
-
-            auto output = gcryptEncrypt(aesKey.key(), aesParameters.ivVector(), WTFMove(plainText));
-            if (!output) {
-                // We should only dereference callbacks after being back to the Document/Worker threads.
-                context.postTask(
-                    [callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) {
-                        exceptionCallback(OperationError);
-                        context.deref();
-                    });
-                return;
-            }
-
-            // We should only dereference callbacks after being back to the Document/Worker threads.
-            context.postTask(
-                [output = WTFMove(*output), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) mutable {
-                    callback(WTFMove(output));
-                    context.deref();
-                });
-        });
+    auto output = gcryptEncrypt(key.key(), parameters.ivVector(), Vector<uint8_t>(plainText));
+    if (!output)
+        return Exception { OperationError };
+    return WTFMove(*output);
 }
 
-void CryptoAlgorithmAES_CBC::platformDecrypt(std::unique_ptr<CryptoAlgorithmParameters>&& parameters, Ref<CryptoKey>&& key, Vector<uint8_t>&& cipherText, VectorCallback&& callback, ExceptionCallback&& exceptionCallback, ScriptExecutionContext& context, WorkQueue& workQueue)
+ExceptionOr<Vector<uint8_t>> CryptoAlgorithmAES_CBC::platformDecrypt(CryptoAlgorithmAesCbcCfbParams& parameters, const CryptoKeyAES& key, const Vector<uint8_t>& cipherText)
 {
-    context.ref();
-    workQueue.dispatch(
-        [parameters = WTFMove(parameters), key = WTFMove(key), cipherText = WTFMove(cipherText), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback), &context]() mutable {
-            auto& aesParameters = downcast<CryptoAlgorithmAesCbcCfbParams>(*parameters);
-            auto& aesKey = downcast<CryptoKeyAES>(key.get());
-
-            auto output = gcryptDecrypt(aesKey.key(), aesParameters.ivVector(), WTFMove(cipherText));
-            if (!output) {
-                // We should only dereference callbacks after being back to the Document/Worker threads.
-                context.postTask(
-                    [callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) {
-                        exceptionCallback(OperationError);
-                        context.deref();
-                    });
-                return;
-            }
-
-            // We should only dereference callbacks after being back to the Document/Worker threads.
-            context.postTask(
-                [output = WTFMove(*output), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) mutable {
-                    callback(WTFMove(output));
-                    context.deref();
-                });
-        });
-}
-
-ExceptionOr<void> CryptoAlgorithmAES_CBC::platformEncrypt(const CryptoAlgorithmAesCbcParamsDeprecated&, const CryptoKeyAES&, const CryptoOperationData&, VectorCallback&&, VoidCallback&&)
-{
-    notImplemented();
-    return Exception { NOT_SUPPORTED_ERR };
-}
-
-ExceptionOr<void> CryptoAlgorithmAES_CBC::platformDecrypt(const CryptoAlgorithmAesCbcParamsDeprecated&, const CryptoKeyAES&, const CryptoOperationData&, VectorCallback&&, VoidCallback&&)
-{
-    notImplemented();
-    return Exception { NOT_SUPPORTED_ERR };
+    auto output = gcryptDecrypt(key.key(), parameters.ivVector(), cipherText);
+    if (!output)
+        return Exception { OperationError };
+    return WTFMove(*output);
 }
 
 } // namespace WebCore

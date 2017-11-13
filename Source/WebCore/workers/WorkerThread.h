@@ -31,6 +31,10 @@
 #include <wtf/Forward.h>
 #include <wtf/RefCounted.h>
 
+namespace PAL {
+class SessionID;
+}
+
 namespace WebCore {
 
 class ContentSecurityPolicyResponseHeaders;
@@ -80,10 +84,10 @@ public:
     JSC::RuntimeFlags runtimeFlags() const { return m_runtimeFlags; }
 
 protected:
-    WorkerThread(const URL&, const String& identifier, const String& userAgent, const String& sourceCode, WorkerLoaderProxy&, WorkerReportingProxy&, WorkerThreadStartMode, const ContentSecurityPolicyResponseHeaders&, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin, IDBClient::IDBConnectionProxy*, SocketProvider*, JSC::RuntimeFlags);
+    WorkerThread(const URL&, const String& identifier, const String& userAgent, const String& sourceCode, WorkerLoaderProxy&, WorkerReportingProxy&, WorkerThreadStartMode, const ContentSecurityPolicyResponseHeaders&, bool shouldBypassMainWorldContentSecurityPolicy, const SecurityOrigin& topOrigin, MonotonicTime timeOrigin, IDBClient::IDBConnectionProxy*, SocketProvider*, JSC::RuntimeFlags, PAL::SessionID);
 
     // Factory method for creating a new worker context for the thread.
-    virtual Ref<WorkerGlobalScope> createWorkerGlobalScope(const URL&, const String& identifier, const String& userAgent, const ContentSecurityPolicyResponseHeaders&, bool shouldBypassMainWorldContentSecurityPolicy, Ref<SecurityOrigin>&& topOrigin, MonotonicTime timeOrigin) = 0;
+    virtual Ref<WorkerGlobalScope> createWorkerGlobalScope(const URL&, const String& identifier, const String& userAgent, const ContentSecurityPolicyResponseHeaders&, bool shouldBypassMainWorldContentSecurityPolicy, Ref<SecurityOrigin>&& topOrigin, MonotonicTime timeOrigin, PAL::SessionID) = 0;
 
     // Executes the event loop for the worker thread. Derived classes can override to perform actions before/after entering the event loop.
     virtual void runEventLoop();
@@ -94,8 +98,6 @@ protected:
     SocketProvider* socketProvider();
 
 private:
-    // Static function executed as the core routine on the new thread. Passed a pointer to a WorkerThread object.
-    static void workerThreadStart(void*);
     void workerThread();
 
     RefPtr<Thread> m_thread;
@@ -117,9 +119,7 @@ private:
 #if ENABLE(INDEXED_DATABASE)
     RefPtr<IDBClient::IDBConnectionProxy> m_idbConnectionProxy;
 #endif
-#if ENABLE(WEB_SOCKETS)
     RefPtr<SocketProvider> m_socketProvider;
-#endif
 };
 
 } // namespace WebCore

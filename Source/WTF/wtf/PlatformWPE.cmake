@@ -1,5 +1,4 @@
 list(APPEND WTF_SOURCES
-    PlatformUserPreferredLanguagesUnix.cpp
     UniStdExtras.cpp
 
     generic/MainThreadGeneric.cpp
@@ -16,13 +15,14 @@ list(APPEND WTF_SOURCES
     text/unix/TextBreakIteratorInternalICUUnix.cpp
 
     unix/CPUTimeUnix.cpp
+    unix/LanguageUnix.cpp
 )
 
 list(APPEND WTF_LIBRARIES
+    ${CMAKE_THREAD_LIBS_INIT}
     ${GLIB_GIO_LIBRARIES}
     ${GLIB_GOBJECT_LIBRARIES}
     ${GLIB_LIBRARIES}
-    pthread
     ${ZLIB_LIBRARIES}
 )
 

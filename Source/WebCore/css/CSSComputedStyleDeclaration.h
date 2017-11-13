@@ -23,6 +23,7 @@
 #include "CSSStyleDeclaration.h"
 #include "RenderStyleConstants.h"
 #include "SVGRenderStyleDefs.h"
+#include "TextFlags.h"
 #include <wtf/RefPtr.h>
 #include <wtf/text/WTFString.h>
 
@@ -37,7 +38,7 @@ class FilterOperations;
 class FontSelectionValue;
 class MutableStyleProperties;
 class Node;
-class RenderObject;
+class RenderElement;
 class RenderStyle;
 class SVGPaint;
 class ShadowData;
@@ -71,12 +72,18 @@ public:
     static Ref<CSSPrimitiveValue> fontNonKeywordStretchFromStyleValue(FontSelectionValue);
     static Ref<CSSPrimitiveValue> fontStretchFromStyleValue(FontSelectionValue);
     static Ref<CSSFontStyleValue> fontNonKeywordStyleFromStyleValue(FontSelectionValue);
-    static Ref<CSSFontStyleValue> fontStyleFromStyleValue(FontSelectionValue);
+    static Ref<CSSFontStyleValue> fontStyleFromStyleValue(FontSelectionValue, FontStyleAxis);
 
 private:
-    // The styled element is either the element passed into computedPropertyValue, or the
-    // PseudoElement for :before and :after if they exist.
-    Element* styledElement();
+    // The styled element is either the element passed into
+    // computedPropertyValue, or the PseudoElement for :before and :after if
+    // they exist.
+    Element* styledElement() const;
+
+    // The renderer we should use for resolving layout-dependent properties.
+    // Note that it differs from styledElement()->renderer() in the case we have
+    // no pseudo-element.
+    RenderElement* styledRenderer() const;
 
     RefPtr<CSSValue> svgPropertyValue(CSSPropertyID, EUpdateLayout);
     RefPtr<CSSValue> adjustSVGPaintForCurrentColor(SVGPaintType, const String& url, const Color&, const Color& currentColor) const;

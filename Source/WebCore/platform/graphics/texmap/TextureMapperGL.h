@@ -25,10 +25,10 @@
 
 #include "ClipStack.h"
 #include "FilterOperation.h"
-#include "FloatQuad.h"
 #include "GraphicsContext3D.h"
 #include "IntSize.h"
 #include "TextureMapper.h"
+#include "TextureMapperContextAttributes.h"
 #include "TransformationMatrix.h"
 
 namespace WebCore {
@@ -51,7 +51,9 @@ public:
         ShouldRotateTexture90 = 0x10,
         ShouldRotateTexture180 = 0x20,
         ShouldRotateTexture270 = 0x40,
-        ShouldOverwriteRect = 0x80
+        ShouldConvertTextureBGRAToRGBA = 0x80,
+        ShouldConvertTextureARGBToRGBA = 0x100,
+        ShouldOverwriteRect = 0x200
     };
 
     typedef int Flags;
@@ -62,6 +64,7 @@ public:
     void drawTexture(const BitmapTexture&, const FloatRect&, const TransformationMatrix&, float opacity, unsigned exposedEdges) override;
     virtual void drawTexture(Platform3DObject texture, Flags, const IntSize& textureSize, const FloatRect& targetRect, const TransformationMatrix& modelViewMatrix, float opacity, unsigned exposedEdges = AllEdges);
     void drawSolidColor(const FloatRect&, const TransformationMatrix&, const Color&, bool) override;
+    void clearColor(const Color&) override;
 
     void bindSurface(BitmapTexture* surface) override;
     BitmapTexture* currentSurface();
@@ -71,9 +74,8 @@ public:
     void endClip() override;
     IntRect clipBounds() override;
     IntSize maxTextureSize() const override { return IntSize(2000, 2000); }
-    Ref<BitmapTexture> createTexture() override;
-    Ref<BitmapTexture> createTexture(GC3Dint internalFormat);
-    inline GraphicsContext3D* graphicsContext3D() const { return m_context3D.get(); }
+    Ref<BitmapTexture> createTexture() override { return createTexture(GraphicsContext3D::DONT_CARE); }
+    Ref<BitmapTexture> createTexture(GC3Dint internalFormat) override;
 
     void drawFiltered(const BitmapTexture& sourceTexture, const BitmapTexture* contentTexture, const FilterOperation&, int pass);
 
@@ -90,6 +92,8 @@ private:
     void bindDefaultSurface();
     ClipStack& clipStack();
     inline TextureMapperGLData& data() { return *m_data; }
+
+    TextureMapperContextAttributes m_contextAttributes;
     RefPtr<GraphicsContext3D> m_context3D;
     TextureMapperGLData* m_data;
     ClipStack m_clipStack;

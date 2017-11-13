@@ -27,7 +27,6 @@
 
 #include "AbstractModuleRecord.h"
 #include "JSDestructibleObject.h"
-#include "ScopeOffset.h"
 
 namespace JSC {
 
@@ -38,11 +37,12 @@ public:
 
     static JSModuleNamespaceObject* create(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, AbstractModuleRecord* moduleRecord, Vector<std::pair<Identifier, AbstractModuleRecord::Resolution>>&& resolutions)
     {
+        VM& vm = exec->vm();
         JSModuleNamespaceObject* object =
             new (
                 NotNull,
-                allocateCell<JSModuleNamespaceObject>(exec->vm().heap, JSModuleNamespaceObject::allocationSize(resolutions.size())))
-            JSModuleNamespaceObject(exec->vm(), structure);
+                allocateCell<JSModuleNamespaceObject>(vm.heap, JSModuleNamespaceObject::allocationSize(resolutions.size())))
+            JSModuleNamespaceObject(vm, structure);
         object->finishCreation(exec, globalObject, moduleRecord, WTFMove(resolutions));
         return object;
     }

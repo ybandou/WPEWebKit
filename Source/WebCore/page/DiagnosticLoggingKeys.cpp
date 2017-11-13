@@ -453,11 +453,6 @@ String DiagnosticLoggingKeys::deviceOrientationKey()
     return ASCIILiteral("deviceOrientation");
 }
 
-String DiagnosticLoggingKeys::deviceProximityKey()
-{
-    return ASCIILiteral("deviceProximity");
-}
-
 String DiagnosticLoggingKeys::diskCacheKey()
 {
     return ASCIILiteral("diskCache");
@@ -767,5 +762,10 @@ String DiagnosticLoggingKeys::backgroundCPUUsageToDiagnosticLoggingKey(double cp
     return ASCIILiteral("over70");
 }
 
+String DiagnosticLoggingKeys::resourceLoadStatisticsTelemetryKey()
+{
+    return ASCIILiteral("resourceLoadStatisticsTelemetry");
+}
+    
 } // namespace WebCore
 

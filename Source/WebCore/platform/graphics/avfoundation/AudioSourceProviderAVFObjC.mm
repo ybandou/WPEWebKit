@@ -33,13 +33,13 @@
 #import "AudioSourceProviderClient.h"
 #import "CARingBuffer.h"
 #import "Logging.h"
-#import "MediaTimeAVFoundation.h"
 #import <AVFoundation/AVAssetTrack.h>
 #import <AVFoundation/AVAudioMix.h>
 #import <AVFoundation/AVMediaFormat.h>
 #import <AVFoundation/AVPlayerItem.h>
 #import <mutex>
 #import <objc/runtime.h>
+#import <pal/avfoundation/MediaTimeAVFoundation.h>
 #import <wtf/Lock.h>
 #import <wtf/MainThread.h>
 
@@ -93,7 +93,7 @@ AudioSourceProviderAVFObjC::~AudioSourceProviderAVFObjC()
 {
     setClient(nullptr);
     if (m_tapStorage) {
-        std::unique_lock<Lock> lock(m_tapStorage->mutex);
+        std::lock_guard<Lock> lock(m_tapStorage->mutex);
         m_tapStorage->_this = nullptr;
         m_tapStorage = nullptr;
     }
@@ -287,7 +287,7 @@ void AudioSourceProviderAVFObjC::processCallback(MTAudioProcessingTapRef tap, CM
     std::lock_guard<Lock> lock(tapStorage->mutex);
 
     if (tapStorage->_this)
-        tapStorage->_this->process(numberFrames, flags, bufferListInOut, numberFramesOut, flagsOut);
+        tapStorage->_this->process(tap, numberFrames, flags, bufferListInOut, numberFramesOut, flagsOut);
 }
 
 void AudioSourceProviderAVFObjC::init(void* clientInfo, void** tapStorageOut)
@@ -357,27 +357,23 @@ void AudioSourceProviderAVFObjC::unprepare()
     m_list = nullptr;
 }
 
-void AudioSourceProviderAVFObjC::process(CMItemCount numberOfFrames, MTAudioProcessingTapFlags flags, AudioBufferList* bufferListInOut, CMItemCount* numberFramesOut, MTAudioProcessingTapFlags* flagsOut)
+void AudioSourceProviderAVFObjC::process(MTAudioProcessingTapRef tap, CMItemCount numberOfFrames, MTAudioProcessingTapFlags flags, AudioBufferList* bufferListInOut, CMItemCount* numberFramesOut, MTAudioProcessingTapFlags* flagsOut)
 {
     UNUSED_PARAM(flags);
     
-    RetainPtr<MTAudioProcessingTapRef> tap = m_tap;
-    if (!tap)
-        return;
-
     CMItemCount itemCount = 0;
     CMTimeRange rangeOut;
-    OSStatus status = MTAudioProcessingTapGetSourceAudio(tap.get(), numberOfFrames, bufferListInOut, flagsOut, &rangeOut, &itemCount);
+    OSStatus status = MTAudioProcessingTapGetSourceAudio(tap, numberOfFrames, bufferListInOut, flagsOut, &rangeOut, &itemCount);
     if (status != noErr || !itemCount)
         return;
 
-    MediaTime rangeStart = toMediaTime(rangeOut.start);
-    MediaTime rangeDuration = toMediaTime(rangeOut.duration);
+    MediaTime rangeStart = PAL::toMediaTime(rangeOut.start);
+    MediaTime rangeDuration = PAL::toMediaTime(rangeOut.duration);
 
     if (rangeStart.isInvalid())
         return;
 
-    MediaTime currentTime = toMediaTime(CMTimebaseGetTime([m_avPlayerItem timebase]));
+    MediaTime currentTime = PAL::toMediaTime(CMTimebaseGetTime([m_avPlayerItem timebase]));
     if (currentTime.isInvalid())
         return;
 

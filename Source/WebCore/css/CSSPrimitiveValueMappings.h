@@ -38,7 +38,6 @@
 #include "GraphicsTypes.h"
 #include "Length.h"
 #include "LineClampValue.h"
-#include "Path.h"
 #include "RenderStyleConstants.h"
 #include "SVGRenderStyleDefs.h"
 #include "TextFlags.h"
@@ -606,6 +605,9 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(ControlPart e)
 #if ENABLE(ATTACHMENT_ELEMENT)
     case AttachmentPart:
         m_value.valueID = CSSValueAttachment;
+        break;
+    case BorderlessAttachmentPart:
+        m_value.valueID = CSSValueBorderlessAttachment;
         break;
 #endif
 #if ENABLE(SERVICE_CONTROLS)
@@ -2050,37 +2052,6 @@ template<> inline CSSPrimitiveValue::operator EMarqueeBehavior() const
     return MNONE;
 }
 
-template<> inline CSSPrimitiveValue::CSSPrimitiveValue(RegionFragment e)
-    : CSSValue(PrimitiveClass)
-{
-    m_primitiveUnitType = CSS_VALUE_ID;
-    switch (e) {
-    case AutoRegionFragment:
-        m_value.valueID = CSSValueAuto;
-        break;
-    case BreakRegionFragment:
-        m_value.valueID = CSSValueBreak;
-        break;
-    }
-}
-
-template<> inline CSSPrimitiveValue::operator RegionFragment() const
-{
-    ASSERT(isValueID());
-
-    switch (m_value.valueID) {
-    case CSSValueAuto:
-        return AutoRegionFragment;
-    case CSSValueBreak:
-        return BreakRegionFragment;
-    default:
-        break;
-    }
-
-    ASSERT_NOT_REACHED();
-    return AutoRegionFragment;
-}
-
 template<> inline CSSPrimitiveValue::CSSPrimitiveValue(EMarqueeDirection e)
     : CSSValue(PrimitiveClass)
 {
@@ -2243,17 +2214,11 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(BreakBetween e)
     case AvoidPageBreakBetween:
         m_value.valueID = CSSValueAvoidPage;
         break;
-    case AvoidRegionBreakBetween:
-        m_value.valueID = CSSValueAvoidRegion;
-        break;
     case ColumnBreakBetween:
         m_value.valueID = CSSValueColumn;
         break;
     case PageBreakBetween:
         m_value.valueID = CSSValuePage;
-        break;
-    case RegionBreakBetween:
-        m_value.valueID = CSSValueRegion;
         break;
     case LeftPageBreakBetween:
         m_value.valueID = CSSValueLeft;
@@ -2283,14 +2248,10 @@ template<> inline CSSPrimitiveValue::operator BreakBetween() const
         return AvoidColumnBreakBetween;
     case CSSValueAvoidPage:
         return AvoidPageBreakBetween;
-    case CSSValueAvoidRegion:
-        return AvoidRegionBreakBetween;
     case CSSValueColumn:
         return ColumnBreakBetween;
     case CSSValuePage:
         return PageBreakBetween;
-    case CSSValueRegion:
-        return RegionBreakBetween;
     case CSSValueLeft:
         return LeftPageBreakBetween;
     case CSSValueRight:
@@ -4414,6 +4375,42 @@ template<> inline CSSPrimitiveValue::operator ETransformStyle3D() const
     return TransformStyle3DFlat;
 }
 
+template<> inline CSSPrimitiveValue::CSSPrimitiveValue(TransformBox box)
+    : CSSValue(PrimitiveClass)
+{
+    m_primitiveUnitType = CSS_VALUE_ID;
+    switch (box) {
+    case TransformBox::BorderBox:
+        m_value.valueID = CSSValueBorderBox;
+        break;
+    case TransformBox::FillBox:
+        m_value.valueID = CSSValueFillBox;
+        break;
+    case TransformBox::ViewBox:
+        m_value.valueID = CSSValueViewBox;
+        break;
+    }
+}
+
+template<> inline CSSPrimitiveValue::operator TransformBox() const
+{
+    ASSERT(isValueID());
+
+    switch (m_value.valueID) {
+    case CSSValueBorderBox:
+        return TransformBox::BorderBox;
+    case CSSValueFillBox:
+        return TransformBox::FillBox;
+    case CSSValueViewBox:
+        return TransformBox::ViewBox;
+    default:
+        break;
+    }
+
+    ASSERT_NOT_REACHED();
+    return TransformBox::BorderBox;
+}
+
 template<> inline CSSPrimitiveValue::CSSPrimitiveValue(ColumnAxis e)
     : CSSValue(PrimitiveClass)
 {
@@ -5658,5 +5655,58 @@ template<> inline CSSPrimitiveValue::operator FontOpticalSizing() const
     ASSERT_NOT_REACHED();
     return FontOpticalSizing::Enabled;
 }
+
+template<> inline CSSPrimitiveValue::CSSPrimitiveValue(FontLoadingBehavior behavior)
+    : CSSValue(PrimitiveClass)
+{
+    m_primitiveUnitType = CSS_VALUE_ID;
+    switch (behavior) {
+    case FontLoadingBehavior::Auto:
+        m_value.valueID = CSSValueAuto;
+        break;
+    case FontLoadingBehavior::Block:
+        m_value.valueID = CSSValueBlock;
+        break;
+    case FontLoadingBehavior::Swap:
+        m_value.valueID = CSSValueSwap;
+        break;
+    case FontLoadingBehavior::Fallback:
+        m_value.valueID = CSSValueFallback;
+        break;
+    case FontLoadingBehavior::Optional:
+        m_value.valueID = CSSValueOptional;
+        break;
+    default:
+        ASSERT_NOT_REACHED();
+        break;
+    }
+}
+
+template<> inline CSSPrimitiveValue::operator FontLoadingBehavior() const
+{
+    ASSERT(isValueID());
+    switch (m_value.valueID) {
+    case CSSValueAuto:
+        return FontLoadingBehavior::Auto;
+    case CSSValueBlock:
+        return FontLoadingBehavior::Block;
+    case CSSValueSwap:
+        return FontLoadingBehavior::Swap;
+    case CSSValueFallback:
+        return FontLoadingBehavior::Fallback;
+    case CSSValueOptional:
+        return FontLoadingBehavior::Optional;
+    default:
+        break;
+    }
+    ASSERT_NOT_REACHED();
+    return FontLoadingBehavior::Auto;
+}
+
+/*
+enum class FontLoadingBehavior {
+    Auto, Block, Swap, Fallback, Optional
+};
+*/
 
 }

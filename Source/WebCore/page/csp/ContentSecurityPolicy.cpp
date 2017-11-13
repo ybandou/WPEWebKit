@@ -38,11 +38,10 @@
 #include "DocumentLoader.h"
 #include "EventNames.h"
 #include "FormData.h"
-#include "FormDataList.h"
 #include "Frame.h"
 #include "HTMLParserIdioms.h"
 #include "InspectorInstrumentation.h"
-#include "JSDOMWindowShell.h"
+#include "JSDOMWindowProxy.h"
 #include "JSMainThreadExecState.h"
 #include "ParsingUtilities.h"
 #include "PingLoader.h"
@@ -148,26 +147,30 @@ bool ContentSecurityPolicy::allowRunningOrDisplayingInsecureContent(const URL& u
     return allow;
 }
 
-void ContentSecurityPolicy::didCreateWindowShell(JSDOMWindowShell& windowShell) const
+void ContentSecurityPolicy::didCreateWindowProxy(JSDOMWindowProxy& windowProxy) const
 {
-    JSDOMWindow* window = windowShell.window();
+    auto* window = windowProxy.window();
     ASSERT(window);
     ASSERT(window->scriptExecutionContext());
     ASSERT(window->scriptExecutionContext()->contentSecurityPolicy() == this);
-    if (!windowShell.world().isNormal()) {
+    if (!windowProxy.world().isNormal()) {
         window->setEvalEnabled(true);
         return;
     }
     window->setEvalEnabled(m_lastPolicyEvalDisabledErrorMessage.isNull(), m_lastPolicyEvalDisabledErrorMessage);
+    window->setWebAssemblyEnabled(m_lastPolicyWebAssemblyDisabledErrorMessage.isNull(), m_lastPolicyWebAssemblyDisabledErrorMessage);
 }
 
 ContentSecurityPolicyResponseHeaders ContentSecurityPolicy::responseHeaders() const
 {
-    ContentSecurityPolicyResponseHeaders result;
-    result.m_headers.reserveInitialCapacity(m_policies.size());
-    for (auto& policy : m_policies)
-        result.m_headers.uncheckedAppend({ policy->header(), policy->headerType() });
-    return result;
+    if (!m_cachedResponseHeaders) {
+        ContentSecurityPolicyResponseHeaders result;
+        result.m_headers.reserveInitialCapacity(m_policies.size());
+        for (auto& policy : m_policies)
+            result.m_headers.uncheckedAppend({ policy->header(), policy->headerType() });
+        m_cachedResponseHeaders = WTFMove(result);
+    }
+    return *m_cachedResponseHeaders;
 }
 
 void ContentSecurityPolicy::didReceiveHeaders(const ContentSecurityPolicyResponseHeaders& headers, ReportParsingErrors reportParsingErrors)
@@ -186,6 +189,8 @@ void ContentSecurityPolicy::didReceiveHeader(const String& header, ContentSecuri
         ASSERT(m_policies.isEmpty());
         m_hasAPIPolicy = true;
     }
+
+    m_cachedResponseHeaders = std::nullopt;
 
     // RFC2616, section 4.2 specifies that headers appearing multiple times can
     // be combined with a comma. Walk the header string, and parse each comma
@@ -230,14 +235,18 @@ void ContentSecurityPolicy::applyPolicyToScriptExecutionContext()
     bool enableStrictMixedContentMode = false;
     for (auto& policy : m_policies) {
         const ContentSecurityPolicyDirective* violatedDirective = policy->violatedDirectiveForUnsafeEval();
-        if (violatedDirective && !violatedDirective->directiveList().isReportOnly())
+        if (violatedDirective && !violatedDirective->directiveList().isReportOnly()) {
             m_lastPolicyEvalDisabledErrorMessage = policy->evalDisabledErrorMessage();
+            m_lastPolicyWebAssemblyDisabledErrorMessage = policy->webAssemblyDisabledErrorMessage();
+        }
         if (policy->hasBlockAllMixedContentDirective() && !policy->isReportOnly())
             enableStrictMixedContentMode = true;
     }
 
     if (!m_lastPolicyEvalDisabledErrorMessage.isNull())
         m_scriptExecutionContext->disableEval(m_lastPolicyEvalDisabledErrorMessage);
+    if (!m_lastPolicyWebAssemblyDisabledErrorMessage.isNull())
+        m_scriptExecutionContext->disableWebAssembly(m_lastPolicyWebAssemblyDisabledErrorMessage);
     if (m_sandboxFlags != SandboxNone && is<Document>(m_scriptExecutionContext))
         m_scriptExecutionContext->enforceSandboxFlags(m_sandboxFlags);
     if (enableStrictMixedContentMode)

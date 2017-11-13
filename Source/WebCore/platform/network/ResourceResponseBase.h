@@ -38,15 +38,14 @@ namespace WebCore {
 
 class ResourceResponse;
 
-#if ENABLE(NOSNIFF)
 bool isScriptAllowedByNosniff(const ResourceResponse&);
-#endif
 
 // Do not use this class directly, use the class ResponseResponse instead
 class ResourceResponseBase {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    enum class Type;
+    enum class Type { Basic, Cors, Default, Error, Opaque, Opaqueredirect };
+    enum class Tainting { Basic, Cors, Opaque, Opaqueredirect };
 
     struct CrossThreadData {
         CrossThreadData(const CrossThreadData&) = delete;
@@ -64,14 +63,12 @@ public:
         HTTPHeaderMap httpHeaderFields;
         NetworkLoadMetrics networkLoadMetrics;
         Type type;
+        Tainting tainting;
         bool isRedirected;
     };
 
     CrossThreadData crossThreadData() const;
     static ResourceResponse fromCrossThreadData(CrossThreadData&&);
-
-    enum class Tainting { Basic, Cors, Opaque };
-    static ResourceResponse filterResponse(const ResourceResponse&, Tainting);
 
     bool isNull() const { return m_isNull; }
     WEBCORE_EXPORT bool isHTTP() const;
@@ -156,11 +153,16 @@ public:
         return 1280;
     }
 
-    enum class Type { Basic, Cors, Default, Error, Opaque, Opaqueredirect };
+    void setType(Type);
     Type type() const { return m_type; }
-    void setType(Type type) { m_type = type; }
-    bool isRedirected() const { return m_isRedirected; }
+
     void setRedirected(bool isRedirected) { m_isRedirected = isRedirected; }
+    bool isRedirected() const { return m_isRedirected; }
+
+    void setTainting(Tainting tainting) { m_tainting = tainting; }
+    Tainting tainting() const { return m_tainting; }
+
+    static ResourceResponse filter(const ResourceResponse&);
 
     static bool compare(const ResourceResponse&, const ResourceResponse&);
 
@@ -226,6 +228,7 @@ private:
 
     Type m_type { Type::Default };
     bool m_isRedirected { false };
+    Tainting m_tainting { Tainting::Basic };
 };
 
 inline bool operator==(const ResourceResponse& a, const ResourceResponse& b) { return ResourceResponseBase::compare(a, b); }
@@ -257,6 +260,7 @@ void ResourceResponseBase::encode(Encoder& encoder) const
     encoder.encodeEnum(m_source);
     encoder << m_cacheBodyKey;
     encoder.encodeEnum(m_type);
+    encoder.encodeEnum(m_tainting);
     encoder << m_isRedirected;
 }
 
@@ -298,6 +302,8 @@ bool ResourceResponseBase::decode(Decoder& decoder, ResourceResponseBase& respon
     if (!decoder.decode(response.m_cacheBodyKey))
         return false;
     if (!decoder.decodeEnum(response.m_type))
+        return false;
+    if (!decoder.decodeEnum(response.m_tainting))
         return false;
     if (!decoder.decode(response.m_isRedirected))
         return false;

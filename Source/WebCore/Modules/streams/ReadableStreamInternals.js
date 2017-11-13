@@ -106,6 +106,33 @@ function readableStreamDefaultControllerError(controller, error)
     @readableStreamError(stream, error);
 }
 
+function readableStreamPipeTo(stream, sink)
+{
+    "use strict";
+    @assert(@isReadableStream(stream));
+
+    const reader = new @ReadableStreamDefaultReader(stream);
+
+    reader.@closedPromiseCapability.@promise.@then(() => { }, (e) => { sink.error(e); });
+
+    function doPipe() {
+        @readableStreamDefaultReaderRead(reader).@then(function(result) {
+            if (result.done) {
+                sink.close();
+                return;
+            }
+            try {
+                sink.enqueue(result.value);
+            } catch (e) {
+                sink.error("ReadableStream chunk enqueueing in the sink failed");
+                return;
+            }
+            doPipe();
+        });
+    }
+    doPipe();
+}
+
 function readableStreamTee(stream, shouldClone)
 {
     "use strict";
@@ -332,6 +359,13 @@ function isReadableStreamLocked(stream)
 function readableStreamDefaultControllerGetDesiredSize(controller)
 {
    "use strict";
+
+   const stream = controller.@controlledReadableStream;
+
+   if (stream.@state === @streamErrored)
+       return null;
+   if (stream.@state === @streamClosed)
+       return 0;
 
    return controller.@strategy.highWaterMark - controller.@queue.size;
 }

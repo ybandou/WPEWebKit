@@ -23,7 +23,7 @@
 #include "config.h"
 #include "WebKitOpenCDMDecryptorGStreamer.h"
 
-#if (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA)) && USE(GSTREAMER) && USE(OCDM)
+#if ENABLE(ENCRYPTED_MEDIA) && USE(GSTREAMER) && USE(OPENCDM)
 
 #include "GUniquePtrGStreamer.h"
 
@@ -75,12 +75,14 @@ static void webkit_media_opencdm_decrypt_init(WebKitOpenCDMDecrypt* self)
     WebKitOpenCDMDecryptPrivate* priv = GST_WEBKIT_OPENCDM_DECRYPT_GET_PRIVATE(self);
     self->priv = priv;
     new (priv) WebKitOpenCDMDecryptPrivate();
+    GST_TRACE_OBJECT(self, "created");
 }
 
 static void webKitMediaOpenCDMDecryptorFinalize(GObject* object)
 {
     WebKitOpenCDMDecryptPrivate* priv = GST_WEBKIT_OPENCDM_DECRYPT_GET_PRIVATE(WEBKIT_OPENCDM_DECRYPT(object));
-    priv->m_openCdm->ReleaseMem();
+    if (priv->m_openCdm)
+        priv->m_openCdm->ReleaseMem();
     priv->~WebKitOpenCDMDecryptPrivate();
     GST_CALL_PARENT(G_OBJECT_CLASS, finalize, (object));
 }
@@ -96,9 +98,14 @@ static gboolean webKitMediaOpenCDMDecryptorHandleKeyResponse(WebKitMediaCommonEn
     WebKitOpenCDMDecryptPrivate* priv = GST_WEBKIT_OPENCDM_DECRYPT_GET_PRIVATE(WEBKIT_OPENCDM_DECRYPT(self));
     ASSERT(temporarySession);
 
-    priv->m_session = temporarySession.get();
-    priv->m_openCdm = std::make_unique<media::OpenCdm>();
-    priv->m_openCdm->SelectSession(priv->m_session.utf8().data());
+    if (priv->m_session != temporarySession.get() ) {
+        priv->m_session = temporarySession.get();
+        priv->m_openCdm = std::make_unique<media::OpenCdm>();
+        priv->m_openCdm->SelectSession(priv->m_session.utf8().data());
+        GST_DEBUG_OBJECT(self, "selected session %s", priv->m_session.utf8().data());
+    } else
+        GST_DEBUG_OBJECT(self, "session %s already selected!", priv->m_session.utf8().data());
+
     return true;
 }
 
@@ -118,7 +125,6 @@ static gboolean webKitMediaOpenCDMDecryptorDecrypt(WebKitMediaCommonEncryptionDe
     }
 
     WebKitOpenCDMDecryptPrivate* priv = GST_WEBKIT_OPENCDM_DECRYPT_GET_PRIVATE(WEBKIT_OPENCDM_DECRYPT(self));
-    ASSERT(priv->sessionMetaData);
 
     int errorCode;
     bool returnValue = true;
@@ -195,4 +201,4 @@ beach:
     return returnValue;
 }
 
-#endif // (ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA) || ENABLE(ENCRYPTED_MEDIA)) && USE(GSTREAMER) && USE(OCDM)
+#endif // ENABLE(ENCRYPTED_MEDIA) && USE(GSTREAMER) && USE(OPENCDM)

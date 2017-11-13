@@ -208,7 +208,7 @@ ImageSizeChangeType RenderImage::setImageSizeForAltText(CachedImage* newImage /*
 void RenderImage::styleWillChange(StyleDifference diff, const RenderStyle& newStyle)
 {
     if (!hasInitializedStyle())
-        imageResource().initialize(this);
+        imageResource().initialize(*this);
     RenderReplaced::styleWillChange(diff, newStyle);
 }
 
@@ -285,8 +285,12 @@ void RenderImage::updateInnerContentRect()
 {
     // Propagate container size to image resource.
     IntSize containerSize(replacedContentRect(intrinsicSize()).size());
-    if (!containerSize.isEmpty())
-        imageResource().setContainerSizeForRenderer(containerSize);
+    if (!containerSize.isEmpty()) {
+        URL imageSourceURL;
+        if (HTMLImageElement* imageElement = is<HTMLImageElement>(element()) ? downcast<HTMLImageElement>(element()) : nullptr)
+            imageSourceURL = document().completeURL(imageElement->imageSourceURL());
+        imageResource().setContainerContext(containerSize, imageSourceURL);
+    }
 }
 
 void RenderImage::repaintOrMarkForLayout(ImageSizeChangeType imageSizeChange, const IntRect* rect)
@@ -323,7 +327,7 @@ void RenderImage::repaintOrMarkForLayout(ImageSizeChangeType imageSizeChange, co
         // may need values from the containing block, though, so make sure that we're not too
         // early. It may be that layout hasn't even taken place once yet.
 
-        // FIXME: we should not have to trigger another call to setContainerSizeForRenderer()
+        // FIXME: we should not have to trigger another call to setContainerContextForRenderer()
         // from here, since it's already being done during layout.
         updateInnerContentRect();
     }
@@ -475,13 +479,13 @@ void RenderImage::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paintOf
     if (clip)
         context.clip(contentBoxRect);
 
-    paintIntoRect(context, snapRectToDevicePixels(replacedContentRect, deviceScaleFactor));
+    ImageDrawResult result = paintIntoRect(paintInfo, snapRectToDevicePixels(replacedContentRect, deviceScaleFactor));
     
     if (cachedImage() && paintInfo.phase == PaintPhaseForeground) {
         // For now, count images as unpainted if they are still progressively loading. We may want 
         // to refine this in the future to account for the portion of the image that has painted.
         LayoutRect visibleRect = intersection(replacedContentRect, contentBoxRect);
-        if (cachedImage()->isLoading())
+        if (cachedImage()->isLoading() || result == ImageDrawResult::DidRequestDecoding)
             page().addRelevantUnpaintedObject(this, visibleRect);
         else
             page().addRelevantRepaintedObject(this, visibleRect);
@@ -559,21 +563,21 @@ void RenderImage::areaElementFocusChanged(HTMLAreaElement* element)
     repaint();
 }
 
-void RenderImage::paintIntoRect(GraphicsContext& context, const FloatRect& rect)
+ImageDrawResult RenderImage::paintIntoRect(PaintInfo& paintInfo, const FloatRect& rect)
 {
     if (!imageResource().cachedImage() || imageResource().errorOccurred() || rect.width() <= 0 || rect.height() <= 0)
-        return;
+        return ImageDrawResult::DidNothing;
 
     RefPtr<Image> img = imageResource().image(flooredIntSize(rect.size()));
     if (!img || img->isNull())
-        return;
+        return ImageDrawResult::DidNothing;
 
     HTMLImageElement* imageElement = is<HTMLImageElement>(element()) ? downcast<HTMLImageElement>(element()) : nullptr;
     CompositeOperator compositeOperator = imageElement ? imageElement->compositeOperator() : CompositeSourceOver;
 
     // FIXME: Document when image != img.get().
     Image* image = imageResource().image().get();
-    InterpolationQuality interpolation = image ? chooseInterpolationQuality(context, *image, image, LayoutSize(rect.size())) : InterpolationDefault;
+    InterpolationQuality interpolation = image ? chooseInterpolationQuality(paintInfo.context(), *image, image, LayoutSize(rect.size())) : InterpolationDefault;
 
 #if USE(CG)
     if (is<PDFDocumentImage>(image))
@@ -584,8 +588,11 @@ void RenderImage::paintIntoRect(GraphicsContext& context, const FloatRect& rect)
         downcast<BitmapImage>(*image).updateFromSettings(settings());
 
     ImageOrientationDescription orientationDescription(shouldRespectImageOrientation(), style().imageOrientation());
-    auto decodingMode = (view().frameView().paintBehavior() & PaintBehaviorFlattenCompositingLayers) ? DecodingMode::Synchronous : DecodingMode::Asynchronous;
-    context.drawImage(*img, rect, ImagePaintingOptions(compositeOperator, BlendModeNormal, decodingMode, orientationDescription, interpolation));
+    auto decodingMode = decodingModeForImageDraw(*image, paintInfo);
+    auto drawResult = paintInfo.context().drawImage(*img, rect, ImagePaintingOptions(compositeOperator, BlendModeNormal, decodingMode, orientationDescription, interpolation));
+    if (drawResult == ImageDrawResult::DidRequestDecoding)
+        imageResource().cachedImage()->addPendingImageDrawingClient(*this);
+    return drawResult;
 }
 
 bool RenderImage::boxShadowShouldBeAppliedToBackground(const LayoutPoint& paintOffset, BackgroundBleedAvoidance bleedAvoidance, InlineFlowBox*) const
@@ -664,8 +671,8 @@ bool RenderImage::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
         }
     }
 
-    if (!inside && result.isRectBasedTest())
-        result.append(tempResult);
+    if (!inside && request.resultIsElementList())
+        result.append(tempResult, request);
     if (inside)
         result = tempResult;
     return inside;

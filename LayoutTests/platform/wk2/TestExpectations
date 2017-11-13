@@ -47,9 +47,6 @@ webkit.org/b/156612 http/tests/security/contentSecurityPolicy/object-redirect-bl
 
 # AX tests that require hit testing do not work in WK2.
 webkit.org/b/71298 accessibility/loading-iframe-updates-axtree.html
-webkit.org/b/71298 accessibility/mac/html-slider-indicator.html
-webkit.org/b/71298 accessibility/mac/listbox-hit-test.html
-webkit.org/b/71298 accessibility/mac/iframe-with-title-correct-hierarchy.html
 
 # This test has been skipped for a long time. Temporarily marking as flaky to see what bots think.
 webkit.org/b/48354 compositing/iframes/iframe-src-change.html [ Pass Failure ]
@@ -84,25 +81,6 @@ fast/dom/tab-in-right-alignment.html
 fast/events/ime-composition-events-001.html
 fast/forms/cursor-at-editable-content-boundary.html
 fast/text/international/thai-cursor-position.html
-editing/mac/input/5576619.html
-editing/mac/input/bold-node.html
-editing/mac/input/caret-primary-bidi.html
-editing/mac/input/firstrectforcharacterrange-caret-in-br.html
-editing/mac/input/firstrectforcharacterrange-plain.html
-editing/mac/input/firstrectforcharacterrange-styled.html
-editing/mac/input/firstrectforcharacterrange-vertical.html
-editing/mac/input/hangul-enter-confirms-and-sends-keypress.html
-editing/mac/input/insert-delete-smp-symbol.html
-editing/mac/input/kotoeri-enter-to-confirm-and-newline.html
-editing/mac/input/range-for-empty-document.html
-editing/mac/input/replace-invalid-range.html
-editing/mac/input/secure-input.html
-editing/mac/input/text-input-controller.html
-editing/mac/input/text-input-controller-no-editable-no-crash.html
-editing/mac/input/wrapped-line-char-rect.html
-editing/mac/input/NSBackgroundColor-transparent.html
-editing/mac/pasteboard/paste-and-match-style-selector-event.html
-editing/mac/selection/25228.html
 platform/mac/fast/dom/character-index-for-point.html
 platform/mac/fast/text/attributed-substring-from-range-001.html
 platform/mac/fast/text/attributed-substring-from-range-002.html
@@ -152,14 +130,13 @@ transitions/default-timing-function.html
 plugins/geturlnotify-during-document-teardown.html
 plugins/open-and-close-window-with-plugin.html
 
-accessibility/mac/search-predicate.html
-
 # Sometimes fails
 # http://webkit.org/b/58990
 editing/undo/undo-iframe-location-change.html
 
 # PasteBoard::plainText() does not support file names.
-editing/pasteboard/drag-files-to-editable-element.html
+editing/pasteboard/drag-files-to-editable-element-as-attachment.html [ Skip ]
+editing/pasteboard/drag-files-to-editable-element-as-URLs.html [ Skip ]
 
 # Times out
 # https://bugs.webkit.org/show_bug.cgi?id=63806
@@ -252,10 +229,12 @@ webarchive/doctype.html
 webarchive/archive-empty-frame-source.html
 
 # WebKitTestRunner needs testRunner.setIconDatabaseEnabled
-webarchive/test-link-rel-icon.html
-http/tests/misc/favicon-loads-with-images-disabled.html
-http/tests/misc/favicon-loads-with-icon-loading-override.html
-http/tests/misc/link-rel-icon-beforeload.html
+webkit.org/b/115809 webarchive/test-link-rel-icon.html
+webkit.org/b/115809 http/tests/misc/favicon-loads-with-images-disabled.html
+webkit.org/b/115809 http/tests/misc/favicon-loads-with-icon-loading-override.html
+webkit.org/b/115809 http/tests/misc/link-rel-icon-beforeload.html
+webkit.org/b/115809 http/tests/security/contentSecurityPolicy/allow-favicon.html
+webkit.org/b/115809 http/tests/security/contentSecurityPolicy/block-favicon.html
 
 # WebKitTestRunner should dump text/plain content as text
 http/tests/incremental/slow-utf8-text.pl
@@ -336,7 +315,6 @@ dom/xhtml/level2/html/HTMLAppletElement10.xhtml
 editing/selection/selection-applet.html
 fast/replaced/applet-disabled-positioned.html
 fast/replaced/applet-rendering-java-disabled.html
-java
 
 # WebKitTestRunner needs testRunner.displayInvalidatedRegion
 compositing/plugins/invalidate_rect.html
@@ -586,7 +564,10 @@ platform/mac/fast/events/objc-event-api.html
 
 # WebKitTestRunner needs an implementation of eventSender.beginDragWithFiles
 # https://bugs.webkit.org/show_bug.cgi?id=64285
-editing/pasteboard/file-drag-to-editable.html
+editing/pasteboard/datatransfer-items-drop-plaintext-file.html
+editing/pasteboard/datatransfer-types-dropping-text-file.html
+editing/pasteboard/entries-api
+editing/pasteboard/file-drag-to-editable.html [ Skip ]
 editing/pasteboard/file-input-files-access.html
 fast/dom/FileList-iterator.html
 fast/dom/Window/window-postmessage-clone-frames.html
@@ -617,10 +598,12 @@ fast/files/workers/worker-read-blob-async.html
 fast/files/workers/worker-read-blob-sync.html
 fast/files/workers/worker-read-file-async.html
 fast/files/workers/worker-read-file-sync.html
+fast/forms/file/entries-api/drag-folder-webkitEntries.html
+fast/forms/file/entries-api/webkitdirectory-drag-folder.html
+fast/forms/file/entries-api/webkitdirectory-drag-folder-webkitEntries.html
 fast/forms/file/file-input-change-event.html
 fast/forms/file/file-input-reset.html
 fast/forms/file/get-file-upload.html
-fast/forms/file/input-file-directory-upload.html
 fast/forms/file/input-file-re-render.html
 fast/forms/file/input-file-write-files.html
 fast/forms/file/recover-file-input-in-unposted-form.html
@@ -702,7 +685,11 @@ http/tests/loading/resourceLoadStatistics/classify-as-prevalent-based-on-mixed-s
 http/tests/loading/resourceLoadStatistics/classify-as-prevalent-based-on-sub-frame-under-top-frame-origins.html [ Pass ]
 http/tests/loading/resourceLoadStatistics/classify-as-prevalent-based-on-subresource-under-top-frame-origins.html [ Pass ]
 http/tests/loading/resourceLoadStatistics/classify-as-prevalent-based-on-subresource-unique-redirects-to.html [ Pass ]
-http/tests/loading/resourceLoadStatistics/clear-in-memory-and-persistent-store.html [ Pass ]
+webkit.org/b/175263 http/tests/loading/resourceLoadStatistics/clear-in-memory-and-persistent-store.html [ Pass Timeout ]
+webkit.org/b/172452 http/tests/loading/resourceLoadStatistics/grandfathering.html [ Pass Failure Timeout ]
+webkit.org/b/173499 http/tests/loading/resourceLoadStatistics/telemetry-generation.html [ Pass Failure ]
+http/tests/loading/resourceLoadStatistics/prune-statistics.html [ Pass ]
+http/tests/storageAccess/request-storage-access-top-frame.html [ Pass ]
 
 ### END OF (5) Progressions, expected successes that are expected failures in WebKit1.
 ########################################
@@ -715,3 +702,13 @@ http/tests/loading/resourceLoadStatistics/clear-in-memory-and-persistent-store.h
 ### (3) Unclassified failures
 ### (4) Features that are not supported in WebKit2 and likely never will be
 ### (5) Progressions, expected successes that are expected failures in WebKit1.
+
+webkit.org/b/168092 media/track/track-cues-sorted-before-dispatch.html [ Pass Failure ]
+
+webkit.org/b/172662 [ Debug ] http/tests/cache/disk-cache/disk-cache-vary-cookie.html [ Pass Failure ]
+webkit.org/b/172662 [ Debug ] http/tests/cache/disk-cache/redirect-chain-limits.html [ Pass Failure ]
+
+webkit.org/b/174471 webrtc/filtering-ice-candidate-after-reload.html [ Pass Timeout ]
+
+webkit.org/b/175678 media/W3C/video/events/event_progress.html [ Pass Failure ]
+

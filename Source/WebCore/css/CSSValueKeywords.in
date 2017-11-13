@@ -816,6 +816,7 @@ image-controls-button
 textarea
 #if defined(ENABLE_ATTACHMENT_ELEMENT) && ENABLE_ATTACHMENT_ELEMENT
 attachment
+borderless-attachment
 #endif
 caps-lock-indicator
 
@@ -846,9 +847,10 @@ var
 -internal-variable-value
 
 //
-// UA Constants
+// Environment Variables
 //
 constant
+env
 
 //
 // CSS_PROP_BREAK_BEFORE/AFTER/INSIDE
@@ -989,15 +991,6 @@ geometricPrecision
 // -webkit-color-adjust
 economy
 exact
-
-#if defined(ENABLE_VIEW_MODE_CSS_MEDIA) && ENABLE_VIEW_MODE_CSS_MEDIA
-// (-webkit-view-mode:) media feature:
-floating
-fullscreen
-maximized
-minimized
-windowed
-#endif // ENABLE_VIEW_MODE_CSS_MEDIA
 
 // -webkit-hyphenate-limit-lines
 no-limit
@@ -1247,11 +1240,18 @@ translateY
 translateZ
 translate3d
 
+// transform-box
+// border-box
+// view-box
+fill-box
+
 // motion path
 path
 
 calc
 -webkit-calc
+min
+max
 
 #if defined(ENABLE_CSS_IMAGE_RESOLUTION) && ENABLE_CSS_IMAGE_RESOLUTION
 from-image
@@ -1341,3 +1341,10 @@ no-preference
 // auto-repeat
 auto-fill
 auto-fit
+
+// font-display
+// auto
+// block
+swap
+fallback
+optional

@@ -65,10 +65,12 @@ inline CapabilityLevel canCompile(Node* node)
     case BitLShift:
     case BitURShift:
     case CheckStructure:
+    case CheckStructureOrEmpty:
     case DoubleAsInt32:
     case ArrayifyToStructure:
     case PutStructure:
     case GetButterfly:
+    case GetButterflyWithoutCaging:
     case NewObject:
     case NewArray:
     case NewArrayWithSpread:
@@ -110,13 +112,17 @@ inline CapabilityLevel canCompile(Node* node)
     case Phi:
     case Upsilon:
     case ExtractOSREntryLocal:
+    case ExtractCatchLocal:
     case LoopHint:
     case SkipScope:
     case GetGlobalObject:
+    case GetGlobalThis:
     case CreateActivation:
+    case PushWithScope:
     case NewFunction:
     case NewGeneratorFunction:
     case NewAsyncFunction:
+    case NewAsyncGeneratorFunction:
     case GetClosureVar:
     case PutClosureVar:
     case CreateDirectArguments:
@@ -192,8 +198,11 @@ inline CapabilityLevel canCompile(Node* node)
     case IsCellWithType:
     case MapHash:
     case GetMapBucket:
-    case LoadFromJSMapBucket:
-    case IsNonEmptyMapBucket:
+    case GetMapBucketHead:
+    case GetMapBucketNext:
+    case LoadKeyFromMapBucket:
+    case LoadValueFromMapBucket:
+    case WeakMapGet:
     case IsEmpty:
     case IsUndefined:
     case IsBoolean:
@@ -225,6 +234,7 @@ inline CapabilityLevel canCompile(Node* node)
     case PhantomNewObject:
     case PhantomNewFunction:
     case PhantomNewGeneratorFunction:
+    case PhantomNewAsyncGeneratorFunction:
     case PhantomNewAsyncFunction:
     case PhantomCreateActivation:
     case PutHint:
@@ -239,6 +249,7 @@ inline CapabilityLevel canCompile(Node* node)
     case GetMyArgumentByVal:
     case GetMyArgumentByValOutOfBounds:
     case ForwardVarargs:
+    case EntrySwitch:
     case Switch:
     case TypeOf:
     case PutById:
@@ -278,10 +289,12 @@ inline CapabilityLevel canCompile(Node* node)
     case DefineAccessorProperty:
     case ToLowerCase:
     case NumberToStringWithRadix:
+    case NumberToStringWithValidRadixConstant:
     case CheckSubClass:
     case CallDOM:
     case CallDOMGetter:
     case ArraySlice:
+    case ArrayIndexOf:
     case ParseInt:
     case AtomicsAdd:
     case AtomicsAnd:
@@ -293,6 +306,7 @@ inline CapabilityLevel canCompile(Node* node)
     case AtomicsSub:
     case AtomicsXor:
     case AtomicsIsLockFree:
+    case InitializeEntrypointArguments:
         // These are OK.
         break;
 
@@ -342,6 +356,15 @@ inline CapabilityLevel canCompile(Node* node)
             return CannotCompile;
         }
         break;
+    case GetVectorLength:
+        switch (node->arrayMode().type()) {
+        case Array::ArrayStorage:
+        case Array::SlowPutArrayStorage:
+            break;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+        break;
     case HasIndexedProperty:
         switch (node->arrayMode().type()) {
         case Array::ForceExit:
@@ -364,6 +387,8 @@ inline CapabilityLevel canCompile(Node* node)
         case Array::Undecided:
         case Array::DirectArguments:
         case Array::ScopedArguments:
+        case Array::ArrayStorage:
+        case Array::SlowPutArrayStorage:
             break;
         default:
             if (isTypedView(node->arrayMode().typedArrayType()))
@@ -468,6 +493,8 @@ CapabilityLevel canCompile(Graph& graph)
                 case SymbolUse:
                 case MapObjectUse:
                 case SetObjectUse:
+                case WeakMapObjectUse:
+                case WeakSetObjectUse:
                 case FinalObjectUse:
                 case RegExpObjectUse:
                 case ProxyObjectUse:

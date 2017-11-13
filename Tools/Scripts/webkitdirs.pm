@@ -139,6 +139,7 @@ my $osXVersion;
 my $iosVersion;
 my $generateDsym;
 my $isCMakeBuild;
+my $isGenerateProjectOnly;
 my $isWin64;
 my $isInspectorFrontend;
 my $portName;
@@ -229,6 +230,7 @@ sub determineBaseProductDir
     determineSourceDir();
 
     my $setSharedPrecompsDir;
+    my $indexDataStoreDir;
     $baseProductDir = $ENV{"WEBKIT_OUTPUTDIR"};
 
     if (!defined($baseProductDir) and isAppleCocoaWebKit()) {
@@ -246,7 +248,10 @@ sub determineBaseProductDir
         if ($buildLocationStyle eq "Custom") {
             my $buildLocationType = join '', readXcodeUserDefault("IDECustomBuildLocationType");
             # FIXME: Read CustomBuildIntermediatesPath and set OBJROOT accordingly.
-            $baseProductDir = readXcodeUserDefault("IDECustomBuildProductsPath") if $buildLocationType eq "Absolute";
+            if ($buildLocationType eq "Absolute") {
+                $baseProductDir = readXcodeUserDefault("IDECustomBuildProductsPath");
+                $indexDataStoreDir = readXcodeUserDefault("IDECustomIndexStorePath");
+            }
         }
 
         # DeterminedByTargets corresponds to a setting of "Legacy" in Xcode.
@@ -279,6 +284,7 @@ sub determineBaseProductDir
         die "Can't handle Xcode product directory with a variable in it.\n" if $baseProductDir =~ /\$/;
         @baseProductDirOption = ("SYMROOT=$baseProductDir", "OBJROOT=$baseProductDir");
         push(@baseProductDirOption, "SHARED_PRECOMPS_DIR=${baseProductDir}/PrecompiledHeaders") if $setSharedPrecompsDir;
+        push(@baseProductDirOption, "INDEX_ENABLE_DATA_STORE=YES", "INDEX_DATA_STORE_DIR=${indexDataStoreDir}") if $indexDataStoreDir;
     }
 
     if (isCygwin()) {
@@ -563,6 +569,13 @@ sub programFilesPath
     return $programFilesPath;
 }
 
+sub programFilesPathX86
+{
+    my $programFilesPathX86 = $ENV{'PROGRAMFILES(X86)'} || "C:\\Program Files (x86)";
+
+    return $programFilesPathX86;
+}
+
 sub visualStudioInstallDir
 {
     return $vsInstallDir if defined $vsInstallDir;
@@ -571,7 +584,10 @@ sub visualStudioInstallDir
         $vsInstallDir = $ENV{'VSINSTALLDIR'};
         $vsInstallDir =~ s|[\\/]$||;
     } else {
-        $vsInstallDir = File::Spec->catdir(programFilesPath(), "Microsoft Visual Studio 14.0");
+        $vsInstallDir = File::Spec->catdir(programFilesPathX86(), "Microsoft Visual Studio", "2017", "Community");
+        if (not -e $vsInstallDir) {
+            $vsInstallDir = File::Spec->catdir(programFilesPathX86(), "Microsoft Visual Studio 14.0");
+        }
     }
     chomp($vsInstallDir = `cygpath "$vsInstallDir"`) if isCygwin();
 
@@ -583,8 +599,10 @@ sub msBuildInstallDir
 {
     return $msBuildInstallDir if defined $msBuildInstallDir;
 
-    $msBuildInstallDir = File::Spec->catdir(programFilesPath(), "MSBuild", "14.0", "Bin");
-   
+    $msBuildInstallDir = File::Spec->catdir(programFilesPathX86(), "Microsoft Visual Studio", "2017", "Community", "MSBuild", "15.0", "Bin");
+    if (not -e $msBuildInstallDir) {
+        $msBuildInstallDir = File::Spec->catdir(programFilesPathX86(), "MSBuild", "14.0", "Bin");
+    }
     chomp($msBuildInstallDir = `cygpath "$msBuildInstallDir"`) if isCygwin();
 
     print "Using MSBuild: $msBuildInstallDir\n";
@@ -1529,12 +1547,10 @@ sub relativeScriptsDir()
 sub launcherPath()
 {
     my $relativeScriptsPath = relativeScriptsDir();
-    if (isGtk()) {
+    if (isGtk() || isWPE()) {
         return "$relativeScriptsPath/run-minibrowser";
     } elsif (isAppleWebKit()) {
         return "$relativeScriptsPath/run-safari";
-    } elsif (isWPE()) {
-        return "$relativeScriptsPath/run-wpe";
     }
 }
 
@@ -1547,7 +1563,7 @@ sub launcherName()
     } elsif (isAppleWinWebKit()) {
         return "MiniBrowser";
     } elsif (isWPE()) {
-        return "WPELauncher";
+        return "dyz";
     }
 }
 
@@ -1900,6 +1916,11 @@ sub wrapperPrefixIfNeeded()
     return ();
 }
 
+sub shouldUseJhbuild()
+{
+    return ((isGtk() or isWPE()) and -e getJhbuildPath());
+}
+
 sub cmakeCachePath()
 {
     return File::Spec->catdir(baseProductDir(), configuration(), "CMakeCache.txt");
@@ -1948,6 +1969,13 @@ sub shouldRemoveCMakeCache(@)
         return 1;
     }
 
+    if (isGtk() or isWPE()) {
+        my $gtkImageDircetory = File::Spec->catdir(sourceDir(), "Source", "WebInspectorUI", "UserInterface", "Images", "gtk");
+        if ($cacheFileModifiedTime < stat($gtkImageDircetory)->mtime) {
+            return 1;
+        }
+    }
+
     if(isAnyWindows()) {
         my $winConfiguration = File::Spec->catdir(sourceDir(), "Source", "cmake", "OptionsWin.cmake");
         if ($cacheFileModifiedTime < stat($winConfiguration)->mtime) {
@@ -1979,15 +2007,15 @@ sub canUseNinja(@)
         return 0;
     }
 
+    if (isAppleCocoaWebKit()) {
+        my $devnull = File::Spec->devnull();
+        if (exitStatus(system("xcrun -find ninja >$devnull 2>&1")) == 0) {
+            return 1;
+        }
+    }
+
     # Test both ninja and ninja-build. Fedora uses ninja-build and has patched CMake to also call ninja-build.
     return commandExists("ninja") || commandExists("ninja-build");
-}
-
-sub canUseNinjaGenerator(@)
-{
-    # Check that a Ninja generator is installed
-    my $devnull = File::Spec->devnull();
-    return exitStatus(system("cmake -N -G Ninja >$devnull 2>&1")) == 0;
 }
 
 sub canUseEclipseNinjaGenerator(@)
@@ -2020,7 +2048,7 @@ sub generateBuildSystemFromCMakeProject
     chdir($buildPath) or die;
 
     # We try to be smart about when to rerun cmake, so that we can have faster incremental builds.
-    my $willUseNinja = canUseNinja() && canUseNinjaGenerator();
+    my $willUseNinja = canUseNinja();
     if (-e cmakeCachePath() && -e cmakeGeneratedBuildfile($willUseNinja)) {
         return 0;
     }
@@ -2132,6 +2160,7 @@ sub buildCMakeProjectOrExit($$$@)
 
     $returnCode = exitStatus(generateBuildSystemFromCMakeProject($prefixPath, @cmakeArgs));
     exit($returnCode) if $returnCode;
+    exit 0 if isGenerateProjectOnly();
 
     $returnCode = exitStatus(buildCMakeGeneratedProject($makeArgs));
     exit($returnCode) if $returnCode;
@@ -2159,6 +2188,18 @@ sub isCMakeBuild()
     return 1 unless isAppleCocoaWebKit();
     determineIsCMakeBuild();
     return $isCMakeBuild;
+}
+
+sub determineIsGenerateProjectOnly()
+{
+    return if defined($isGenerateProjectOnly);
+    $isGenerateProjectOnly = checkForArgumentAndRemoveFromARGV("--generate-project-only");
+}
+
+sub isGenerateProjectOnly()
+{
+    determineIsGenerateProjectOnly();
+    return $isGenerateProjectOnly;
 }
 
 sub promptUser

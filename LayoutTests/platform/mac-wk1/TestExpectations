@@ -6,6 +6,7 @@
 #//////////////////////////////////////////////////////////////////////////////////////////
 
 fast/forms/attributed-strings.html [ Pass ]
+editing/pasteboard/drag-drop-href-as-text-data.html [ Pass ]
 
 #//////////////////////////////////////////////////////////////////////////////////////////
 # End platform-specific directories.
@@ -85,20 +86,22 @@ fast/forms/file/open-file-panel.html [ Skip ]
 # WK1 and WK2 mousemove events are subtly different in ways that break this test on WK1.
 fast/events/ghostly-mousemoves-in-subframe.html [ Skip ]
 
-# Test support for inserting special characters is not yet implemented on WK1.
-fast/events/before-input-prevent-insert-replacement.html [ Skip ]
-fast/events/input-event-insert-replacement.html [ Skip ]
-
 # Media Stream API testing is not supported for WK1 yet.
 fast/mediastream
 http/tests/media/media-stream
 http/tests/ssl/media-stream
 
+# No service worker implementation for WK1
+imported/w3c/web-platform-tests/service-workers [ Skip ]
+http/wpt/cache-storage [ Skip ]
+http/tests/cache-storage [ Skip ]
+
 # Skip WebRTC for now in WK1
 imported/w3c/web-platform-tests/webrtc [ Skip ]
 webrtc [ Skip ]
+http/tests/webrtc [ Skip ]
 webrtc/datachannel [ Pass ]
-webrtc/captureCanvas-webrtc.html [ Pass ]
+webrtc/captureCanvas-webrtc.html [ Failure Pass ]
 
 # These tests test the Shadow DOM based HTML form validation UI but Mac WK1 is using native dialogs instead.
 fast/forms/validation-message-on-listbox.html
@@ -154,6 +157,11 @@ compositing/iframes/overlapped-nested-iframes.html [ Pass Failure ]
 http/tests/cache/disk-cache
 http/tests/inspector/network/resource-response-source-disk-cache.html
 http/tests/inspector/network/resource-sizes-disk-cache.html
+
+# Async image decoding is WK2 only
+fast/images/async-image-background-change.html
+fast/images/async-image-src-change.html
+http/tests/multipart/multipart-async-image.html
 
 [ Yosemite+ ] fast/ruby/ruby-expansion-cjk-2.html [ ImageOnlyFailure ]
 
@@ -233,6 +241,7 @@ webkit.org/b/156069 fast/dom/HTMLAnchorElement/anchor-file-blob-download-include
 webkit.org/b/156069 fast/dom/HTMLAnchorElement/anchor-file-blob-download-no-extension.html [ Skip ]
 webkit.org/b/156069 http/tests/download/anchor-download-attribute-content-disposition.html [ Skip ]
 webkit.org/b/156069 http/tests/download/anchor-download-no-extension.html [ Skip ]
+webkit.org/b/156069 http/tests/download/anchor-download-redirect.html [ Skip ]
 webkit.org/b/156069 http/tests/download/area-download.html [ Skip ]
 webkit.org/b/156069 http/tests/security/anchor-download-allow-blob.html [ Skip ]
 webkit.org/b/156069 http/tests/security/anchor-download-allow-data.html [ Skip ]
@@ -243,6 +252,10 @@ webkit.org/b/156069 imported/w3c/web-platform-tests/html/semantics/text-level-se
 webkit.org/b/156069 imported/w3c/web-platform-tests/html/semantics/embedded-content/the-area-element/area-download-click.html [ Skip ]
 
 webkit.org/b/169523 [ Debug ] imported/w3c/web-platform-tests/html/dom/interfaces.worker.html [ Failure ]
+
+imported/w3c/web-platform-tests/html/browsers/history/the-history-interface/history_go_no_argument.html [ Pass Failure ]
+imported/w3c/web-platform-tests/html/webappapis/system-state-and-capabilities/the-navigator-object/navigator-pluginarray.html [ Pass Failure ]
+imported/w3c/web-platform-tests/html/browsers/history/the-history-interface/history_go_to_uri.html [ Pass Failure ]
 
 # testRunner.setShouldDownloadUndisplayableMIMETypes() is not supported on WK1.
 fast/dom/HTMLAnchorElement/anchor-file-blob-convert-to-download.html [ Skip ]
@@ -311,8 +324,8 @@ webkit.org/b/163361 imported/w3c/web-platform-tests/html/webappapis/animation-fr
 webkit.org/b/163361 imported/w3c/web-platform-tests/html/webappapis/animation-frames/callback-multicalls.html [ Pass Failure ]
 
 # Resource Metrics data not available in WebKit1.
-imported/w3c/web-platform-tests/resource-timing/rt-nextHopProtocol.html [ Failure ]
-imported/w3c/web-platform-tests/resource-timing/rt-nextHopProtocol.worker.html [ Failure ]
+http/wpt/resource-timing/rt-nextHopProtocol.html [ Failure ]
+http/wpt/resource-timing/rt-nextHopProtocol.worker.html [ Failure ]
 http/tests/inspector/network/resource-request-headers.html [ Failure ]
 http/tests/inspector/network/resource-sizes-network.html [ Failure ]
 http/tests/inspector/network/resource-sizes-memory-cache.html [ Failure ]
@@ -341,22 +354,6 @@ webkit.org/b/167127 pointer-lock/locked-element-removed-from-dom.html
 
 webkit.org/b/167857 pageoverlay/overlay-remove-reinsert-view.html [ Skip ]
 
-webkit.org/b/168409 media/modern-media-controls/airplay-button/airplay-button.html [ Pass Failure Timeout ]
-webkit.org/b/169654 [ Debug ] media/modern-media-controls/airplay-placard/airplay-placard-text-section.html [ Pass Timeout ]
-webkit.org/b/167371 [ Debug ] media/modern-media-controls/buttons-container/buttons-container-buttons-property.html [ Pass Timeout ]
-webkit.org/b/171391 [ Debug ] media/modern-media-controls/fullscreen-button/fullscreen-button.html [ Pass Timeout ]
-webkit.org/b/169678 [ Debug ] media/modern-media-controls/time-label/time-label.html [ Pass Timeout ]
-webkit.org/b/167589 media/modern-media-controls/macos-fullscreen-media-controls/macos-fullscreen-media-controls-buttons-containers-styles.html [ Pass Timeout ]
-webkit.org/b/169117 media/modern-media-controls/macos-inline-media-controls/macos-inline-media-controls-audio-background.html [ Pass Timeout ]
-webkit.org/b/170456 media/modern-media-controls/macos-inline-media-controls/macos-inline-media-controls-buttons-styles.html [ Pass Timeout ]
-webkit.org/b/167752 media/modern-media-controls/icon-button/icon-button-active-state.html [ Pass Timeout ]
-webkit.org/b/167477 [ Debug ] media/modern-media-controls/play-pause-button/play-pause-button.html [ Pass Timeout ]
-webkit.org/b/171245 [ Debug ] media/modern-media-controls/scrubber-support/scrubber-support-click.html [ Pass Timeout ]
-webkit.org/b/171629 media/modern-media-controls/slider/slider-styles.html [ Pass Timeout ]
-webkit.org/b/171828 media/modern-media-controls/status-label/status-label-font.html [ Pass Timeout ]
-webkit.org/b/167475 [ Debug ] media/modern-media-controls/volume-slider/volume-slider-value.html [ Pass Timeout ]
-webkit.org/b/170682 [ Debug ] media/modern-media-controls/volume-up-support/volume-up-support.html [ Pass Timeout ]
-
 # There is not NetworkProcess in WK1, so it can't crash.
 http/tests/websocket/tests/hybi/network-process-crash-error.html [ Skip ]
 
@@ -366,6 +363,14 @@ webkit.org/b/170830 inspector/sampling-profiler/named-function-expression.html [
 css3/viewport-percentage-lengths/vh-auto-size.html [ Skip ]
 
 webkit.org/b/170877 [ Debug ] webgl/1.0.2/conformance/glsl/misc/shader-with-reserved-words.html [ Pass Timeout ]
+
+imported/w3c/web-platform-tests/XMLHttpRequest/event-upload-progress-crossorigin.htm [ Pass Crash ]
+
+# Beacon is not supported on WK1.
+http/tests/blink/sendbeacon/ [ Skip ]
+http/wpt/beacon/ [ Skip ]
+imported/blink/fast/beacon/ [ Skip ]
+imported/w3c/web-platform-tests/beacon/ [ Skip ]
 
 # This was a WK2-only fix.
 http/tests/css/filters-on-iframes.html [ Skip ]
@@ -377,3 +382,58 @@ webkit.org/b/171814 http/tests/media/hls/video-controls-live-stream.html [ Failu
 webkit.org/b/171814 http/tests/media/hls/video-duration-accessibility.html [ Failure ]
 
 webkit.org/b/172241 http/tests/appcache/404-resource-with-slow-main-resource.php [ Pass Failure ]
+
+webkit.org/b/172331 workers/wasm-long-compile-many.html [ Pass Timeout ]
+
+webkit.org/b/172807 imported/w3c/web-platform-tests/css/selectors4/focus-display-none-001.html [ Pass Failure ]
+webkit.org/b/172807 imported/w3c/web-platform-tests/css/selectors4/focus-within-display-none-001.html [ Pass Failure ]
+
+webkit.org/b/168409 media/modern-media-controls/airplay-button/airplay-button.html [ Pass Timeout ]
+webkit.org/b/175195 media/modern-media-controls/css/webkit-cursor-visibility-auto-hide.html [ Pass Failure ]
+webkit.org/b/168265 media/modern-media-controls/forward-button/forward-button.html [ Pass Timeout ]
+
+webkit.org/b/173432 [ Debug ] imported/w3c/web-platform-tests/fetch/nosniff/importscripts.html [ Pass Crash ]
+
+# requires wk2 speculative tiling
+fast/images/low-memory-decode.html [ Skip ]
+
+http/tests/workers/service [ Skip ]
+
+webkit.org/b/175345 fast/images/animated-gif-scrolling-crash.html [ Pass Timeout ]
+
+webkit.org/b/175554 [ Sierra ] fullscreen/full-screen-iframe-legacy.html [ Pass Failure ]
+
+webkit.org/b/174218 svg/animations/smil-leak-list-property-instances.svg [ Pass Failure ]
+
+webkit.org/b/172334 webrtc/datachannel/bufferedAmountLowThreshold.html [ Pass Failure ]
+
+webkit.org/b/172877 svg/as-image/svg-image-with-data-uri-background.html [ Pass ImageOnlyFailure ]
+
+webkit.org/b/174180 svg/animations/smil-leak-elements.svg [ Pass Failure ]
+
+webkit.org/b/175867 svg/animations/smil-leak-dynamically-added-element-instances.svg [ Pass Failure ]
+
+webkit.org/b/176920 imported/w3c/web-platform-tests/streams/piping/error-propagation-forward.dedicatedworker.html [ Pass Timeout ]
+
+webkit.org/b/175886 svg/animations/smil-leak-element-instances.svg [ Pass Failure ]
+
+webkit.org/b/177020 fast/events/beforeunload-dom-manipulation-crash.html [ Skip ]
+
+# <rdar://problem/29201698> DumpRenderTree crashed in com.apple.CoreGraphics: CGDataProviderCopyData + 377
+[ HighSierra+ ] fast/canvas/webgl/tex-image-and-sub-image-2d-with-potentially-subsampled-image.html [ Crash ]
+
+# <rdar://problem/29031509> REGRESSION? (FontParser-195): svg/W3C-SVG-1.1/fonts-elem-* and svg/W3C-SVG-1.1/text-intro-* tests failing
+[ HighSierra+ ] svg/W3C-SVG-1.1/fonts-elem-04-b.svg [ Failure ]
+
+# <rdar://problem/31893714> REGRESSION: LayoutTest fast/text/multiple-codeunit-vertical-upright.html is failing on WK1
+[ HighSierra+ ] fast/text/multiple-codeunit-vertical-upright.html [ ImageOnlyFailure ]
+
+# <rdar://problem/31895192> DumpRenderTree crashed in com.apple.ImageIO.framework: IIODictionary::getBoolForKey + 0
+[ HighSierra+ ] http/tests/misc/slow-loading-animated-image.html [ Skip ]
+
+# <rdar://problem/33522420> Crash: Multiple Layout test in fast/events and fast/forms and fast/text are crashing
+[ HighSierra+ ] fast/events/keyboardevent-code.html [ Crash ]
+[ HighSierra+ ] fast/events/keyboardevent-key.html [ Crash ]
+[ HighSierra+ ] fast/events/keydown-leftright-keys.html [ Crash ]
+[ HighSierra+ ] fast/forms/textarea-maxlength.html [ Crash ]
+[ HighSierra+ ] fast/text/system-font-fallback-emoji.html [ Crash ]

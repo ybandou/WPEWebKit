@@ -55,17 +55,17 @@ bool PaymentCoordinator::canMakePayments()
     return m_client.canMakePayments();
 }
 
-void PaymentCoordinator::canMakePaymentsWithActiveCard(const String& merchantIdentifier, const String& domainName, std::function<void (bool)> completionHandler)
+void PaymentCoordinator::canMakePaymentsWithActiveCard(const String& merchantIdentifier, const String& domainName, WTF::Function<void (bool)>&& completionHandler)
 {
     m_client.canMakePaymentsWithActiveCard(merchantIdentifier, domainName, WTFMove(completionHandler));
 }
 
-void PaymentCoordinator::openPaymentSetup(const String& merchantIdentifier, const String& domainName, std::function<void (bool)> completionHandler)
+void PaymentCoordinator::openPaymentSetup(const String& merchantIdentifier, const String& domainName, WTF::Function<void (bool)>&& completionHandler)
 {
     m_client.openPaymentSetup(merchantIdentifier, domainName, WTFMove(completionHandler));
 }
 
-bool PaymentCoordinator::beginPaymentSession(ApplePaySession& paymentSession, const URL& originatingURL, const Vector<URL>& linkIconURLs, const PaymentRequest& paymentRequest)
+bool PaymentCoordinator::beginPaymentSession(ApplePaySession& paymentSession, const URL& originatingURL, const Vector<URL>& linkIconURLs, const ApplePaySessionPaymentRequest& paymentRequest)
 {
     ASSERT(!m_activeSession);
 
@@ -163,7 +163,7 @@ void PaymentCoordinator::didSelectPaymentMethod(const PaymentMethod& paymentMeth
     m_activeSession->didSelectPaymentMethod(paymentMethod);
 }
 
-void PaymentCoordinator::didSelectShippingMethod(const PaymentRequest::ShippingMethod& shippingMethod)
+void PaymentCoordinator::didSelectShippingMethod(const ApplePaySessionPaymentRequest::ShippingMethod& shippingMethod)
 {
     if (!m_activeSession) {
         // It's possible that the payment has been aborted already.

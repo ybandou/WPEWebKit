@@ -28,9 +28,7 @@
 #include "RenderTreePosition.h"
 #include "StyleChange.h"
 #include "StyleUpdate.h"
-#include <wtf/HashMap.h>
 #include <wtf/HashSet.h>
-#include <wtf/RefPtr.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
@@ -45,20 +43,27 @@ class Text;
 class RenderTreeUpdater {
 public:
     RenderTreeUpdater(Document&);
+    ~RenderTreeUpdater();
 
     void commit(std::unique_ptr<const Style::Update>);
 
-    enum class TeardownType { Normal, KeepHoverAndActive };
-    static void tearDownRenderers(Element&, TeardownType = TeardownType::Normal);
+    static void tearDownRenderers(Element&);
     static void tearDownRenderer(Text&);
 
+    class FirstLetter;
+    class ListItem;
+
 private:
+    class GeneratedContent;
+    class MultiColumn;
+
     void updateRenderTree(ContainerNode& root);
-    void updateTextRenderer(Text&);
+    void updateTextRenderer(Text&, const Style::TextUpdate*);
     void updateElementRenderer(Element&, const Style::ElementUpdate&);
     void createRenderer(Element&, RenderStyle&&);
     void invalidateWhitespaceOnlyTextSiblingsAfterAttachIfNeeded(Node&);
-    void updateBeforeOrAfterPseudoElement(Element&, PseudoId);
+    void updateBeforeDescendants(Element&);
+    void updateAfterDescendants(Element&, Style::Change);
 
     struct Parent {
         Element* element { nullptr };
@@ -71,9 +76,16 @@ private:
     Parent& parent() { return m_parentStack.last(); }
     RenderTreePosition& renderTreePosition();
 
+    GeneratedContent& generatedContent() { return *m_generatedContent; }
+
     void pushParent(Element&, Style::Change);
     void popParent();
     void popParentsToDepth(unsigned depth);
+
+    enum class TeardownType { Full, RendererUpdate, RendererUpdateCancelingAnimations };
+    static void tearDownRenderers(Element&, TeardownType);
+
+    RenderView& renderView();
 
     Document& m_document;
     std::unique_ptr<const Style::Update> m_styleUpdate;
@@ -81,6 +93,8 @@ private:
     Vector<Parent> m_parentStack;
 
     HashSet<Text*> m_invalidatedWhitespaceOnlyTextSiblings;
+
+    std::unique_ptr<GeneratedContent> m_generatedContent;
 };
 
 } // namespace WebCore

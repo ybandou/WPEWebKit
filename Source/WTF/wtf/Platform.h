@@ -25,8 +25,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WTF_Platform_h
-#define WTF_Platform_h
+#pragma once
 
 /* Include compiler specific macros */
 #include <wtf/Compiler.h>
@@ -242,7 +241,8 @@
     || defined(__ARM_ARCH_7S__)
 #define WTF_ARM_ARCH_VERSION 7
 
-#elif defined(__ARM_ARCH_8__)
+#elif defined(__ARM_ARCH_8__) \
+    || defined(__ARM_ARCH_8A__)
 #define WTF_ARM_ARCH_VERSION 8
 
 /* MSVC sets _M_ARM */
@@ -287,7 +287,9 @@
     || defined(__ARM_ARCH_7K__) \
     || defined(__ARM_ARCH_7M__) \
     || defined(__ARM_ARCH_7R__) \
-    || defined(__ARM_ARCH_7S__)
+    || defined(__ARM_ARCH_7S__) \
+    || defined(__ARM_ARCH_8__) \
+    || defined(__ARM_ARCH_8A__)
 #define WTF_THUMB_ARCH_VERSION 4
 
 /* RVCT sets __TARGET_ARCH_THUMB */
@@ -338,6 +340,19 @@
 #define WTF_CPU_ARM_VFP 1
 #endif
 
+/* If CPU(ARM_NEON) is not enabled, we'll conservatively assume only VFP2 or VFPv3D16
+   support is available. Hence, only the first 16 64-bit floating point registers
+   are available. See:
+   NEON registers: http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0473c/CJACABEJ.html
+   VFP2 and VFP3 registers: http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0473c/CIHDIBDG.html
+   NEON to VFP register mapping: http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0473c/CJAIJHFC.html
+*/
+#if CPU(ARM_NEON)
+#define WTF_CPU_ARM_VFP_V3_D32 1
+#else
+#define WTF_CPU_ARM_VFP_V2 1
+#endif
+
 #if defined(__ARM_ARCH_7K__)
 #define WTF_CPU_APPLE_ARMV7K 1
 #endif
@@ -352,7 +367,7 @@
 
 #endif /* ARM */
 
-#if CPU(ARM) || CPU(MIPS) || CPU(SH4)
+#if CPU(ARM) || CPU(MIPS) || CPU(SH4) || CPU(ALPHA) || CPU(HPPA)
 #define WTF_CPU_NEEDS_ALIGNED_ACCESS 1
 #endif
 
@@ -408,11 +423,6 @@
 #define WTF_OS_OPENBSD 1
 #endif
 
-/* OS(SOLARIS) - Solaris */
-#if defined(sun) || defined(__sun)
-#define WTF_OS_SOLARIS 1
-#endif
-
 /* OS(WINDOWS) - Any version of Windows */
 #if defined(WIN32) || defined(_WIN32)
 #define WTF_OS_WINDOWS 1
@@ -429,7 +439,6 @@
     || OS(LINUX)            \
     || OS(NETBSD)           \
     || OS(OPENBSD)          \
-    || OS(SOLARIS)          \
     || defined(unix)        \
     || defined(__unix)      \
     || defined(__unix__)
@@ -520,6 +529,7 @@
 
 #if PLATFORM(GTK) || PLATFORM(EFL)
 #define USE_WEBP 1
+#define USE_FILE_LOCK 1
 #endif
 #endif
 
@@ -548,8 +558,10 @@
 #define ENABLE_USER_MESSAGE_HANDLERS 1
 #define HAVE_OUT_OF_PROCESS_LAYER_HOSTING 1
 #define HAVE_DTRACE 0
+#define USE_FILE_LOCK 1
 
 #if !PLATFORM(WATCHOS) && !PLATFORM(APPLETV)
+#define ENABLE_DATA_DETECTION 1
 #define HAVE_AVKIT 1
 #define HAVE_PARENTAL_CONTROLS 1
 #endif
@@ -574,12 +586,6 @@
 #define USE_PLUGIN_HOST_PROCESS 1
 #endif
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101100
-#define HAVE_NSSCROLLING_FILTERS 1
-#else
-#define HAVE_NSSCROLLING_FILTERS 0
-#endif
-
 /* OS X defines a series of platform macros for debugging. */
 /* Some of them are really annoying because they use common names (e.g. check()). */
 /* Disable those macros so that we are not limited in how we name methods and functions. */
@@ -589,13 +595,6 @@
 #endif /* PLATFORM(MAC) */
 
 #if PLATFORM(IOS)
-
-#if USE(APPLE_INTERNAL_SDK) \
-    && ((TARGET_OS_IOS && __IPHONE_OS_VERSION_MAX_ALLOWED < 100000) \
-     || (PLATFORM(APPLETV) && __TV_OS_VERSION_MAX_ALLOWED < 100000) \
-     || (PLATFORM(WATCHOS) && __WATCH_OS_VERSION_MAX_ALLOWED < 30000))
-#define USE_CFURLCONNECTION 1
-#endif
 
 #define HAVE_NETWORK_EXTENSION 1
 #define HAVE_READLINE 1
@@ -620,10 +619,6 @@
 #endif
 
 #endif /* PLATFORM(IOS) */
-
-#if PLATFORM(WIN) && !USE(WINGDI)
-#define USE_CF 1
-#endif
 
 #if PLATFORM(WIN) && !USE(WINGDI) && !PLATFORM(WIN_CAIRO)
 #define USE_CFURLCONNECTION 1
@@ -651,6 +646,10 @@
 #define HAVE_TM_GMTOFF 1
 #define HAVE_TM_ZONE 1
 #define HAVE_TIMEGM 1
+
+#if CPU(X86_64) || CPU(ARM64)
+#define HAVE_INT128_T 1
+#endif
 #endif /* OS(DARWIN) */
 
 #if OS(UNIX)
@@ -667,6 +666,10 @@
 #define HAVE_READLINE 1
 #define HAVE_SYS_TIMEB_H 1
 
+#if __has_include(<mach/mach_exc.defs>) && !(PLATFORM(WATCHOS) || PLATFORM(APPLETV))
+#define HAVE_MACH_EXCEPTIONS 1
+#endif
+
 #if !PLATFORM(GTK)
 #define USE_ACCELERATE 1
 #endif
@@ -676,11 +679,11 @@
 
 #endif /* OS(DARWIN) */
 
-#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000)
+#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || PLATFORM(IOS)
 #define HAVE_CFNETWORK_STORAGE_PARTITIONING 1
 #endif
 
-#if OS(DARWIN) || ((OS(FREEBSD) || defined(__GLIBC__)) && (CPU(X86) || CPU(X86_64) || CPU(ARM) || CPU(ARM64) || CPU(MIPS)))
+#if OS(DARWIN) || ((OS(FREEBSD) || defined(__GLIBC__) || defined(__BIONIC__)) && (CPU(X86) || CPU(X86_64) || CPU(ARM) || CPU(ARM64) || CPU(MIPS)))
 #define HAVE_MACHINE_CONTEXT 1
 #endif
 
@@ -704,10 +707,6 @@
 
 /* Include feature macros */
 #include <wtf/FeatureDefines.h>
-
-#if USE(APPLE_INTERNAL_SDK) && __has_include(<WebKitAdditions/AdditionalFeatureDefines.h>)
-#include <WebKitAdditions/AdditionalFeatureDefines.h>
-#endif
 
 #if OS(WINDOWS)
 #define USE_SYSTEM_MALLOC 1
@@ -778,17 +777,20 @@
 
 #if !defined(ENABLE_DFG_JIT) && ENABLE(JIT)
 /* Enable the DFG JIT on X86 and X86_64. */
-#if (CPU(X86) || CPU(X86_64)) && (OS(DARWIN) || OS(LINUX) || OS(FREEBSD) || OS(WINDOWS) || OS(HURD))
+#if (CPU(X86) || CPU(X86_64)) && (OS(DARWIN) || OS(LINUX) || OS(FREEBSD) || OS(HURD) || OS(WINDOWS))
 #define ENABLE_DFG_JIT 1
 #endif
-/* Enable the DFG JIT on ARMv7.  Only tested on iOS and Qt/GTK+ Linux. */
+/* Enable the DFG JIT on ARMv7.  Only tested on iOS and GTK+/WPE Linux. */
 #if (CPU(ARM_THUMB2) || CPU(ARM64)) && (PLATFORM(IOS) || PLATFORM(GTK) || PLATFORM(WPE))
 #define ENABLE_DFG_JIT 1
 #endif
-/* Enable the DFG JIT on ARM and MIPS. */
-#if CPU(ARM_TRADITIONAL) || CPU(MIPS)
+/* Enable the DFG JIT on ARM. */
+#if CPU(ARM_TRADITIONAL)
 #define ENABLE_DFG_JIT 1
 #endif
+/* FIXME: MIPS cannot enable the DFG until it has support for MacroAssembler::probe().
+   https://bugs.webkit.org/show_bug.cgi?id=175447
+*/
 #endif
 
 /* Concurrent JS only works on 64-bit platforms because it requires that
@@ -807,19 +809,43 @@
 #define ENABLE_FAST_TLS_JIT 1
 #endif
 
+#if CPU(X86) || CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64) || CPU(ARM_TRADITIONAL)
+#define ENABLE_MASM_PROBE 1
+#else
+#define ENABLE_MASM_PROBE 0
+#endif
+
+#if !ENABLE(JIT)
+#undef ENABLE_MASM_PROBE
+#define ENABLE_MASM_PROBE 0
+#endif
+
+/* If the baseline jit is not available, then disable upper tiers as well.
+   The MacroAssembler::probe() is also required for supporting the upper tiers. */
+#if !ENABLE(JIT) || !ENABLE(MASM_PROBE)
+#undef ENABLE_DFG_JIT
+#undef ENABLE_FTL_JIT
+#define ENABLE_DFG_JIT 0
+#define ENABLE_FTL_JIT 0
+#endif
+
+/* If the DFG jit is not available, then disable upper tiers as well: */
+#if !ENABLE(DFG_JIT)
+#undef ENABLE_FTL_JIT
+#define ENABLE_FTL_JIT 0
+#endif
+
 /* This controls whether B3 is built. B3 is needed for FTL JIT and WebAssembly */
-#if ENABLE(FTL_JIT) || ENABLE(WEBASSEMBLY)
+#if ENABLE(FTL_JIT)
 #define ENABLE_B3_JIT 1
 #endif
 
-/* If the baseline jit is not available, then disable upper tiers as well: */
-#if !ENABLE(JIT)
-#undef ENABLE_DFG_JIT
-#undef ENABLE_FTL_JIT
-#undef ENABLE_B3_JIT
-#define ENABLE_DFG_JIT 0
-#define ENABLE_FTL_JIT 0
-#define ENABLE_B3_JIT 0
+#if !defined(ENABLE_WEBASSEMBLY)
+#if ENABLE(B3_JIT) && PLATFORM(COCOA)
+#define ENABLE_WEBASSEMBLY 1
+#else
+#define ENABLE_WEBASSEMBLY 0
+#endif
 #endif
 
 /* The SamplingProfiler is the probabilistic and low-overhead profiler used by
@@ -915,6 +941,15 @@
 #define ENABLE_COMPUTED_GOTO_OPCODES 1
 #endif
 
+#if ENABLE(JIT) && !COMPILER(MSVC) && \
+    (CPU(X86) || CPU(X86_64) || CPU(ARM64) || (CPU(ARM_THUMB2) && OS(DARWIN)))
+/* This feature works by embedding the OpcodeID in the 32 bit just before the generated LLint code
+   that executes each opcode. It cannot be supported by the CLoop since there's no way to embed the
+   OpcodeID word in the CLoop's switch statement cases. It is also currently not implemented for MSVC.
+*/
+#define USE_LLINT_EMBEDDED_OPCODE_ID 1
+#endif
+
 /* Regular Expression Tracing - Set to 1 to trace RegExp's in jsc.  Results dumped at exit */
 #define ENABLE_REGEXP_TRACING 0
 
@@ -947,14 +982,6 @@
 #endif
 #endif
 
-/* Enable the following if you want to use the MacroAssembler::probe() facility
-   to do JIT debugging. */
-#if (CPU(X86) || CPU(X86_64) || CPU(ARM64) || (CPU(ARM_THUMB2) && PLATFORM(IOS))) && ENABLE(JIT) && OS(DARWIN)
-#define ENABLE_MASM_PROBE 1
-#else
-#define ENABLE_MASM_PROBE 0
-#endif
-
 #ifndef ENABLE_EXCEPTION_SCOPE_VERIFICATION
 #ifdef NDEBUG
 #define ENABLE_EXCEPTION_SCOPE_VERIFICATION 0
@@ -963,7 +990,7 @@
 #endif
 #endif
 
-#if ENABLE(JIT) && HAVE(MACHINE_CONTEXT)
+#if ENABLE(DFG_JIT) && HAVE(MACHINE_CONTEXT) && (CPU(X86) || CPU(X86_64) || CPU(ARM64))
 #define ENABLE_SIGNAL_BASED_VM_TRAPS 1
 #endif
 
@@ -1028,11 +1055,11 @@
    since most ports try to support sub-project independence, adding new headers
    to WTF causes many ports to break, and so this way we can address the build
    breakages one port at a time. */
-#if !defined(USE_EXPORT_MACROS) && (PLATFORM(COCOA) || PLATFORM(WIN))
+#if !defined(USE_EXPORT_MACROS) && (PLATFORM(COCOA) || OS(WINDOWS))
 #define USE_EXPORT_MACROS 1
 #endif
 
-#if !defined(USE_EXPORT_MACROS_FOR_TESTING) && (PLATFORM(GTK) || PLATFORM(WIN))
+#if !defined(USE_EXPORT_MACROS_FOR_TESTING) && (PLATFORM(GTK) || OS(WINDOWS))
 #define USE_EXPORT_MACROS_FOR_TESTING 1
 #endif
 
@@ -1090,10 +1117,6 @@
 #define USE_VIDEOTOOLBOX 1
 #endif
 
-#if PLATFORM(COCOA) || PLATFORM(GTK) || PLATFORM(WPE) || (PLATFORM(WIN) && !USE(WINGDI))
-#define USE_REQUEST_ANIMATION_FRAME_TIMER 1
-#endif
-
 #if PLATFORM(COCOA) || PLATFORM(GTK) || PLATFORM(WPE)
 #define USE_REQUEST_ANIMATION_FRAME_DISPLAY_MONITOR 1
 #endif
@@ -1141,7 +1164,11 @@
 #define USE_INSERTION_UNDO_GROUPING 1
 #endif
 
-#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101100) || PLATFORM(IOS)
+#if PLATFORM(MAC)
+#define HAVE_AVSAMPLEBUFFERGENERATOR 1
+#endif
+
+#if PLATFORM(COCOA)
 #define HAVE_TIMINGDATAOPTIONS 1
 #endif
 
@@ -1208,20 +1235,15 @@
 #define USE_MEDIATOOLBOX 1
 #endif
 
-/* While 10.10 has support for fences, it is missing some API important for our integration of them. */
-#if PLATFORM(IOS) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101100)
-#define HAVE_COREANIMATION_FENCES 1
-#endif
-
 /* FIXME: Enable USE_OS_LOG when building with the public iOS 10 SDK once we fix <rdar://problem/27758343>. */
-#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000 && USE(APPLE_INTERNAL_SDK))
+#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || (PLATFORM(IOS) && USE(APPLE_INTERNAL_SDK))
 #define USE_OS_LOG 1
 #if USE(APPLE_INTERNAL_SDK)
 #define USE_OS_STATE 1
 #endif
 #endif
 
-#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000)
+#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || PLATFORM(IOS)
 #define HAVE_SEC_TRUST_SERIALIZATION 1
 #endif
 
@@ -1230,7 +1252,10 @@
 #endif
 
 #if WTF_DEFAULT_EVENT_LOOP
-#if PLATFORM(WIN)
+#if USE(GLIB)
+/* Use GLib's event loop abstraction. Primarily GTK port uses it. */
+#define USE_GLIB_EVENT_LOOP 1
+#elif OS(WINDOWS)
 /* Use Windows message pump abstraction.
  * Even if the port is AppleWin, we use the Windows message pump system for the event loop,
  * so that USE(WINDOWS_EVENT_LOOP) && USE(CF) can be true.
@@ -1241,9 +1266,6 @@
 #elif PLATFORM(COCOA)
 /* OS X and IOS. Use CoreFoundation & GCD abstraction. */
 #define USE_COCOA_EVENT_LOOP 1
-#elif USE(GLIB)
-/* Use GLib's event loop abstraction. Primarily GTK port uses it. */
-#define USE_GLIB_EVENT_LOOP 1
 #else
 #define USE_GENERIC_EVENT_LOOP 1
 #endif
@@ -1271,4 +1293,10 @@
 #define USE_LIBWEBRTC 1
 #endif
 
-#endif /* WTF_Platform_h */
+#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101300) || (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 110000) || USE(GCRYPT)
+#define HAVE_RSA_PSS 1
+#endif
+
+#if !OS(WINDOWS)
+#define HAVE_STACK_BOUNDS_FOR_NEW_THREAD 1
+#endif

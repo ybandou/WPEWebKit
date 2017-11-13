@@ -49,7 +49,9 @@
 
 namespace JSC { namespace Wasm {
 
+namespace WasmBBQPlanInternal {
 static const bool verbose = false;
+}
 
 BBQPlan::BBQPlan(VM* vm, Ref<ModuleInformation> info, AsyncWork work, CompletionTask&& task)
     : Base(vm, WTFMove(info), WTFMove(task))
@@ -59,7 +61,7 @@ BBQPlan::BBQPlan(VM* vm, Ref<ModuleInformation> info, AsyncWork work, Completion
 }
 
 BBQPlan::BBQPlan(VM* vm, Vector<uint8_t>&& source, AsyncWork work, CompletionTask&& task)
-    : BBQPlan(vm, makeRef(*new ModuleInformation(WTFMove(source))), work, WTFMove(task))
+    : BBQPlan(vm, adoptRef(*new ModuleInformation(WTFMove(source))), work, WTFMove(task))
 {
     m_state = State::Initial;
 }
@@ -86,7 +88,7 @@ const char* BBQPlan::stateString(State state)
 void BBQPlan::moveToState(State state)
 {
     ASSERT(state >= m_state);
-    dataLogLnIf(verbose && state != m_state, "moving to state: ", stateString(state), " from state: ", stateString(m_state));
+    dataLogLnIf(WasmBBQPlanInternal::verbose && state != m_state, "moving to state: ", stateString(state), " from state: ", stateString(m_state));
     m_state = state;
 }
 
@@ -95,9 +97,9 @@ bool BBQPlan::parseAndValidateModule()
     if (m_state != State::Initial)
         return true;
 
-    dataLogLnIf(verbose, "starting validation");
+    dataLogLnIf(WasmBBQPlanInternal::verbose, "starting validation");
     MonotonicTime startTime;
-    if (verbose || Options::reportCompileTimes())
+    if (WasmBBQPlanInternal::verbose || Options::reportCompileTimes())
         startTime = MonotonicTime::now();
 
     {
@@ -111,7 +113,7 @@ bool BBQPlan::parseAndValidateModule()
 
     const auto& functionLocations = m_moduleInformation->functionLocationInBinary;
     for (unsigned functionIndex = 0; functionIndex < functionLocations.size(); ++functionIndex) {
-        dataLogLnIf(verbose, "Processing function starting at: ", functionLocations[functionIndex].start, " and ending at: ", functionLocations[functionIndex].end);
+        dataLogLnIf(WasmBBQPlanInternal::verbose, "Processing function starting at: ", functionLocations[functionIndex].start, " and ending at: ", functionLocations[functionIndex].end);
         const uint8_t* functionStart = m_source + functionLocations[functionIndex].start;
         size_t functionLength = functionLocations[functionIndex].end - functionLocations[functionIndex].start;
         ASSERT(functionLength <= m_sourceLength);
@@ -120,7 +122,7 @@ bool BBQPlan::parseAndValidateModule()
 
         auto validationResult = validateFunction(functionStart, functionLength, signature, m_moduleInformation.get());
         if (!validationResult) {
-            if (verbose) {
+            if (WasmBBQPlanInternal::verbose) {
                 for (unsigned i = 0; i < functionLength; ++i)
                     dataLog(RawPointer(reinterpret_cast<void*>(functionStart[i])), ", ");
                 dataLogLn();
@@ -130,7 +132,7 @@ bool BBQPlan::parseAndValidateModule()
         }
     }
 
-    if (verbose || Options::reportCompileTimes())
+    if (WasmBBQPlanInternal::verbose || Options::reportCompileTimes())
         dataLogLn("Took ", (MonotonicTime::now() - startTime).microseconds(), " us to validate module");
 
     moveToState(State::Validated);
@@ -142,7 +144,7 @@ bool BBQPlan::parseAndValidateModule()
 void BBQPlan::prepare()
 {
     ASSERT(m_state == State::Validated);
-    dataLogLnIf(verbose, "Starting preparation");
+    dataLogLnIf(WasmBBQPlanInternal::verbose, "Starting preparation");
 
     auto tryReserveCapacity = [this] (auto& vector, size_t size, const char* what) {
         if (UNLIKELY(!vector.tryReserveCapacity(size))) {
@@ -174,9 +176,33 @@ void BBQPlan::prepare()
         if (import->kind != ExternalKind::Function)
             continue;
         unsigned importFunctionIndex = m_wasmToWasmExitStubs.size();
-        dataLogLnIf(verbose, "Processing import function number ", importFunctionIndex, ": ", makeString(import->module), ": ", makeString(import->field));
-        m_wasmToWasmExitStubs.uncheckedAppend(wasmToWasm(importFunctionIndex));
+        dataLogLnIf(WasmBBQPlanInternal::verbose, "Processing import function number ", importFunctionIndex, ": ", makeString(import->module), ": ", makeString(import->field));
+        auto binding = wasmToWasm(importFunctionIndex);
+        if (UNLIKELY(!binding)) {
+            switch (binding.error()) {
+            case BindingFailure::OutOfMemory:
+                return fail(holdLock(m_lock), makeString("Out of executable memory at import ", String::number(importIndex)));
+            }
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+        m_wasmToWasmExitStubs.uncheckedAppend(binding.value());
     }
+
+    const uint32_t importFunctionCount = m_moduleInformation->importFunctionCount();
+    for (const auto& exp : m_moduleInformation->exports) {
+        if (exp.kindIndex >= importFunctionCount)
+            m_exportedFunctionIndices.add(exp.kindIndex - importFunctionCount);
+    }
+
+    for (const auto& element : m_moduleInformation->elements) {
+        for (const uint32_t elementIndex : element.functionIndices) {
+            if (elementIndex >= importFunctionCount)
+                m_exportedFunctionIndices.add(elementIndex - importFunctionCount);
+        }
+    }
+
+    if (m_moduleInformation->startFunctionIndexSpace && m_moduleInformation->startFunctionIndexSpace >= importFunctionCount)
+        m_exportedFunctionIndices.add(*m_moduleInformation->startFunctionIndexSpace - importFunctionCount);
 
     moveToState(State::Prepared);
 }
@@ -206,7 +232,7 @@ public:
 void BBQPlan::compileFunctions(CompilationEffort effort)
 {
     ASSERT(m_state >= State::Prepared);
-    dataLogLnIf(verbose, "Starting compilation");
+    dataLogLnIf(WasmBBQPlanInternal::verbose, "Starting compilation");
 
     if (!hasWork())
         return;
@@ -242,7 +268,7 @@ void BBQPlan::compileFunctions(CompilationEffort effort)
         ASSERT(validateFunction(functionStart, functionLength, signature, m_moduleInformation.get()));
 
         m_unlinkedWasmToWasmCalls[functionIndex] = Vector<UnlinkedWasmToWasmCall>();
-        TierUpCount* tierUp = &m_tierUpCounts[functionIndex];
+        TierUpCount* tierUp = Options::useBBQTierUpChecks() ? &m_tierUpCounts[functionIndex] : nullptr;
         auto parseAndCompileResult = parseAndCompile(m_compilationContexts[functionIndex], functionStart, functionLength, signature, m_unlinkedWasmToWasmCalls[functionIndex], m_moduleInformation.get(), m_mode, CompilationMode::BBQMode, functionIndex, tierUp);
 
         if (UNLIKELY(!parseAndCompileResult)) {
@@ -256,6 +282,13 @@ void BBQPlan::compileFunctions(CompilationEffort effort)
         }
 
         m_wasmInternalFunctions[functionIndex] = WTFMove(*parseAndCompileResult);
+
+        if (m_exportedFunctionIndices.contains(functionIndex)) {
+            auto locker = holdLock(m_lock);
+            auto result = m_jsToWasmInternalFunctions.add(functionIndex, createJSToWasmWrapper(m_compilationContexts[functionIndex], signature, &m_unlinkedWasmToWasmCalls[functionIndex], m_moduleInformation.get(), m_mode, functionIndex));
+            ASSERT_UNUSED(result, result.isNewEntry);
+        }
+
         bytesCompiled += functionLength;
     }
 }
@@ -263,22 +296,32 @@ void BBQPlan::compileFunctions(CompilationEffort effort)
 void BBQPlan::complete(const AbstractLocker& locker)
 {
     ASSERT(m_state != State::Compiled || m_currentIndex >= m_moduleInformation->functionLocationInBinary.size());
-    dataLogLnIf(verbose, "Starting Completion");
+    dataLogLnIf(WasmBBQPlanInternal::verbose, "Starting Completion");
 
-    if (m_state == State::Compiled) {
+    if (!failed() && m_state == State::Compiled) {
         for (uint32_t functionIndex = 0; functionIndex < m_moduleInformation->functionLocationInBinary.size(); functionIndex++) {
             CompilationContext& context = m_compilationContexts[functionIndex];
             SignatureIndex signatureIndex = m_moduleInformation->internalFunctionSignatureIndices[functionIndex];
             {
-                LinkBuffer linkBuffer(*context.wasmEntrypointJIT, nullptr);
-                m_wasmInternalFunctions[functionIndex]->wasmEntrypoint.compilation = std::make_unique<B3::Compilation>(
+                LinkBuffer linkBuffer(*context.wasmEntrypointJIT, nullptr, JITCompilationCanFail);
+                if (UNLIKELY(linkBuffer.didFailToAllocate())) {
+                    Base::fail(locker, makeString("Out of executable memory in function at index ", String::number(functionIndex)));
+                    return;
+                }
+
+                m_wasmInternalFunctions[functionIndex]->entrypoint.compilation = std::make_unique<B3::Compilation>(
                     FINALIZE_CODE(linkBuffer, ("WebAssembly function[%i] %s", functionIndex, SignatureInformation::get(signatureIndex).toString().ascii().data())),
                     WTFMove(context.wasmEntrypointByproducts));
             }
 
-            {
-                LinkBuffer linkBuffer(*context.jsEntrypointJIT, nullptr);
-                m_wasmInternalFunctions[functionIndex]->jsToWasmEntrypoint.compilation = std::make_unique<B3::Compilation>(
+            if (auto jsToWasmInternalFunction = m_jsToWasmInternalFunctions.get(functionIndex)) {
+                LinkBuffer linkBuffer(*context.jsEntrypointJIT, nullptr, JITCompilationCanFail);
+                if (UNLIKELY(linkBuffer.didFailToAllocate())) {
+                    Base::fail(locker, makeString("Out of executable memory in function entrypoint at index ", String::number(functionIndex)));
+                    return;
+                }
+
+                jsToWasmInternalFunction->entrypoint.compilation = std::make_unique<B3::Compilation>(
                     FINALIZE_CODE(linkBuffer, ("JavaScript->WebAssembly entrypoint[%i] %s", functionIndex, SignatureInformation::get(signatureIndex).toString().ascii().data())),
                     WTFMove(context.jsEntrypointByproducts));
             }
@@ -291,7 +334,7 @@ void BBQPlan::complete(const AbstractLocker& locker)
                     // FIXME imports could have been linked in B3, instead of generating a patchpoint. This condition should be replaced by a RELEASE_ASSERT. https://bugs.webkit.org/show_bug.cgi?id=166462
                     executableAddress = m_wasmToWasmExitStubs.at(call.functionIndexSpace).code().executableAddress();
                 } else
-                    executableAddress = m_wasmInternalFunctions.at(call.functionIndexSpace - m_moduleInformation->importFunctionCount())->wasmEntrypoint.compilation->code().executableAddress();
+                    executableAddress = m_wasmInternalFunctions.at(call.functionIndexSpace - m_moduleInformation->importFunctionCount())->entrypoint.compilation->code().executableAddress();
                 MacroAssembler::repatchNearCall(call.callLocation, CodeLocationLabel(executableAddress));
             }
         }

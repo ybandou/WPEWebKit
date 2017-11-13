@@ -31,7 +31,6 @@
 #if ENABLE(SUBTLE_CRYPTO)
 
 #include "CryptoKeyEC.h"
-#include "ScriptExecutionContext.h"
 #include <pal/crypto/gcrypt/Handle.h>
 #include <pal/crypto/gcrypt/Utilities.h>
 
@@ -105,7 +104,7 @@ static std::optional<Vector<uint8_t>> gcryptDerive(gcry_sexp_t baseKeySexp, gcry
             return std::nullopt;
         }
 
-        output.resize(dataLength);
+        output.grow(dataLength);
         error = gcry_mpi_print(GCRYMPI_FMT_USG, output.data(), output.size(), nullptr, xMPI);
         if (error != GPG_ERR_NO_ERROR) {
             PAL::GCrypt::logError(error);
@@ -116,21 +115,9 @@ static std::optional<Vector<uint8_t>> gcryptDerive(gcry_sexp_t baseKeySexp, gcry
     return output;
 }
 
-void CryptoAlgorithmECDH::platformDeriveBits(Ref<CryptoKey>&& baseKey, Ref<CryptoKey>&& publicKey, size_t length, Callback&& callback, ScriptExecutionContext& context, WorkQueue& workQueue)
+std::optional<Vector<uint8_t>> CryptoAlgorithmECDH::platformDeriveBits(const CryptoKeyEC& baseKey, const CryptoKeyEC& publicKey)
 {
-    context.ref();
-    workQueue.dispatch(
-        [baseKey = WTFMove(baseKey), publicKey = WTFMove(publicKey), length, callback = WTFMove(callback), &context]() mutable {
-            auto& ecBaseKey = downcast<CryptoKeyEC>(baseKey.get());
-            auto& ecPublicKey = downcast<CryptoKeyEC>(publicKey.get());
-
-            auto output = gcryptDerive(ecBaseKey.platformKey(), ecPublicKey.platformKey());
-            context.postTask(
-                [output = WTFMove(output), length, callback = WTFMove(callback)](ScriptExecutionContext& context) mutable {
-                    callback(WTFMove(output), length);
-                    context.deref();
-                });
-        });
+    return gcryptDerive(baseKey.platformKey(), publicKey.platformKey());
 }
 
 } // namespace WebCore

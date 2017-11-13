@@ -37,6 +37,7 @@ namespace JSC  {
     class Interpreter;
     class JSCallee;
     class JSScope;
+    class SourceOrigin;
 
     struct Instruction;
 
@@ -133,18 +134,6 @@ namespace JSC  {
         JSObject* globalThisValue() const;
 
         VM& vm() const;
-
-        // Convenience functions for access to global data.
-        // It takes a few memory references to get from a call frame to the global data
-        // pointer, so these are inefficient, and should be used sparingly in new code.
-        // But they're used in many places in legacy code, so they're not going away any time soon.
-
-        AtomicStringTable* atomicStringTable() const { return vm().atomicStringTable(); }
-        const CommonIdentifiers& propertyNames() const { return *vm().propertyNames; }
-        const ArgList& emptyList() const { return *vm().emptyList; }
-        Interpreter* interpreter() { return vm().interpreter; }
-        Heap* heap() { return &vm().heap; }
-
 
         static CallFrame* create(Register* callFrameBase) { return static_cast<CallFrame*>(callFrameBase); }
         Register* registers() { return this; }

@@ -41,12 +41,15 @@ protected:
     virtual ~ImageObserver() {}
 public:
     virtual URL sourceUrl() const = 0;
+    virtual String mimeType() const = 0;
+    virtual long long expectedContentLength() const = 0;
+
     virtual void decodedSizeChanged(const Image&, long long delta) = 0;
 
     virtual void didDraw(const Image&) = 0;
 
     virtual bool canDestroyDecodedData(const Image&) = 0;
-    virtual void imageFrameAvailable(const Image&, ImageAnimatingState, const IntRect* changeRect = nullptr) = 0;
+    virtual void imageFrameAvailable(const Image&, ImageAnimatingState, const IntRect* changeRect = nullptr, DecodingStatus = DecodingStatus::Invalid) = 0;
     virtual void changedInRect(const Image&, const IntRect* changeRect = nullptr) = 0;
 };
 

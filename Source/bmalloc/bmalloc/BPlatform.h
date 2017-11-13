@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,6 +42,14 @@
 #define BOS_UNIX 1
 #endif
 
+#ifdef __linux__
+#define BOS_LINUX 1
+#endif
+
+#if defined(WIN32) || defined(_WIN32)
+#define BOS_WINDOWS 1
+#endif
+
 #if BOS(DARWIN) && ((defined(TARGET_OS_EMBEDDED) && TARGET_OS_EMBEDDED) \
     || (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) \
     || (defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR))
@@ -57,6 +65,16 @@
 
 /* BUSE() - use a particular third-party library or optional OS service */
 #define BUSE(FEATURE) (defined BUSE_##FEATURE && BUSE_##FEATURE)
+
+/* ==== Compiler adaptation macros: these describe the capabilities of the compiler. ==== */
+
+/* BCOMPILER_SUPPORTS() - check for a compiler feature */
+#define BCOMPILER_SUPPORTS(FEATURE) (defined BCOMPILER_SUPPORTS_##FEATURE && BCOMPILER_SUPPORTS_##FEATURE)
+
+/* BCOMPILER_SUPPORTS(NSDMI_FOR_AGGREGATES) - compiler supports non-static data member initializers for aggregates */
+#if defined(__cpp_aggregate_nsdmi) && __cpp_aggregate_nsdmi >= 201304
+#define BCOMPILER_SUPPORTS_NSDMI_FOR_AGGREGATES 1
+#endif
 
 /* ==== Platform adaptation macros: these describe properties of the target environment. ==== */
 
@@ -123,7 +141,8 @@
 || defined(__ARM_ARCH_7S__)
 #define BARM_ARCH_VERSION 7
 
-#elif defined(__ARM_ARCH_8__)
+#elif defined(__ARM_ARCH_8__) \
+|| defined(__ARM_ARCH_8A__)
 #define BARM_ARCH_VERSION 8
 
 /* MSVC sets _M_ARM */
@@ -161,7 +180,9 @@
 || defined(__ARM_ARCH_7K__) \
 || defined(__ARM_ARCH_7M__) \
 || defined(__ARM_ARCH_7R__) \
-|| defined(__ARM_ARCH_7S__)
+|| defined(__ARM_ARCH_7S__) \
+|| defined(__ARM_ARCH_8__) \
+|| defined(__ARM_ARCH_8A__)
 #define BTHUMB_ARCH_VERSION 4
 
 /* RVCT sets __TARGET_ARCH_THUMB */
@@ -194,6 +215,6 @@
 
 #define BATTRIBUTE_PRINTF(formatStringArgument, extraArguments) __attribute__((__format__(printf, formatStringArgument, extraArguments)))
 
-#if (BPLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || (BPLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000)
+#if (BPLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || BPLATFORM(IOS)
 #define BUSE_OS_LOG 1
 #endif

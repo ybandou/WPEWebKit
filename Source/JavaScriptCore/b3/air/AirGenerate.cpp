@@ -46,7 +46,6 @@
 #include "AirReportUsedRegisters.h"
 #include "AirSimplifyCFG.h"
 #include "AirValidate.h"
-#include "AllowMacroScratchRegisterUsageIf.h"
 #include "B3Common.h"
 #include "B3Procedure.h"
 #include "B3TimingScope.h"
@@ -168,10 +167,6 @@ void generate(Code& code, CCallHelpers& jit)
 
     DisallowMacroScratchRegisterUsage disallowScratch(jit);
 
-    auto argFor = [&] (const RegisterAtOffset& entry) -> CCallHelpers::Address {
-        return CCallHelpers::Address(GPRInfo::callFrameRegister, entry.offset());
-    };
-    
     // And now, we generate code.
     GenerationContext context;
     context.code = &code;
@@ -212,26 +207,18 @@ void generate(Code& code, CCallHelpers& jit)
         if (disassembler)
             disassembler->startBlock(block, jit); 
 
-        if (code.isEntrypoint(block)) {
+        if (std::optional<unsigned> entrypointIndex = code.entrypointIndex(block)) {
+            ASSERT(code.isEntrypoint(block));
+
             if (disassembler)
                 disassembler->startEntrypoint(jit); 
 
-            jit.emitFunctionPrologue();
-            if (code.frameSize()) {
-                AllowMacroScratchRegisterUsageIf allowScratch(jit, isARM64());
-                jit.addPtr(CCallHelpers::TrustedImm32(-code.frameSize()), MacroAssembler::stackPointerRegister);
-            }
-            
-            for (const RegisterAtOffset& entry : code.calleeSaveRegisterAtOffsetList()) {
-                if (entry.reg().isGPR())
-                    jit.storePtr(entry.reg().gpr(), argFor(entry));
-                else
-                    jit.storeDouble(entry.reg().fpr(), argFor(entry));
-            }
+            code.prologueGeneratorForEntrypoint(*entrypointIndex)->run(jit, code);
 
             if (disassembler)
                 disassembler->endEntrypoint(jit); 
-        }
+        } else
+            ASSERT(!code.isEntrypoint(block));
         
         ASSERT(block->size() >= 1);
         for (unsigned i = 0; i < block->size() - 1; ++i) {
@@ -259,12 +246,7 @@ void generate(Code& code, CCallHelpers& jit)
             // have this override.
             auto start = jit.labelIgnoringWatchpoints();
             if (code.frameSize()) {
-                for (const RegisterAtOffset& entry : code.calleeSaveRegisterAtOffsetList()) {
-                    if (entry.reg().isGPR())
-                        jit.loadPtr(argFor(entry), entry.reg().gpr());
-                    else
-                        jit.loadDouble(argFor(entry), entry.reg().fpr());
-                }
+                jit.emitRestore(code.calleeSaveRegisterAtOffsetList());
                 jit.emitFunctionEpilogue();
             } else
                 jit.emitFunctionEpilogueWithEmptyFrame();

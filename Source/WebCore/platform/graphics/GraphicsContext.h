@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2003-2017 Apple Inc. All rights reserved.
  * Copyright (C) 2008-2009 Torch Mobile, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,6 +34,7 @@
 #include "Image.h"
 #include "ImageOrientation.h"
 #include "Pattern.h"
+#include <wtf/Function.h>
 #include <wtf/Noncopyable.h>
 
 #if USE(CG)
@@ -237,13 +238,13 @@ struct GraphicsContextStateChange {
     void accumulate(const GraphicsContextState&, GraphicsContextState::StateChangeFlags);
     void apply(GraphicsContext&) const;
     
-    void dump(TextStream&) const;
+    void dump(WTF::TextStream&) const;
 
     GraphicsContextState m_state;
     GraphicsContextState::StateChangeFlags m_changeFlags { GraphicsContextState::NoChange };
 };
 
-TextStream& operator<<(TextStream&, const GraphicsContextStateChange&);
+WTF::TextStream& operator<<(WTF::TextStream&, const GraphicsContextStateChange&);
 
 
 class GraphicsContext {
@@ -357,12 +358,12 @@ public:
 
     WEBCORE_EXPORT void strokeRect(const FloatRect&, float lineWidth);
 
-    WEBCORE_EXPORT void drawImage(Image&, const FloatPoint& destination, const ImagePaintingOptions& = ImagePaintingOptions());
-    WEBCORE_EXPORT void drawImage(Image&, const FloatRect& destination, const ImagePaintingOptions& = ImagePaintingOptions());
-    void drawImage(Image&, const FloatRect& destination, const FloatRect& source, const ImagePaintingOptions& = ImagePaintingOptions());
+    WEBCORE_EXPORT ImageDrawResult drawImage(Image&, const FloatPoint& destination, const ImagePaintingOptions& = ImagePaintingOptions());
+    WEBCORE_EXPORT ImageDrawResult drawImage(Image&, const FloatRect& destination, const ImagePaintingOptions& = ImagePaintingOptions());
+    ImageDrawResult drawImage(Image&, const FloatRect& destination, const FloatRect& source, const ImagePaintingOptions& = ImagePaintingOptions());
 
-    void drawTiledImage(Image&, const FloatRect& destination, const FloatPoint& source, const FloatSize& tileSize, const FloatSize& spacing, const ImagePaintingOptions& = ImagePaintingOptions());
-    void drawTiledImage(Image&, const FloatRect& destination, const FloatRect& source, const FloatSize& tileScaleFactor,
+    ImageDrawResult drawTiledImage(Image&, const FloatRect& destination, const FloatPoint& source, const FloatSize& tileSize, const FloatSize& spacing, const ImagePaintingOptions& = ImagePaintingOptions());
+    ImageDrawResult drawTiledImage(Image&, const FloatRect& destination, const FloatRect& source, const FloatSize& tileScaleFactor,
         Image::TileRule, Image::TileRule, const ImagePaintingOptions& = ImagePaintingOptions());
 
     WEBCORE_EXPORT void drawImageBuffer(ImageBuffer&, const FloatPoint& destination, const ImagePaintingOptions& = ImagePaintingOptions());
@@ -444,6 +445,7 @@ public:
 #if PLATFORM(MAC)
     void drawFocusRing(const Path&, double timeOffset, bool& needsRedraw);
     void drawFocusRing(const Vector<FloatRect>&, double timeOffset, bool& needsRedraw);
+    static CGColorRef focusRingColor();
 #endif
 
     void setLineCap(LineCap);
@@ -474,6 +476,7 @@ public:
     WEBCORE_EXPORT void scale(const FloatSize&);
     void rotate(float angleInRadians);
     void translate(const FloatSize& size) { translate(size.width(), size.height()); }
+    void translate(const FloatPoint& p) { translate(p.x(), p.y()); }
     WEBCORE_EXPORT void translate(float x, float y);
 
     void setURLForRect(const URL&, const FloatRect&);
@@ -599,8 +602,8 @@ private:
 
 #if USE(DIRECT2D)
     void platformInit(HDC, ID2D1RenderTarget**, RECT, bool hasAlpha = false);
-    void drawWithoutShadow(const FloatRect& boundingRect, const std::function<void(ID2D1RenderTarget*)>&);
-    void drawWithShadow(const FloatRect& boundingRect, const std::function<void(ID2D1RenderTarget*)>&);
+    void drawWithoutShadow(const FloatRect& boundingRect, const WTF::Function<void(ID2D1RenderTarget*)>&);
+    void drawWithShadow(const FloatRect& boundingRect, const WTF::Function<void(ID2D1RenderTarget*)>&);
 #endif
 
     void savePlatformState();

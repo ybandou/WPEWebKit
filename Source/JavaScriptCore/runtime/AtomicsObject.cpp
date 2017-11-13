@@ -81,7 +81,7 @@ void AtomicsObject::finishCreation(VM& vm, JSGlobalObject* globalObject)
     ASSERT(inherits(vm, info()));
     
 #define PUT_DIRECT_NATIVE_FUNC(lowerName, upperName, count) \
-    putDirectNativeFunctionWithoutTransition(vm, globalObject, Identifier::fromString(&vm, #lowerName), count, atomicsFunc ## upperName, Atomics ## upperName ## Intrinsic, DontEnum);
+    putDirectNativeFunctionWithoutTransition(vm, globalObject, Identifier::fromString(&vm, #lowerName), count, atomicsFunc ## upperName, Atomics ## upperName ## Intrinsic, static_cast<unsigned>(PropertyAttribute::DontEnum));
     FOR_EACH_ATOMICS_FUNC(PUT_DIRECT_NATIVE_FUNC)
 #undef PUT_DIRECT_NATIVE_FUNC
 }
@@ -242,7 +242,7 @@ struct LoadFunc {
     template<typename T>
     JSValue operator()(T* ptr, const double*) const
     {
-        return jsNumber(WTF::atomicLoad(ptr));
+        return jsNumber(WTF::atomicLoadFullyFenced(ptr));
     }
 };
 
@@ -264,7 +264,7 @@ struct StoreFunc {
     {
         double valueAsInt = args[0];
         T valueAsT = static_cast<T>(toInt32(valueAsInt));
-        WTF::atomicStore(ptr, valueAsT);
+        WTF::atomicStoreFullyFenced(ptr, valueAsT);
         return jsNumber(valueAsInt);
     }
 };

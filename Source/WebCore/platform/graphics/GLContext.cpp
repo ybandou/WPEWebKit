@@ -26,7 +26,9 @@
 #include "GLContextEGL.h"
 #endif
 
-#if USE(OPENGL_ES_2)
+#if USE(LIBEPOXY)
+#include <epoxy/gl.h>
+#elif USE(OPENGL_ES_2)
 #define GL_GLEXT_PROTOTYPES 1
 #include <GLES2/gl2.h>
 #endif
@@ -47,7 +49,7 @@ public:
     GLContext* context() { return m_context; }
 
 private:
-    GLContext* m_context;
+    GLContext* m_context { nullptr };
 };
 
 ThreadSpecific<ThreadGlobalGLContext>* ThreadGlobalGLContext::staticGLContext;
@@ -61,7 +63,7 @@ inline ThreadGlobalGLContext* currentContext()
 
 static bool initializeOpenGLShimsIfNeeded()
 {
-#if USE(OPENGL_ES_2)
+#if USE(OPENGL_ES_2) || USE(LIBEPOXY)
     return true;
 #else
     static bool initialized = false;

@@ -38,7 +38,6 @@ class FixedPositionViewportConstraints;
 class GraphicsLayer;
 class GraphicsLayerUpdater;
 class RenderEmbeddedObject;
-class RenderNamedFlowFragment;
 class RenderVideo;
 class RenderWidget;
 class ScrollingCoordinator;
@@ -47,12 +46,12 @@ class TiledBacking;
 
 typedef unsigned LayerTreeFlags;
 
-enum CompositingUpdateType {
-    CompositingUpdateAfterStyleChange,
-    CompositingUpdateAfterLayout,
-    CompositingUpdateOnHitTest,
-    CompositingUpdateOnScroll,
-    CompositingUpdateOnCompositedScroll
+enum class CompositingUpdateType {
+    AfterStyleChange,
+    AfterLayout,
+    OnHitTest,
+    OnScroll,
+    OnCompositedScroll
 };
 
 enum class CompositingReason {
@@ -279,7 +278,12 @@ public:
 
     ScrollableArea* scrollableAreaForScrollLayerID(ScrollingNodeID) const;
 
-    void updateScrollCoordinatedStatus(RenderLayer&);
+    enum class ScrollingNodeChangeFlags {
+        Layer           = 1 << 0,
+        LayerGeometry   = 1 << 1,
+    };
+
+    void updateScrollCoordinatedStatus(RenderLayer&, OptionSet<ScrollingNodeChangeFlags>);
     void removeFromScrollCoordinatedLayers(RenderLayer&);
 
     void willRemoveScrollingLayerWithBacking(RenderLayer&, RenderLayerBacking&);
@@ -332,7 +336,7 @@ private:
 
     // GraphicsLayerClient implementation
     void notifyFlushRequired(const GraphicsLayer*) override;
-    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const FloatRect&) override;
+    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const FloatRect&, GraphicsLayerPaintBehavior) override;
     void customPositionForVisibleRectComputation(const GraphicsLayer*, FloatPoint&) const override;
     bool isTrackingRepaints() const override;
     
@@ -345,6 +349,7 @@ private:
     bool requiresCompositingLayer(const RenderLayer&, RenderLayer::ViewportConstrainedNotCompositedReason* = nullptr) const;
     // Whether the layer could ever be composited.
     bool canBeComposited(const RenderLayer&) const;
+    bool needsCompositingUpdateForStyleChangeOnNonCompositedLayer(RenderLayer&, const RenderStyle* oldStyle) const;
 
     // Make or destroy the backing for this layer; returns true if backing changed.
     enum class BackingRequired { No, Yes, Unknown };
@@ -364,18 +369,8 @@ private:
     // Returns true if any layer's compositing changed
     void computeCompositingRequirements(RenderLayer* ancestorLayer, RenderLayer&, OverlapMap&, CompositingState&, bool& layersChanged, bool& descendantHas3DTransform);
 
-    void computeRegionCompositingRequirements(RenderNamedFlowFragment*, OverlapMap&, CompositingState&, bool& layersChanged, bool& anyDescendantHas3DTransform);
-
-    void computeCompositingRequirementsForNamedFlowFixed(RenderLayer&, OverlapMap&, CompositingState&, bool& layersChanged, bool& anyDescendantHas3DTransform);
-
     // Recurses down the tree, parenting descendant compositing layers and collecting an array of child layers for the current compositing layer.
     void rebuildCompositingLayerTree(RenderLayer&, Vector<GraphicsLayer*>& childGraphicsLayersOfEnclosingLayer, int depth);
-
-    // Recurses down the RenderFlowThread tree, parenting descendant compositing layers and collecting an array of child 
-    // layers for the current compositing layer corresponding to the anonymous region (that belongs to the region's parent).
-    void rebuildRegionCompositingLayerTree(RenderNamedFlowFragment*, Vector<GraphicsLayer*>& childList, int depth);
-
-    void rebuildCompositingLayerTreeForNamedFlowFixed(RenderLayer&, Vector<GraphicsLayer*>& childList, int depth);
 
     // Recurses down the tree, updating layer geometry only.
     void updateLayerTreeGeometry(RenderLayer&, int depth);
@@ -442,7 +437,7 @@ private:
 
     void updateScrollCoordinationForThisFrame(ScrollingNodeID);
     ScrollingNodeID attachScrollingNode(RenderLayer&, ScrollingNodeType, ScrollingNodeID parentNodeID);
-    void updateScrollCoordinatedLayer(RenderLayer&, LayerScrollCoordinationRoles);
+    void updateScrollCoordinatedLayer(RenderLayer&, LayerScrollCoordinationRoles, OptionSet<ScrollingNodeChangeFlags>);
     void detachScrollCoordinatedLayer(RenderLayer&, LayerScrollCoordinationRoles);
     void reattachSubframeScrollLayers();
     
@@ -460,6 +455,7 @@ private:
 
     // True if the FrameView uses a ScrollingCoordinator.
     bool hasCoordinatedScrolling() const;
+    bool useCoordinatedScrollingForLayer(const RenderLayer&) const;
 
     bool isAsyncScrollableStickyLayer(const RenderLayer&, const RenderLayer** enclosingAcceleratedOverflowLayer = nullptr) const;
     bool isViewportConstrainedFixedOrStickyLayer(const RenderLayer&) const;
@@ -565,5 +561,7 @@ private:
 };
 
 void paintScrollbar(Scrollbar*, GraphicsContext&, const IntRect& clip);
+
+WTF::TextStream& operator<<(WTF::TextStream&, CompositingUpdateType);
 
 } // namespace WebCore

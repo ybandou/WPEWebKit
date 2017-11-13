@@ -25,9 +25,7 @@
 
 #pragma once
 
-#include "Color.h"
 #include "CompositionUnderline.h"
-#include "DataTransferAccessPolicy.h"
 #include "DictationAlternative.h"
 #include "DocumentMarker.h"
 #include "EditAction.h"
@@ -49,6 +47,10 @@ OBJC_CLASS NSAttributedString;
 OBJC_CLASS NSDictionary;
 OBJC_CLASS NSMutableDictionary;
 #endif
+
+namespace PAL {
+class KillRing;
+}
 
 namespace WebCore {
 
@@ -90,14 +92,36 @@ enum class MailBlockquoteHandling {
     IgnoreBlockquote,
 };
 
-#if PLATFORM(COCOA)
+enum TemporarySelectionOption : uint8_t {
+    // By default, no additional options are enabled.
+    TemporarySelectionOptionDefault = 0,
 
-struct FragmentAndResources {
-    RefPtr<DocumentFragment> fragment;
-    Vector<Ref<ArchiveResource>> resources;
+    // Scroll to reveal the selection.
+    TemporarySelectionOptionRevealSelection = 1 << 0,
+
+    // Don't propagate selection changes to the client layer.
+    TemporarySelectionOptionIgnoreSelectionChanges = 1 << 1,
+
+    // Force the render tree to update selection state. Only respected on iOS.
+    TemporarySelectionOptionEnableAppearanceUpdates = 1 << 2
 };
 
+using TemporarySelectionOptions = uint8_t;
+
+class TemporarySelectionChange {
+public:
+    TemporarySelectionChange(Frame&, std::optional<VisibleSelection> = std::nullopt, TemporarySelectionOptions = TemporarySelectionOptionDefault);
+    ~TemporarySelectionChange();
+
+private:
+    Ref<Frame> m_frame;
+    TemporarySelectionOptions m_options;
+    bool m_wasIgnoringSelectionChanges;
+#if PLATFORM(IOS)
+    bool m_appearanceUpdatesWereEnabled;
 #endif
+    std::optional<VisibleSelection> m_selectionToRestore;
+};
 
 class Editor {
     WTF_MAKE_FAST_ALLOCATED;
@@ -185,9 +209,7 @@ public:
 #if PLATFORM(IOS)
     WEBCORE_EXPORT void removeUnchangeableStyles();
 #endif
-    
-    bool dispatchCPPEvent(const AtomicString&, DataTransferAccessPolicy);
-    
+
     WEBCORE_EXPORT void applyStyle(StyleProperties*, EditAction = EditActionUnspecified);
     void applyStyle(RefPtr<EditingStyle>&&, EditAction);
     void applyParagraphStyle(StyleProperties*, EditAction = EditActionUnspecified);
@@ -333,7 +355,7 @@ public:
 
     VisibleSelection selectionForCommand(Event*);
 
-    KillRing& killRing() const { return *m_killRing; }
+    PAL::KillRing& killRing() const { return *m_killRing; }
     SpellChecker& spellChecker() const { return *m_spellChecker; }
 
     EditingBehavior behavior() const;
@@ -367,7 +389,7 @@ public:
     void clearMisspellingsAndBadGrammar(const VisibleSelection&);
     void markMisspellingsAndBadGrammar(const VisibleSelection&);
 
-    Node* findEventTargetFrom(const VisibleSelection& selection) const;
+    Element* findEventTargetFrom(const VisibleSelection& selection) const;
 
     WEBCORE_EXPORT String selectedText() const;
     String selectedTextForDataTransfer() const;
@@ -477,11 +499,7 @@ public:
     void setIsGettingDictionaryPopupInfo(bool b) { m_isGettingDictionaryPopupInfo = b; }
     bool isGettingDictionaryPopupInfo() const { return m_isGettingDictionaryPopupInfo; }
 
-    Ref<DocumentFragment> createFragmentForImageAndURL(const String&);
-
 private:
-    class WebContentReader;
-
     Document& document() const;
 
     bool canDeleteRange(Range*) const;
@@ -507,7 +525,7 @@ private:
 
     void editorUIUpdateTimerFired();
 
-    Node* findEventTargetFromSelection() const;
+    Element* findEventTargetFromSelection() const;
 
     bool unifiedTextCheckerEnabled() const;
 
@@ -517,11 +535,7 @@ private:
     RefPtr<SharedBuffer> selectionInWebArchiveFormat();
     String selectionInHTMLFormat();
     RefPtr<SharedBuffer> imageInWebArchiveFormat(Element&);
-    RefPtr<DocumentFragment> createFragmentForImageResourceAndAddResource(RefPtr<ArchiveResource>&&);
-    RefPtr<DocumentFragment> createFragmentAndAddResources(NSAttributedString *);
-    FragmentAndResources createFragment(NSAttributedString *);
-    String userVisibleString(const URL&);
-
+    static String userVisibleString(const URL&);
     static RefPtr<SharedBuffer> dataInRTFDFormat(NSAttributedString *);
     static RefPtr<SharedBuffer> dataInRTFFormat(NSAttributedString *);
 #endif
@@ -537,7 +551,7 @@ private:
     bool m_ignoreSelectionChanges { false };
     bool m_shouldStartNewKillRingSequence { false };
     bool m_shouldStyleWithCSS { false };
-    const std::unique_ptr<KillRing> m_killRing;
+    const std::unique_ptr<PAL::KillRing> m_killRing;
     const std::unique_ptr<SpellChecker> m_spellChecker;
     const std::unique_ptr<AlternativeTextController> m_alternativeTextController;
     VisibleSelection m_mark;

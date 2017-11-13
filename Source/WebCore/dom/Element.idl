@@ -68,7 +68,7 @@
     [MayThrowException] void insertAdjacentText(DOMString where, DOMString data); // Historical.
 
     // CSSOM-view extensions (https://drafts.csswg.org/cssom-view/#extension-to-the-element-interface).
-    sequence<DOMRect> getClientRects();
+    DOMRectList getClientRects();
     [NewObject] DOMRect getBoundingClientRect();
     void scrollIntoView(optional boolean alignWithTop = true); // FIXME: Parameter type should be (boolean or object).
     [ImplementedAs=scrollTo] void scroll(optional ScrollToOptions options);
@@ -88,8 +88,8 @@
 
     // Extensions to Element from DOM Parsing and Serialization specification.
     // https://w3c.github.io/DOM-Parsing/#extensions-to-the-element-interface
-    [CEReactions, SetterMayThrowException] attribute [TreatNullAs=EmptyString] DOMString innerHTML;
-    [CEReactions, SetterMayThrowException] attribute [TreatNullAs=EmptyString] DOMString outerHTML;
+    [CEReactions] attribute [TreatNullAs=EmptyString] DOMString innerHTML;
+    [CEReactions] attribute [TreatNullAs=EmptyString] DOMString outerHTML;
     [CEReactions, MayThrowException] void insertAdjacentHTML(DOMString position, DOMString text);
 
     // Extensions from Full Screen API (https://fullscreen.spec.whatwg.org/#api).
@@ -99,12 +99,6 @@
 
     // Extensions from Pointer Lock API (https://w3c.github.io/pointerlock/#extensions-to-the-element-interface).
     [Conditional=POINTER_LOCK] void requestPointerLock();
-
-    // Extensions from CSS Regions API (https://drafts.csswg.org/css-regions/#the-region-interface).
-    // FIXME: Should be in a separate Region interface implemented by Element.
-    // FIXME: Should we add unprefixed versions?
-    [Conditional=CSS_REGIONS] readonly attribute DOMString webkitRegionOverset;
-    [Conditional=CSS_REGIONS] sequence<Range>? webkitGetRegionFlowRanges();
 
     // Non standard API (https://www.w3.org/Bugs/Public/show_bug.cgi?id=17152).
     void scrollIntoViewIfNeeded(optional boolean centerIfNeeded = true);
@@ -135,12 +129,8 @@
     // Non standard event handler (https://developer.apple.com/reference/webkitjs/element/1633146-onbeforeload).
     [NotEnumerable] attribute EventHandler onbeforeload;
 
-    [NotEnumerable, Conditional=LEGACY_ENCRYPTED_MEDIA_V1] attribute EventHandler onwebkitkeyadded;
-    [NotEnumerable, Conditional=LEGACY_ENCRYPTED_MEDIA_V1] attribute EventHandler onwebkitkeyerror;
-    [NotEnumerable, Conditional=LEGACY_ENCRYPTED_MEDIA_V1] attribute EventHandler onwebkitkeymessage;
-
     // Non standard event handler (https://developer.apple.com/reference/webkitjs/element/1634205-onwebkitneedkey).
-    [NotEnumerable, Conditional=LEGACY_ENCRYPTED_MEDIA_V1|LEGACY_ENCRYPTED_MEDIA] attribute EventHandler onwebkitneedkey;
+    [NotEnumerable, Conditional=LEGACY_ENCRYPTED_MEDIA, EnabledAtRuntime=LegacyEncryptedMediaAPI] attribute EventHandler onwebkitneedkey;
 
     // Non standard event handler (https://developer.apple.com/reference/webkitjs/element/1633943-onwebkitpresentationmodechanged).
     [NotEnumerable, Conditional=VIDEO_PRESENTATION_MODE] attribute EventHandler onwebkitpresentationmodechanged;

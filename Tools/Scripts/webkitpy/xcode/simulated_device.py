@@ -22,11 +22,12 @@
 
 import logging
 import re
-import signal
 import subprocess
 
-from webkitpy.xcode.simulator import Simulator
 from webkitpy.common.host import Host
+from webkitpy.common.system.executive import ScriptError
+from webkitpy.common.timeout_context import Timeout
+from webkitpy.xcode.simulator import Simulator
 
 _log = logging.getLogger(__name__)
 
@@ -141,9 +142,8 @@ class SimulatedDevice(object):
     def install_app(self, app_path, env=None):
         # FIXME: This is a workaround for <rdar://problem/30273973>, Racey failure of simctl install.
         for x in xrange(3):
-            if self._host.executive.run_command(['xcrun', 'simctl', 'install', self.udid, app_path], return_exit_code=True):
-                return False
             try:
+                self._host.executive.run_command(['xcrun', 'simctl', 'install', self.udid, app_path])
                 bundle_id = self._host.executive.run_command([
                     '/usr/libexec/PlistBuddy',
                     '-c',
@@ -152,7 +152,7 @@ class SimulatedDevice(object):
                 ]).rstrip()
                 self._host.executive.kill_process(self.launch_app(bundle_id, [], env=env, timeout=10))
                 return True
-            except RuntimeError:
+            except (RuntimeError, ScriptError):
                 pass
         return False
 
@@ -170,29 +170,23 @@ class SimulatedDevice(object):
         def _log_debug_error(error):
             _log.debug(error.message_with_output())
 
-        def _install_timeout(signum, frame):
-            assert signum == signal.SIGALRM
-            raise RuntimeError('Timed out waiting for process to open {} on {}'.format(bundle_id, self.udid))
-
         output = None
-        signal.signal(signal.SIGALRM, _install_timeout)
-        signal.alarm(timeout)  # In seconds
-        while True:
-            output = self._host.executive.run_command(
-                ['xcrun', 'simctl', 'launch', self.udid, bundle_id] + args,
-                env=environment_to_use,
-                error_handler=_log_debug_error,
-            )
-            match = re.match(r'(?P<bundle>[^:]+): (?P<pid>\d+)\n', output)
-            # FIXME: We shouldn't need to check the PID <rdar://problem/31154075>.
-            if match and self.executive.check_running_pid(int(match.group('pid'))):
-                break
-            if match:
-                _log.debug('simctl launch reported pid {}, but this process is not running'.format(match.group('pid')))
-            else:
-                _log.debug('simctl launch did not report a pid')
 
-        signal.alarm(0)  # Cancel alarm
+        with Timeout(timeout, RuntimeError('Timed out waiting for process to open {} on {}'.format(bundle_id, self.udid))):
+            while True:
+                output = self._host.executive.run_command(
+                    ['xcrun', 'simctl', 'launch', self.udid, bundle_id] + args,
+                    env=environment_to_use,
+                    error_handler=_log_debug_error,
+                )
+                match = re.match(r'(?P<bundle>[^:]+): (?P<pid>\d+)\n', output)
+                # FIXME: We shouldn't need to check the PID <rdar://problem/31154075>.
+                if match and self.executive.check_running_pid(int(match.group('pid'))):
+                    break
+                if match:
+                    _log.debug('simctl launch reported pid {}, but this process is not running'.format(match.group('pid')))
+                else:
+                    _log.debug('simctl launch did not report a pid')
 
         if match.group('bundle') != bundle_id:
             raise RuntimeError('Failed to find process id for {}: {}'.format(bundle_id, output))

@@ -28,7 +28,7 @@
 
 #if ENABLE(INDEXED_DATABASE)
 
-#include "DOMError.h"
+#include "DOMException.h"
 #include "DOMStringList.h"
 #include "DOMWindow.h"
 #include "Event.h"
@@ -36,7 +36,6 @@
 #include "EventQueue.h"
 #include "IDBCursorWithValue.h"
 #include "IDBDatabase.h"
-#include "IDBDatabaseException.h"
 #include "IDBError.h"
 #include "IDBEventDispatcher.h"
 #include "IDBGetRecordData.h"
@@ -55,7 +54,6 @@
 #include "ScriptState.h"
 #include "SerializedScriptValue.h"
 #include "TransactionOperation.h"
-#include <wtf/NeverDestroyed.h>
 
 using namespace JSC;
 
@@ -136,7 +134,7 @@ IDBDatabase* IDBTransaction::db()
     return m_database.ptr();
 }
 
-DOMError* IDBTransaction::error() const
+DOMException* IDBTransaction::error() const
 {
     ASSERT(currentThread() == m_database->originThreadID());
     return m_domError.get();
@@ -148,10 +146,10 @@ ExceptionOr<Ref<IDBObjectStore>> IDBTransaction::objectStore(const String& objec
     ASSERT(currentThread() == m_database->originThreadID());
 
     if (!scriptExecutionContext())
-        return Exception { IDBDatabaseException::InvalidStateError };
+        return Exception { InvalidStateError };
 
     if (isFinishedOrFinishing())
-        return Exception { IDBDatabaseException::InvalidStateError, ASCIILiteral("Failed to execute 'objectStore' on 'IDBTransaction': The transaction finished.") };
+        return Exception { InvalidStateError, ASCIILiteral("Failed to execute 'objectStore' on 'IDBTransaction': The transaction finished.") };
 
     Locker<Lock> locker(m_referencedObjectStoreLock);
 
@@ -169,11 +167,11 @@ ExceptionOr<Ref<IDBObjectStore>> IDBTransaction::objectStore(const String& objec
 
     auto* info = m_database->info().infoForExistingObjectStore(objectStoreName);
     if (!info)
-        return Exception { IDBDatabaseException::NotFoundError, ASCIILiteral("Failed to execute 'objectStore' on 'IDBTransaction': The specified object store was not found.") };
+        return Exception { NotFoundError, ASCIILiteral("Failed to execute 'objectStore' on 'IDBTransaction': The specified object store was not found.") };
 
     // Version change transactions are scoped to every object store in the database.
     if (!info || (!found && !isVersionChange()))
-        return Exception { IDBDatabaseException::NotFoundError, ASCIILiteral("Failed to execute 'objectStore' on 'IDBTransaction': The specified object store was not found.") };
+        return Exception { NotFoundError, ASCIILiteral("Failed to execute 'objectStore' on 'IDBTransaction': The specified object store was not found.") };
 
     auto objectStore = std::make_unique<IDBObjectStore>(*scriptExecutionContext(), *info, *this);
     auto* rawObjectStore = objectStore.get();
@@ -183,7 +181,7 @@ ExceptionOr<Ref<IDBObjectStore>> IDBTransaction::objectStore(const String& objec
 }
 
 
-void IDBTransaction::abortDueToFailedRequest(DOMError& error)
+void IDBTransaction::abortDueToFailedRequest(DOMException& error)
 {
     LOG(IndexedDB, "IDBTransaction::abortDueToFailedRequest");
     ASSERT(currentThread() == m_database->originThreadID());
@@ -210,7 +208,7 @@ ExceptionOr<void> IDBTransaction::abort()
     ASSERT(currentThread() == m_database->originThreadID());
 
     if (isFinishedOrFinishing())
-        return Exception { IDBDatabaseException::InvalidStateError, ASCIILiteral("Failed to execute 'abort' on 'IDBTransaction': The transaction is inactive or finished.") };
+        return Exception { InvalidStateError, ASCIILiteral("Failed to execute 'abort' on 'IDBTransaction': The transaction is inactive or finished.") };
 
     internalAbort();
 
@@ -296,7 +294,7 @@ void IDBTransaction::abortOnServerAndCancelRequests(IDBClient::TransactionOperat
 
     m_currentlyCompletingRequest = nullptr;
     
-    IDBError error(IDBDatabaseException::AbortError);
+    IDBError error(AbortError);
 
     abortInProgressOperations(error);
 
@@ -761,7 +759,7 @@ void IDBTransaction::didCreateIndexOnServer(const IDBResultData& resultData)
         return;
 
     // Otherwise, failure to create an index forced abortion of the transaction.
-    abortDueToFailedRequest(DOMError::create(IDBDatabaseException::getErrorName(resultData.error().code()), resultData.error().message()));
+    abortDueToFailedRequest(DOMException::create(resultData.error().message(), resultData.error().name()));
 }
 
 void IDBTransaction::renameIndex(IDBIndex& index, const String& newName)
@@ -1218,7 +1216,7 @@ void IDBTransaction::putOrAddOnServer(IDBClient::TransactionOperation& operation
             // If the IDBValue doesn't have any data, then something went wrong writing the blobs to disk.
             // In that case, we cannot successfully store this record, so we callback with an error.
             RefPtr<IDBClient::TransactionOperation> protectedOperation(&operation);
-            auto result = IDBResultData::error(operation.identifier(), { IDBDatabaseException::UnknownError, ASCIILiteral("Error preparing Blob/File data to be stored in object store") });
+            auto result = IDBResultData::error(operation.identifier(), IDBError { UnknownError, ASCIILiteral("Error preparing Blob/File data to be stored in object store") });
             scriptExecutionContext()->postTask([protectedOperation = WTFMove(protectedOperation), result = WTFMove(result)](ScriptExecutionContext&) {
                 protectedOperation->doComplete(result);
             });
@@ -1240,7 +1238,7 @@ void IDBTransaction::putOrAddOnServer(IDBClient::TransactionOperation& operation
 
         // If the IDBValue doesn't have any data, then something went wrong writing the blobs to disk.
         // In that case, we cannot successfully store this record, so we callback with an error.
-        auto result = IDBResultData::error(protectedOperation->identifier(), { IDBDatabaseException::UnknownError, ASCIILiteral("Error preparing Blob/File data to be stored in object store") });
+        auto result = IDBResultData::error(protectedOperation->identifier(), IDBError { UnknownError, ASCIILiteral("Error preparing Blob/File data to be stored in object store") });
         callOnMainThread([protectedThis = WTFMove(protectedThis), protectedOperation = WTFMove(protectedOperation), result = WTFMove(result)]() mutable {
             protectedOperation->doComplete(result);
         });
@@ -1387,7 +1385,7 @@ void IDBTransaction::connectionClosedFromServer(const IDBError& error)
     m_transactionOperationMap.clear();
 
     m_idbError = error;
-    m_domError = error.toDOMError();
+    m_domError = error.toDOMException();
     fireOnAbort();
 }
 

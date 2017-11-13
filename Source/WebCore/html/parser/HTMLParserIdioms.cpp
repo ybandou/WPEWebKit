@@ -30,9 +30,7 @@
 #include "URL.h"
 #include <limits>
 #include <wtf/MathExtras.h>
-#include <wtf/NeverDestroyed.h>
 #include <wtf/dtoa.h>
-#include <wtf/text/StringBuilder.h>
 
 namespace WebCore {
 
@@ -48,7 +46,7 @@ static String stripLeadingAndTrailingHTMLSpaces(String string, CharType characte
     }
 
     if (numLeadingSpaces == length)
-        return string.isNull() ? string : emptyAtom.string();
+        return string.isNull() ? string : emptyAtom().string();
 
     for (; numTrailingSpaces < length; ++numTrailingSpaces) {
         if (isNotHTMLSpace(characters[length - numTrailingSpaces - 1]))
@@ -68,7 +66,7 @@ String stripLeadingAndTrailingHTMLSpaces(const String& string)
     unsigned length = string.length();
 
     if (!length)
-        return string.isNull() ? string : emptyAtom.string();
+        return string.isNull() ? string : emptyAtom().string();
 
     if (string.is8Bit())
         return stripLeadingAndTrailingHTMLSpaces(string, string.characters8(), length);
@@ -362,26 +360,35 @@ static bool parseHTTPRefreshInternal(const CharacterType* position, const Charac
     while (position < end && isHTMLSpace(*position))
         ++position;
 
+    unsigned time = 0;
+
     const CharacterType* numberStart = position;
     while (position < end && isASCIIDigit(*position))
         ++position;
 
-    auto optionalNumber = parseHTMLNonNegativeInteger(StringView(numberStart, position - numberStart));
-    if (!optionalNumber)
-        return false;
+    StringView timeString(numberStart, position - numberStart);
+    if (timeString.isEmpty()) {
+        if (position >= end || *position != '.')
+            return false;
+    } else {
+        auto optionalNumber = parseHTMLNonNegativeInteger(timeString);
+        if (!optionalNumber)
+            return false;
+        time = optionalNumber.value();
+    }
 
     while (position < end && (isASCIIDigit(*position) || *position == '.'))
         ++position;
 
     if (position == end) {
-        parsedDelay = optionalNumber.value();
+        parsedDelay = time;
         return true;
     }
 
     if (*position != ';' && *position != ',' && !isHTMLSpace(*position))
         return false;
 
-    parsedDelay = optionalNumber.value();
+    parsedDelay = time;
 
     while (position < end && isHTMLSpace(*position))
         ++position;
@@ -463,7 +470,7 @@ AtomicString parseHTMLHashNameReference(StringView usemap)
 {
     size_t numberSignIndex = usemap.find('#');
     if (numberSignIndex == notFound)
-        return nullAtom;
+        return nullAtom();
     return usemap.substring(numberSignIndex + 1).toAtomicString();
 }
 

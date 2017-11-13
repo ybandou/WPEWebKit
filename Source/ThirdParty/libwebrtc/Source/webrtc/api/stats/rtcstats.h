@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "webrtc/base/checks.h"
-#include "webrtc/base/export.h"
 
 namespace webrtc {
 
@@ -141,7 +140,7 @@ class RTCStats {
 //
 #define WEBRTC_RTCSTATS_DECL()                                                 \
  public:                                                                       \
-  WEBRTC_DYLIB_EXPORT static const char kType[];                                                   \
+  static const char kType[];                                                   \
                                                                                \
   std::unique_ptr<webrtc::RTCStats> copy() const override;                     \
   const char* type() const override;                                           \

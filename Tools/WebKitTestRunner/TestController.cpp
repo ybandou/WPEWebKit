@@ -54,7 +54,6 @@
 #include <WebKit/WKPluginInformation.h>
 #include <WebKit/WKPreferencesRefPrivate.h>
 #include <WebKit/WKProtectionSpace.h>
-#include <WebKit/WKResourceLoadStatisticsManager.h>
 #include <WebKit/WKRetainPtr.h>
 #include <WebKit/WKSecurityOriginRef.h>
 #include <WebKit/WKTextChecker.h>
@@ -152,6 +151,8 @@ static bool runBeforeUnloadConfirmPanel(WKPageRef page, WKStringRef message, WKF
 static void runOpenPanel(WKPageRef page, WKFrameRef frame, WKOpenPanelParametersRef parameters, WKOpenPanelResultListenerRef resultListenerRef, const void*)
 {
     printf("OPEN FILE PANEL\n");
+    if (WKOpenPanelParametersGetAllowsDirectories(parameters))
+        printf("-> DIRECTORIES ARE ALLOWED\n");
     WKArrayRef fileURLs = TestController::singleton().openPanelFileURLs();
     if (!fileURLs || !WKArrayGetSize(fileURLs)) {
         WKOpenPanelResultListenerCancel(resultListenerRef);
@@ -388,6 +389,7 @@ void TestController::initialize(int argc, const char* argv[])
 #if PLATFORM(MAC)
     WebCoreTestSupport::installMockGamepadProvider();
 #endif
+
     WKRetainPtr<WKStringRef> pageGroupIdentifier(AdoptWK, WKStringCreateWithUTF8CString("WebKitTestRunnerPageGroup"));
     m_pageGroup.adopt(WKPageGroupCreateWithIdentifier(pageGroupIdentifier.get()));
 }
@@ -405,10 +407,12 @@ WKRetainPtr<WKContextConfigurationRef> TestController::generateContextConfigurat
 
         WKContextConfigurationSetApplicationCacheDirectory(configuration.get(), toWK(temporaryFolder + separator + "ApplicationCache").get());
         WKContextConfigurationSetDiskCacheDirectory(configuration.get(), toWK(temporaryFolder + separator + "Cache").get());
+        WKContextConfigurationSetCacheStorageDirectory(configuration.get(), toWK(temporaryFolder + separator + "CacheStorage").get());
         WKContextConfigurationSetIndexedDBDatabaseDirectory(configuration.get(), toWK(temporaryFolder + separator + "Databases" + separator + "IndexedDB").get());
         WKContextConfigurationSetLocalStorageDirectory(configuration.get(), toWK(temporaryFolder + separator + "LocalStorage").get());
         WKContextConfigurationSetWebSQLDatabaseDirectory(configuration.get(), toWK(temporaryFolder + separator + "Databases" + separator + "WebSQL").get());
         WKContextConfigurationSetMediaKeysStorageDirectory(configuration.get(), toWK(temporaryFolder + separator + "MediaKeys").get());
+        WKContextConfigurationSetResourceLoadStatisticsDirectory(configuration.get(), toWK(temporaryFolder + separator + "ResourceLoadStatistics").get());
     }
     return configuration;
 }
@@ -592,8 +596,8 @@ void TestController::createWebViewWithOptions(const TestOptions& options)
     };
     WKPageSetPageNavigationClient(m_mainWebView->page(), &pageNavigationClient.base);
 
-    WKContextDownloadClientV0 downloadClient = {
-        { 0, this },
+    WKContextDownloadClientV1 downloadClient = {
+        { 1, this },
         downloadDidStart,
         0, // didReceiveAuthenticationChallenge
         0, // didReceiveResponse
@@ -604,7 +608,8 @@ void TestController::createWebViewWithOptions(const TestOptions& options)
         downloadDidFinish,
         downloadDidFail,
         downloadDidCancel,
-        0 // processDidCrash;
+        0, // processDidCrash;
+        downloadDidReceiveServerRedirectToURL
     };
     WKContextSetDownloadClient(context(), &downloadClient.base);
     
@@ -674,12 +679,16 @@ void TestController::resetPreferencesToConsistentValues(const TestOptions& optio
     WKPreferencesSetArtificialPluginInitializationDelayEnabled(preferences, false);
     WKPreferencesSetTabToLinksEnabled(preferences, false);
     WKPreferencesSetInteractiveFormValidationEnabled(preferences, true);
+    WKPreferencesSetDisplayContentsEnabled(preferences, true);
+    WKPreferencesSetDataTransferItemsEnabled(preferences, true);
 
     WKPreferencesSetMockScrollbarsEnabled(preferences, options.useMockScrollbars);
     WKPreferencesSetNeedsSiteSpecificQuirks(preferences, options.needsSiteSpecificQuirks);
+    WKPreferencesSetAttachmentElementEnabled(preferences, options.enableAttachmentElement);
     WKPreferencesSetIntersectionObserverEnabled(preferences, options.enableIntersectionObserver);
     WKPreferencesSetModernMediaControlsEnabled(preferences, options.enableModernMediaControls);
     WKPreferencesSetCredentialManagementEnabled(preferences, options.enableCredentialManagement);
+    WKPreferencesSetIsSecureContextAttributeEnabled(preferences, options.enableIsSecureContextAttribute);
 
     static WKStringRef defaultTextEncoding = WKStringCreateWithUTF8CString("ISO-8859-1");
     WKPreferencesSetDefaultTextEncodingName(preferences, defaultTextEncoding);
@@ -713,15 +722,26 @@ void TestController::resetPreferencesToConsistentValues(const TestOptions& optio
     WKPreferencesSetStorageBlockingPolicy(preferences, kWKAllowAllStorage);
 
     WKPreferencesSetResourceTimingEnabled(preferences, true);
-
+    WKPreferencesSetUserTimingEnabled(preferences, true);
+    WKPreferencesSetMediaPreloadingEnabled(preferences, true);
     WKPreferencesSetMediaPlaybackAllowsInline(preferences, true);
     WKPreferencesSetInlineMediaPlaybackRequiresPlaysInlineAttribute(preferences, false);
+    WKPreferencesSetBeaconAPIEnabled(preferences, true);
+    WKPreferencesSetDirectoryUploadEnabled(preferences, true);
 
     WKCookieManagerDeleteAllCookies(WKContextGetCookieManager(m_context.get()));
 
     WKPreferencesSetMockCaptureDevicesEnabled(preferences, true);
     
     WKPreferencesSetLargeImageAsyncDecodingEnabled(preferences, false);
+
+    WKPreferencesSetInspectorAdditionsEnabled(preferences, options.enableInspectorAdditions);
+
+#if ENABLE(PAYMENT_REQUEST)
+    WKPreferencesSetPaymentRequestEnabled(preferences, true);
+#endif
+
+    WKPreferencesSetStorageAccessAPIEnabled(preferences, true);
 
     platformResetPreferencesToConsistentValues();
 }
@@ -799,8 +819,7 @@ bool TestController::resetStateToConsistentValues(const TestOptions& options)
     // Reset UserMedia permissions.
     m_userMediaPermissionRequests.clear();
     m_cachedUserMediaPermissions.clear();
-    m_isUserMediaPermissionSet = false;
-    m_isUserMediaPermissionAllowed = false;
+    setUserMediaPermission(true);
 
     // Reset Custom Policy Delegate.
     setCustomPolicyDelegate(false, false);
@@ -816,6 +835,7 @@ bool TestController::resetStateToConsistentValues(const TestOptions& options)
 
     m_shouldBlockAllPlugins = false;
 
+    m_shouldLogDownloadCallbacks = false;
     m_shouldLogHistoryClientCallbacks = false;
     m_shouldLogCanAuthenticateAgainstProtectionSpace = false;
 
@@ -833,6 +853,8 @@ bool TestController::resetStateToConsistentValues(const TestOptions& options)
     setIgnoresViewportScaleLimits(options.ignoresViewportScaleLimits);
 
     m_openPanelFileURLs = nullptr;
+    
+    statisticsResetToConsistentState();
 
     WKPageLoadURL(m_mainWebView->page(), blankURL());
     runUntil(m_doneResetting, m_currentInvocation->shortTimeout());
@@ -855,7 +877,9 @@ void TestController::reattachPageToWebProcess()
 const char* TestController::webProcessName()
 {
     // FIXME: Find a way to not hardcode the process name.
-#if PLATFORM(COCOA)
+#if PLATFORM(IOS) && !PLATFORM(IOS_SIMULATOR)
+    return "com.apple.WebKit.WebContent";
+#elif PLATFORM(COCOA)
     return "com.apple.WebKit.WebContent.Development";
 #else
     return "WebProcess";
@@ -865,7 +889,9 @@ const char* TestController::webProcessName()
 const char* TestController::networkProcessName()
 {
     // FIXME: Find a way to not hardcode the process name.
-#if PLATFORM(COCOA)
+#if PLATFORM(IOS) && !PLATFORM(IOS_SIMULATOR)
+    return "com.apple.WebKit.Networking";
+#elif PLATFORM(COCOA)
     return "com.apple.WebKit.Networking.Development";
 #else
     return "NetworkProcess";
@@ -875,8 +901,10 @@ const char* TestController::networkProcessName()
 const char* TestController::databaseProcessName()
 {
     // FIXME: Find a way to not hardcode the process name.
-#if PLATFORM(COCOA)
-    return "com.apple.WebKit.Databases.Development";
+#if PLATFORM(IOS) && !PLATFORM(IOS_SIMULATOR)
+    return "com.apple.WebKit.Databases";
+#elif PLATFORM(COCOA)
+    return "com.apple.WebKit.Storage.Development";
 #else
     return "DatabaseProcess";
 #endif
@@ -999,6 +1027,8 @@ static void updateTestOptionsFromTestHeader(TestOptions& testOptions, const std:
             testOptions.ignoresViewportScaleLimits = parseBooleanTestHeaderValue(value);
         if (key == "useCharacterSelectionGranularity")
             testOptions.useCharacterSelectionGranularity = parseBooleanTestHeaderValue(value);
+        if (key == "enableAttachmentElement")
+            testOptions.enableAttachmentElement = parseBooleanTestHeaderValue(value);
         if (key == "enableIntersectionObserver")
             testOptions.enableIntersectionObserver = parseBooleanTestHeaderValue(value);
         if (key == "enableModernMediaControls")
@@ -1007,6 +1037,10 @@ static void updateTestOptionsFromTestHeader(TestOptions& testOptions, const std:
             testOptions.enablePointerLock = parseBooleanTestHeaderValue(value);
         if (key == "enableCredentialManagement")
             testOptions.enableCredentialManagement = parseBooleanTestHeaderValue(value);
+        if (key == "enableIsSecureContextAttribute")
+            testOptions.enableIsSecureContextAttribute = parseBooleanTestHeaderValue(value);
+        if (key == "enableInspectorAdditions")
+            testOptions.enableInspectorAdditions = parseBooleanTestHeaderValue(value);
         pairStart = pairEnd + 1;
     }
 }
@@ -1702,21 +1736,28 @@ void TestController::downloadDidCancel(WKContextRef context, WKDownloadRef downl
     static_cast<TestController*>(const_cast<void*>(clientInfo))->downloadDidCancel(context, download);
 }
 
+void TestController::downloadDidReceiveServerRedirectToURL(WKContextRef context, WKDownloadRef download, WKURLRef url, const void* clientInfo)
+{
+    static_cast<TestController*>(const_cast<void*>(clientInfo))->downloadDidReceiveServerRedirectToURL(context, download, url);
+}
+
 void TestController::downloadDidStart(WKContextRef context, WKDownloadRef download)
 {
-    m_currentInvocation->outputText("Download started.\n");
+    if (m_shouldLogDownloadCallbacks)
+        m_currentInvocation->outputText("Download started.\n");
 }
 
 WKStringRef TestController::decideDestinationWithSuggestedFilename(WKContextRef, WKDownloadRef, WKStringRef filename, bool*& allowOverwrite)
 {
     String suggestedFilename = toWTFString(filename);
 
-    StringBuilder builder;
-    builder.append("Downloading URL with suggested filename \"");
-    builder.append(suggestedFilename);
-    builder.append("\"\n");
-
-    m_currentInvocation->outputText(builder.toString());
+    if (m_shouldLogDownloadCallbacks) {
+        StringBuilder builder;
+        builder.append("Downloading URL with suggested filename \"");
+        builder.append(suggestedFilename);
+        builder.append("\"\n");
+        m_currentInvocation->outputText(builder.toString());
+    }
 
     const char* dumpRenderTreeTemp = libraryPathForTesting();
     if (!dumpRenderTreeTemp)
@@ -1732,35 +1773,51 @@ WKStringRef TestController::decideDestinationWithSuggestedFilename(WKContextRef,
 
 void TestController::downloadDidFinish(WKContextRef, WKDownloadRef)
 {
-    m_currentInvocation->outputText("Download completed.\n");
+    if (m_shouldLogDownloadCallbacks)
+        m_currentInvocation->outputText("Download completed.\n");
     m_currentInvocation->notifyDownloadDone();
+}
+
+void TestController::downloadDidReceiveServerRedirectToURL(WKContextRef, WKDownloadRef, WKURLRef url)
+{
+    if (m_shouldLogDownloadCallbacks) {
+        StringBuilder builder;
+        builder.appendLiteral("Download was redirected to \"");
+        WKRetainPtr<WKStringRef> urlStringWK = adoptWK(WKURLCopyString(url));
+        builder.append(toSTD(urlStringWK).c_str());
+        builder.appendLiteral("\".\n");
+        m_currentInvocation->outputText(builder.toString());
+    }
 }
 
 void TestController::downloadDidFail(WKContextRef, WKDownloadRef, WKErrorRef error)
 {
-    String message = String::format("Download failed.\n");
-    m_currentInvocation->outputText(message);
-    
-    WKRetainPtr<WKStringRef> errorDomain = adoptWK(WKErrorCopyDomain(error));
-    WKRetainPtr<WKStringRef> errorDescription = adoptWK(WKErrorCopyLocalizedDescription(error));
-    int errorCode = WKErrorGetErrorCode(error);
+    if (m_shouldLogDownloadCallbacks) {
+        String message = String::format("Download failed.\n");
+        m_currentInvocation->outputText(message);
 
-    StringBuilder errorBuilder;
-    errorBuilder.append("Failed: ");
-    errorBuilder.append(toWTFString(errorDomain));
-    errorBuilder.append(", code=");
-    errorBuilder.appendNumber(errorCode);
-    errorBuilder.append(", description=");
-    errorBuilder.append(toWTFString(errorDescription));
-    errorBuilder.append("\n");
+        WKRetainPtr<WKStringRef> errorDomain = adoptWK(WKErrorCopyDomain(error));
+        WKRetainPtr<WKStringRef> errorDescription = adoptWK(WKErrorCopyLocalizedDescription(error));
+        int errorCode = WKErrorGetErrorCode(error);
 
-    m_currentInvocation->outputText(errorBuilder.toString());
+        StringBuilder errorBuilder;
+        errorBuilder.append("Failed: ");
+        errorBuilder.append(toWTFString(errorDomain));
+        errorBuilder.append(", code=");
+        errorBuilder.appendNumber(errorCode);
+        errorBuilder.append(", description=");
+        errorBuilder.append(toWTFString(errorDescription));
+        errorBuilder.append("\n");
+
+        m_currentInvocation->outputText(errorBuilder.toString());
+    }
     m_currentInvocation->notifyDownloadDone();
 }
 
 void TestController::downloadDidCancel(WKContextRef, WKDownloadRef)
 {
-    m_currentInvocation->outputText("Download cancelled.\n");
+    if (m_shouldLogDownloadCallbacks)
+        m_currentInvocation->outputText("Download cancelled.\n");
     m_currentInvocation->notifyDownloadDone();
 }
 
@@ -1876,6 +1933,11 @@ void TestController::setUserMediaPermission(bool enabled)
     m_isUserMediaPermissionSet = true;
     m_isUserMediaPermissionAllowed = enabled;
     decidePolicyForUserMediaPermissionRequestIfPossible();
+}
+
+void TestController::resetUserMediaPermission()
+{
+    m_isUserMediaPermissionSet = false;
 }
 
 class OriginSettings : public RefCounted<OriginSettings> {
@@ -2188,96 +2250,6 @@ void TestController::setIgnoresViewportScaleLimits(bool ignoresViewportScaleLimi
     WKPageSetIgnoresViewportScaleLimits(m_mainWebView->page(), ignoresViewportScaleLimits);
 }
 
-void TestController::setStatisticsPrevalentResource(WKStringRef hostName, bool value)
-{
-    WKResourceLoadStatisticsManagerSetPrevalentResource(hostName, value);
-}
-
-bool TestController::isStatisticsPrevalentResource(WKStringRef hostName)
-{
-    return WKResourceLoadStatisticsManagerIsPrevalentResource(hostName);
-}
-
-void TestController::setStatisticsHasHadUserInteraction(WKStringRef hostName, bool value)
-{
-    WKResourceLoadStatisticsManagerSetHasHadUserInteraction(hostName, value);
-}
-
-bool TestController::isStatisticsHasHadUserInteraction(WKStringRef hostName)
-{
-    return WKResourceLoadStatisticsManagerIsHasHadUserInteraction(hostName);
-}
-
-void TestController::setStatisticsSubframeUnderTopFrameOrigin(WKStringRef hostName, WKStringRef topFrameHostName)
-{
-    WKResourceLoadStatisticsManagerSetSubframeUnderTopFrameOrigin(hostName, topFrameHostName);
-}
-
-void TestController::setStatisticsSubresourceUnderTopFrameOrigin(WKStringRef hostName, WKStringRef topFrameHostName)
-{
-    WKResourceLoadStatisticsManagerSetSubresourceUnderTopFrameOrigin(hostName, topFrameHostName);
-}
-    
-void TestController::setStatisticsSubresourceUniqueRedirectTo(WKStringRef hostName, WKStringRef hostNameRedirectedTo)
-{
-    WKResourceLoadStatisticsManagerSetSubresourceUniqueRedirectTo(hostName, hostNameRedirectedTo);
-}
-
-void TestController::setStatisticsTimeToLiveUserInteraction(double seconds)
-{
-    WKResourceLoadStatisticsManagerSetTimeToLiveUserInteraction(seconds);
-}
-
-void TestController::setStatisticsTimeToLiveCookiePartitionFree(double seconds)
-{
-    WKResourceLoadStatisticsManagerSetTimeToLiveCookiePartitionFree(seconds);
-}
-
-void TestController::statisticsFireDataModificationHandler()
-{
-    WKResourceLoadStatisticsManagerFireDataModificationHandler();
-}
-    
-void TestController::statisticsFireShouldPartitionCookiesHandler()
-{
-    WKResourceLoadStatisticsManagerFireShouldPartitionCookiesHandler();
-}
-
-void TestController::statisticsFireShouldPartitionCookiesHandlerForOneDomain(WKStringRef hostName, bool value)
-{
-    WKResourceLoadStatisticsManagerFireShouldPartitionCookiesHandlerForOneDomain(hostName, value);
-}
-
-void TestController::setStatisticsNotifyPagesWhenDataRecordsWereScanned(bool value)
-{
-    WKResourceLoadStatisticsManagerSetNotifyPagesWhenDataRecordsWereScanned(value);
-}
-    
-void TestController::setStatisticsShouldClassifyResourcesBeforeDataRecordsRemoval(bool value)
-{
-    WKResourceLoadStatisticsManagerSetShouldClassifyResourcesBeforeDataRecordsRemoval(value);
-}
-
-void TestController::setStatisticsMinimumTimeBetweeenDataRecordsRemoval(double seconds)
-{
-    WKResourceLoadStatisticsManagerSetMinimumTimeBetweeenDataRecordsRemoval(seconds);
-}
-
-void TestController::statisticsClearInMemoryAndPersistentStore()
-{
-    WKResourceLoadStatisticsManagerClearInMemoryAndPersistentStore();
-}
-
-void TestController::statisticsClearInMemoryAndPersistentStoreModifiedSinceHours(unsigned hours)
-{
-    WKResourceLoadStatisticsManagerClearInMemoryAndPersistentStoreModifiedSinceHours(hours);
-}
-    
-void TestController::statisticsResetToConsistentState()
-{
-    WKResourceLoadStatisticsManagerResetToConsistentState();
-}
-
 void TestController::terminateNetworkProcess()
 {
     WKContextTerminateNetworkProcess(platformContext());
@@ -2311,6 +2283,125 @@ void TestController::platformResetStateToConsistentValues()
 unsigned TestController::imageCountInGeneralPasteboard() const
 {
     return 0;
+}
+
+void TestController::removeAllSessionCredentials()
+{
+}
+
+#endif
+
+#if !PLATFORM(COCOA) || !WK_API_ENABLED
+
+void TestController::setStatisticsLastSeen(WKStringRef, double)
+{
+}
+    
+void TestController::setStatisticsPrevalentResource(WKStringRef, bool)
+{
+}
+
+bool TestController::isStatisticsPrevalentResource(WKStringRef)
+{
+    return false;
+}
+
+void TestController::setStatisticsHasHadUserInteraction(WKStringRef, bool)
+{
+}
+
+bool TestController::isStatisticsHasHadUserInteraction(WKStringRef)
+{
+    return false;
+}
+
+void TestController::setStatisticsGrandfathered(WKStringRef, bool)
+{
+}
+
+bool TestController::isStatisticsGrandfathered(WKStringRef)
+{
+    return false;
+}
+
+void TestController::setStatisticsSubframeUnderTopFrameOrigin(WKStringRef, WKStringRef)
+{
+}
+
+void TestController::setStatisticsSubresourceUnderTopFrameOrigin(WKStringRef, WKStringRef)
+{
+}
+
+void TestController::setStatisticsSubresourceUniqueRedirectTo(WKStringRef, WKStringRef)
+{
+}
+
+void TestController::setStatisticsTimeToLiveUserInteraction(double)
+{
+}
+
+void TestController::setStatisticsTimeToLiveCookiePartitionFree(double)
+{
+}
+
+void TestController::statisticsProcessStatisticsAndDataRecords()
+{
+}
+
+void TestController::statisticsUpdateCookiePartitioning()
+{
+}
+
+void TestController::statisticsSetShouldPartitionCookiesForHost(WKStringRef, bool)
+{
+}
+
+void TestController::statisticsSubmitTelemetry()
+{
+}
+
+void TestController::setStatisticsNotifyPagesWhenDataRecordsWereScanned(bool)
+{
+}
+
+void TestController::setStatisticsShouldClassifyResourcesBeforeDataRecordsRemoval(bool)
+{
+}
+
+void TestController::setStatisticsNotifyPagesWhenTelemetryWasCaptured(bool)
+{
+}
+
+void TestController::setStatisticsMinimumTimeBetweenDataRecordsRemoval(double)
+{
+}
+
+void TestController::setStatisticsGrandfatheringTime(double)
+{
+}
+
+void TestController::setStatisticsMaxStatisticsEntries(unsigned)
+{
+}
+    
+void TestController::setStatisticsPruneEntriesDownTo(unsigned)
+{
+}
+    
+void TestController::statisticsClearInMemoryAndPersistentStore()
+{
+}
+
+void TestController::statisticsClearInMemoryAndPersistentStoreModifiedSinceHours(unsigned)
+{
+}
+
+void TestController::statisticsClearThroughWebsiteDataRemoval()
+{
+}
+
+void TestController::statisticsResetToConsistentState()
+{
 }
 
 #endif

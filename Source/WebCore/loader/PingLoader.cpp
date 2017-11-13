@@ -36,11 +36,9 @@
 
 #include "ContentSecurityPolicy.h"
 #include "Document.h"
-#include "FormData.h"
 #include "Frame.h"
 #include "FrameLoader.h"
 #include "FrameLoaderClient.h"
-#include "HTTPHeaderNames.h"
 #include "InspectorInstrumentation.h"
 #include "LoaderStrategy.h"
 #include "Page.h"
@@ -100,12 +98,15 @@ void PingLoader::loadImage(Frame& frame, const URL& url)
     document.contentSecurityPolicy()->upgradeInsecureRequestIfNeeded(request, ContentSecurityPolicy::InsecureRequestType::Load);
 
     request.setHTTPHeaderField(HTTPHeaderName::CacheControl, "max-age=0");
+
+    HTTPHeaderMap originalRequestHeader = request.httpHeaderFields();
+
     String referrer = SecurityPolicy::generateReferrerHeader(document.referrerPolicy(), request.url(), frame.loader().outgoingReferrer());
     if (!referrer.isEmpty())
         request.setHTTPReferrer(referrer);
     frame.loader().addExtraFieldsToSubresourceRequest(request);
 
-    startPingLoad(frame, request, ShouldFollowRedirects::Yes);
+    startPingLoad(frame, request, WTFMove(originalRequestHeader), ShouldFollowRedirects::Yes);
 }
 
 // http://www.whatwg.org/specs/web-apps/current-work/multipage/links.html#hyperlink-auditing
@@ -127,6 +128,9 @@ void PingLoader::sendPing(Frame& frame, const URL& pingURL, const URL& destinati
     request.setHTTPContentType("text/ping");
     request.setHTTPBody(FormData::create("PING"));
     request.setHTTPHeaderField(HTTPHeaderName::CacheControl, "max-age=0");
+
+    HTTPHeaderMap originalRequestHeader = request.httpHeaderFields();
+
     frame.loader().addExtraFieldsToSubresourceRequest(request);
 
     auto& sourceOrigin = document.securityOrigin();
@@ -141,7 +145,7 @@ void PingLoader::sendPing(Frame& frame, const URL& pingURL, const URL& destinati
         }
     }
 
-    startPingLoad(frame, request, ShouldFollowRedirects::Yes);
+    startPingLoad(frame, request, WTFMove(originalRequestHeader), ShouldFollowRedirects::Yes);
 }
 
 void PingLoader::sendViolationReport(Frame& frame, const URL& reportURL, Ref<FormData>&& report, ViolationReportType reportType)
@@ -172,16 +176,18 @@ void PingLoader::sendViolationReport(Frame& frame, const URL& reportURL, Ref<For
     if (removeCookies)
         request.setAllowCookies(false);
 
+    HTTPHeaderMap originalRequestHeader = request.httpHeaderFields();
+
     frame.loader().addExtraFieldsToSubresourceRequest(request);
 
     String referrer = SecurityPolicy::generateReferrerHeader(document.referrerPolicy(), reportURL, frame.loader().outgoingReferrer());
     if (!referrer.isEmpty())
         request.setHTTPReferrer(referrer);
 
-    startPingLoad(frame, request, ShouldFollowRedirects::No);
+    startPingLoad(frame, request, WTFMove(originalRequestHeader), ShouldFollowRedirects::No);
 }
 
-void PingLoader::startPingLoad(Frame& frame, ResourceRequest& request, ShouldFollowRedirects shouldFollowRedirects)
+void PingLoader::startPingLoad(Frame& frame, ResourceRequest& request, HTTPHeaderMap&& originalRequestHeaders, ShouldFollowRedirects shouldFollowRedirects)
 {
     unsigned long identifier = frame.page()->progress().createUniqueIdentifier();
     // FIXME: Why activeDocumentLoader? I would have expected documentLoader().
@@ -190,10 +196,13 @@ void PingLoader::startPingLoad(Frame& frame, ResourceRequest& request, ShouldFol
     // with the provisional DocumentLoader if there is a provisional
     // DocumentLoader.
     bool shouldUseCredentialStorage = frame.loader().client().shouldUseCredentialStorage(frame.loader().activeDocumentLoader(), identifier);
+    FetchOptions options;
+    options.credentials = shouldUseCredentialStorage ? FetchOptions::Credentials::Include : FetchOptions::Credentials::Omit;
+    options.redirect = shouldFollowRedirects == ShouldFollowRedirects::Yes ? FetchOptions::Redirect::Follow : FetchOptions::Redirect::Error;
 
     InspectorInstrumentation::continueAfterPingLoader(frame, identifier, frame.loader().activeDocumentLoader(), request, ResourceResponse());
 
-    platformStrategies()->loaderStrategy()->createPingHandle(frame.loader().networkingContext(), request, shouldUseCredentialStorage, shouldFollowRedirects == ShouldFollowRedirects::Yes);
+    platformStrategies()->loaderStrategy()->startPingLoad(frame, request, WTFMove(originalRequestHeaders), options);
 }
 
 }

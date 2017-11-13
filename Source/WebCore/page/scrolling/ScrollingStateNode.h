@@ -29,15 +29,19 @@
 
 #include "GraphicsLayer.h"
 #include "ScrollingCoordinator.h"
+#include <stdint.h>
 #include <wtf/RefCounted.h>
 #include <wtf/TypeCasts.h>
 #include <wtf/Vector.h>
+
+namespace WTF {
+class TextStream;
+}
 
 namespace WebCore {
 
 class GraphicsLayer;
 class ScrollingStateTree;
-class TextStream;
 
 // Used to allow ScrollingStateNodes to refer to layers in various contexts:
 // a) Async scrolling, main thread: ScrollingStateNode holds onto a GraphicsLayer, and uses m_layerID
@@ -202,12 +206,12 @@ public:
 
     enum {
         ScrollLayer = 0,
-        NumStateNodeBits = 1
+        NumStateNodeBits // This must remain at the last position.
     };
-    typedef unsigned ChangedProperties;
+    typedef uint64_t ChangedProperties;
 
     bool hasChangedProperties() const { return m_changedProperties; }
-    bool hasChangedProperty(unsigned propertyBit) const { return m_changedProperties & (1 << propertyBit); }
+    bool hasChangedProperty(unsigned propertyBit) const { return m_changedProperties & (static_cast<ChangedProperties>(1) << propertyBit); }
     void resetChangedProperties() { m_changedProperties = 0; }
     void setPropertyChanged(unsigned propertyBit);
 
@@ -236,10 +240,10 @@ public:
 protected:
     ScrollingStateNode(const ScrollingStateNode&, ScrollingStateTree&);
 
-    virtual void dumpProperties(TextStream&, ScrollingStateTreeAsTextBehavior) const;
+    virtual void dumpProperties(WTF::TextStream&, ScrollingStateTreeAsTextBehavior) const;
     
 private:
-    void dump(TextStream&, ScrollingStateTreeAsTextBehavior) const;
+    void dump(WTF::TextStream&, ScrollingStateTreeAsTextBehavior) const;
 
     const ScrollingNodeType m_nodeType;
     ScrollingNodeID m_nodeID;

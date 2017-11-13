@@ -205,7 +205,7 @@ void StackVisitor::readInlinedFrame(CallFrame* callFrame, CodeOrigin* codeOrigin
         if (inlineCallFrame->argumentCountRegister.isValid())
             m_frame.m_argumentCountIncludingThis = callFrame->r(inlineCallFrame->argumentCountRegister.offset()).unboxedInt32();
         else
-            m_frame.m_argumentCountIncludingThis = inlineCallFrame->arguments.size();
+            m_frame.m_argumentCountIncludingThis = inlineCallFrame->argumentCountIncludingThis;
         m_frame.m_codeBlock = inlineCallFrame->baselineCodeBlock.get();
         m_frame.m_bytecodeOffset = codeOrigin->bytecodeIndex;
 
@@ -224,11 +224,6 @@ void StackVisitor::readInlinedFrame(CallFrame* callFrame, CodeOrigin* codeOrigin
     readNonInlinedFrame(callFrame, codeOrigin);
 }
 #endif // ENABLE(DFG_JIT)
-
-bool StackVisitor::Frame::isWasmFrame() const
-{
-    return m_isWasmFrame;
-}
 
 StackVisitor::Frame::CodeType StackVisitor::Frame::codeType() const
 {

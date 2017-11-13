@@ -48,31 +48,23 @@ bool GenericArguments<Type>::getOwnPropertySlot(JSObject* object, ExecState* exe
     
     if (!thisObject->overrodeThings()) {
         if (ident == vm.propertyNames->length) {
-            slot.setValue(thisObject, DontEnum, jsNumber(thisObject->internalLength()));
+            slot.setValue(thisObject, static_cast<unsigned>(PropertyAttribute::DontEnum), jsNumber(thisObject->internalLength()));
             return true;
         }
         if (ident == vm.propertyNames->callee) {
-            slot.setValue(thisObject, DontEnum, thisObject->callee().get());
+            slot.setValue(thisObject, static_cast<unsigned>(PropertyAttribute::DontEnum), thisObject->callee().get());
             return true;
         }
         if (ident == vm.propertyNames->iteratorSymbol) {
-            slot.setValue(thisObject, DontEnum, thisObject->globalObject()->arrayProtoValuesFunction());
+            slot.setValue(thisObject, static_cast<unsigned>(PropertyAttribute::DontEnum), thisObject->globalObject()->arrayProtoValuesFunction());
             return true;
         }
     }
     
-    std::optional<uint32_t> index = parseIndex(ident);
-    if (index && !thisObject->isModifiedArgumentDescriptor(index.value()) && thisObject->isMappedArgument(index.value())) {
-        slot.setValue(thisObject, None, thisObject->getIndexQuickly(index.value()));
-        return true;
-    }
-    
-    bool result = Base::getOwnPropertySlot(thisObject, exec, ident, slot);
-    
-    if (index && thisObject->isMappedArgument(index.value()))
-        slot.setValue(thisObject, slot.attributes(), thisObject->getIndexQuickly(index.value()));
-    
-    return result;
+    if (std::optional<uint32_t> index = parseIndex(ident))
+        return GenericArguments<Type>::getOwnPropertySlotByIndex(thisObject, exec, *index, slot);
+
+    return Base::getOwnPropertySlot(thisObject, exec, ident, slot);
 }
 
 template<typename Type>
@@ -81,14 +73,17 @@ bool GenericArguments<Type>::getOwnPropertySlotByIndex(JSObject* object, ExecSta
     Type* thisObject = jsCast<Type*>(object);
     
     if (!thisObject->isModifiedArgumentDescriptor(index) && thisObject->isMappedArgument(index)) {
-        slot.setValue(thisObject, None, thisObject->getIndexQuickly(index));
+        slot.setValue(thisObject, static_cast<unsigned>(PropertyAttribute::None), thisObject->getIndexQuickly(index));
         return true;
     }
     
     bool result = Base::getOwnPropertySlotByIndex(object, exec, index, slot);
     
-    if (thisObject->isMappedArgument(index))
+    if (thisObject->isMappedArgument(index)) {
+        ASSERT(result);
         slot.setValue(thisObject, slot.attributes(), thisObject->getIndexQuickly(index));
+        return true;
+    }
     
     return result;
 }
@@ -107,10 +102,11 @@ void GenericArguments<Type>::getOwnPropertyNames(JSObject* object, ExecState* ex
     }
 
     if (mode.includeDontEnumProperties() && !thisObject->overrodeThings()) {
-        array.add(exec->propertyNames().length);
-        array.add(exec->propertyNames().callee);
+        VM& vm = exec->vm();
+        array.add(vm.propertyNames->length);
+        array.add(vm.propertyNames->callee);
         if (array.includeSymbolProperties())
-            array.add(exec->propertyNames().iteratorSymbol);
+            array.add(vm.propertyNames->iteratorSymbol);
     }
     Base::getOwnPropertyNames(thisObject, exec, array, mode);
 }
@@ -170,13 +166,9 @@ bool GenericArguments<Type>::deleteProperty(JSCell* cell, ExecState* exec, Prope
             || ident == vm.propertyNames->iteratorSymbol))
         thisObject->overrideThings(vm);
     
-    std::optional<uint32_t> index = parseIndex(ident);
-    if (index && !thisObject->isModifiedArgumentDescriptor(index.value()) && thisObject->isMappedArgument(index.value())) {
-        thisObject->unmapArgument(vm, index.value());
-        thisObject->setModifiedArgumentDescriptor(vm, index.value());
-        return true;
-    }
-    
+    if (std::optional<uint32_t> index = parseIndex(ident))
+        return GenericArguments<Type>::deletePropertyByIndex(thisObject, exec, *index);
+
     return Base::deleteProperty(thisObject, exec, ident);
 }
 
@@ -186,13 +178,21 @@ bool GenericArguments<Type>::deletePropertyByIndex(JSCell* cell, ExecState* exec
     Type* thisObject = jsCast<Type*>(cell);
     VM& vm = exec->vm();
 
-    if (!thisObject->isModifiedArgumentDescriptor(index) && thisObject->isMappedArgument(index)) {
-        thisObject->unmapArgument(vm, index);
+    bool propertyMightBeInJSObjectStorage = thisObject->isModifiedArgumentDescriptor(index) || !thisObject->isMappedArgument(index);
+    bool deletedProperty = true;
+    if (propertyMightBeInJSObjectStorage)
+        deletedProperty = Base::deletePropertyByIndex(cell, exec, index);
+
+    if (deletedProperty) {
+        // Deleting an indexed property unconditionally unmaps it.
+        if (thisObject->isMappedArgument(index)) {
+            // We need to check that the property was mapped so we don't write to random memory.
+            thisObject->unmapArgument(vm, index);
+        }
         thisObject->setModifiedArgumentDescriptor(vm, index);
-        return true;
     }
 
-    return Base::deletePropertyByIndex(cell, exec, index);
+    return deletedProperty;
 }
 
 template<typename Type>
@@ -243,6 +243,7 @@ bool GenericArguments<Type>::defineOwnProperty(JSObject* object, ExecState* exec
                         JSValue value = thisObject->getIndexQuickly(index);
                         ASSERT(value);
                         object->putDirectMayBeIndex(exec, ident, value);
+                        scope.assertNoException();
                     }
                     thisObject->unmapArgument(vm, index);
                     thisObject->setModifiedArgumentDescriptor(vm, index);
@@ -262,7 +263,7 @@ void GenericArguments<Type>::initModifiedArgumentsDescriptor(VM& vm, unsigned ar
     RELEASE_ASSERT(!m_modifiedArgumentsDescriptor);
 
     if (argsLength) {
-        void* backingStore = vm.auxiliarySpace.tryAllocate(WTF::roundUpToMultipleOf<8>(argsLength));
+        void* backingStore = vm.gigacageAuxiliarySpace(m_modifiedArgumentsDescriptor.kind).tryAllocate(WTF::roundUpToMultipleOf<8>(argsLength));
         RELEASE_ASSERT(backingStore);
         bool* modifiedArguments = static_cast<bool*>(backingStore);
         m_modifiedArgumentsDescriptor.set(vm, this, modifiedArguments);
@@ -283,7 +284,7 @@ void GenericArguments<Type>::setModifiedArgumentDescriptor(VM& vm, unsigned inde
 {
     initModifiedArgumentsDescriptorIfNecessary(vm, length);
     if (index < length)
-        m_modifiedArgumentsDescriptor.get()[index] = true;
+        m_modifiedArgumentsDescriptor[index] = true;
 }
 
 template<typename Type>
@@ -292,7 +293,7 @@ bool GenericArguments<Type>::isModifiedArgumentDescriptor(unsigned index, unsign
     if (!m_modifiedArgumentsDescriptor)
         return false;
     if (index < length)
-        return m_modifiedArgumentsDescriptor.get()[index];
+        return m_modifiedArgumentsDescriptor[index];
     return false;
 }
 

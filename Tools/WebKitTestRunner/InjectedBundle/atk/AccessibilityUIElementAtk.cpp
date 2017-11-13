@@ -82,6 +82,10 @@ enum AttributesIndex {
     PlaceholderNameIndex,
     SortNameIndex,
     CurrentNameIndex,
+    AriaLiveNameIndex,
+    AriaAtomicNameIndex,
+    AriaRelevantNameIndex,
+    BusyNameIndex,
 
     // Attribute values.
     SortAscendingValueIndex,
@@ -106,6 +110,10 @@ const String attributesMap[][2] = {
     { "AXPlaceholderValue", "placeholder-text" } ,
     { "AXSortDirection", "sort" },
     { "AXARIACurrent", "current" },
+    { "AXARIALive", "live" },
+    { "AXARIAAtomic", "atomic" },
+    { "AXARIARelevant", "relevant" },
+    { "AXElementBusy", "busy" },
 
     // Attribute values.
     { "AXAscendingSortDirection", "ascending" },
@@ -562,6 +570,10 @@ const gchar* roleToString(AtkObject* object)
     case ATK_ROLE_SUPERSCRIPT:
         return "AXSuperscript";
 #endif
+#if ATK_CHECK_VERSION(2, 25, 2)
+    case ATK_ROLE_FOOTNOTE:
+        return "AXFootnote";
+#endif
     default:
         // We want to distinguish ATK_ROLE_UNKNOWN from a known AtkRole which
         // our DRT isn't properly handling.
@@ -858,8 +870,12 @@ RefPtr<AccessibilityUIElement> AccessibilityUIElement::linkedUIElementAtIndex(un
 
 RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaOwnsElementAtIndex(unsigned index)
 {
-    // FIXME: implement
-    return nullptr;
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_NODE_PARENT_OF, index);
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaOwnsReferencingElementAtIndex(unsigned index)
+{
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_NODE_CHILD_OF, index);
 }
 
 RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaFlowToElementAtIndex(unsigned index)
@@ -867,9 +883,71 @@ RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaFlowToElementAtIndex(
     return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_FLOWS_TO, index);
 }
 
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaFlowToReferencingElementAtIndex(unsigned index)
+{
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_FLOWS_FROM, index);
+}
+
 RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaControlsElementAtIndex(unsigned index)
 {
     return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_CONTROLLER_FOR, index);
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaControlsReferencingElementAtIndex(unsigned index)
+{
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_CONTROLLED_BY, index);
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaLabelledByElementAtIndex(unsigned index)
+{
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_LABELLED_BY, index);
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaLabelledByReferencingElementAtIndex(unsigned index)
+{
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_LABEL_FOR, index);
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaDescribedByElementAtIndex(unsigned index)
+{
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_DESCRIBED_BY, index);
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaDescribedByReferencingElementAtIndex(unsigned index)
+{
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_DESCRIPTION_FOR, index);
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaDetailsElementAtIndex(unsigned index)
+{
+#if ATK_CHECK_VERSION(2, 25, 2)
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_DETAILS, index);
+#endif
+    return nullptr;
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaDetailsReferencingElementAtIndex(unsigned index)
+{
+#if ATK_CHECK_VERSION(2, 25, 2)
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_DETAILS_FOR, index);
+#endif
+    return nullptr;
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaErrorMessageElementAtIndex(unsigned index)
+{
+#if ATK_CHECK_VERSION(2, 25, 2)
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_ERROR_MESSAGE, index);
+#endif
+    return nullptr;
+}
+
+RefPtr<AccessibilityUIElement> AccessibilityUIElement::ariaErrorMessageReferencingElementAtIndex(unsigned index)
+{
+#if ATK_CHECK_VERSION(2, 25, 2)
+    return accessibilityElementAtIndex(m_element.get(), ATK_RELATION_ERROR_FOR, index);
+#endif
+    return nullptr;
 }
 
 RefPtr<AccessibilityUIElement> AccessibilityUIElement::disclosedRowAtIndex(unsigned index)
@@ -1146,6 +1224,11 @@ bool AccessibilityUIElement::boolAttributeValue(JSStringRef attribute)
     if (attributeString == "AXInterfaceTableCell")
         return ATK_IS_TABLE_CELL(m_element.get());
 
+    if (attributeString == "AXARIAAtomic") {
+        String atkAttribute = coreAttributeToAtkAttribute(attribute);
+        return getAttributeSetValueForId(ATK_OBJECT(m_element.get()), ObjectAttributeType, atkAttribute) == "true";
+    }
+
     return false;
 }
 
@@ -1213,10 +1296,18 @@ bool AccessibilityUIElement::isAttributeSupported(JSStringRef attribute)
     if (atkAttributeName.isEmpty())
         return false;
 
+    // In ATK, "busy" is a state and is supported on all AtkObject instances.
+    if (atkAttributeName == "busy")
+        return true;
+
     // For now, an attribute is supported whether it's exposed as a object or a text attribute.
     String attributeValue = getAttributeSetValueForId(ATK_OBJECT(m_element.get()), ObjectAttributeType, atkAttributeName);
     if (attributeValue.isEmpty())
         attributeValue = getAttributeSetValueForId(ATK_OBJECT(m_element.get()), TextAttributeType, atkAttributeName);
+
+    // When the aria-live value is "off", we expose that value via the "live" object attribute.
+    if (atkAttributeName == "live" && attributeValue == "off")
+        return false;
 
     return !attributeValue.isEmpty();
 }
@@ -1345,7 +1436,7 @@ JSRetainPtr<JSStringRef> AccessibilityUIElement::helpText() const
     StringBuilder builder;
     builder.append("AXHelp: ");
 
-    for (int targetCount = 0; targetCount < targetList->len; targetCount++) {
+    for (guint targetCount = 0; targetCount < targetList->len; targetCount++) {
         if (AtkObject* target = static_cast<AtkObject*>(g_ptr_array_index(targetList, targetCount))) {
             GUniquePtr<gchar> text(atk_text_get_text(ATK_TEXT(target), 0, -1));
             if (targetCount)
@@ -1686,7 +1777,7 @@ JSRetainPtr<JSStringRef> AccessibilityUIElement::attributedStringForRange(unsign
     AtkAttributeSet* attributeSet;
     AtkText* text = ATK_TEXT(m_element.get());
     gint start = 0, end = 0;
-    for (int i = location; i < location + length; i = end) {
+    for (unsigned i = location; i < location + length; i = end) {
         AtkAttributeSet* attributeSet = atk_text_get_run_attributes(text, i, &start, &end);
         GUniquePtr<gchar> substring(replaceCharactersForResults(atk_text_get_text(text, start, end)));
         builder.append(String::format("\n\tRange attributes for '%s':\n\t\t", substring.get()));

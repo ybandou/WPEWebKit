@@ -28,6 +28,7 @@
 
 #include "BitmapImage.h"
 #include "BorderEdge.h"
+#include "CachedImage.h"
 #include "FloatRoundedRect.h"
 #include "Frame.h"
 #include "FrameView.h"
@@ -35,6 +36,7 @@
 #include "GraphicsContext.h"
 #include "HTMLFrameOwnerElement.h"
 #include "HTMLFrameSetElement.h"
+#include "HTMLImageElement.h"
 #include "HTMLNames.h"
 #include "ImageBuffer.h"
 #include "ImageQualityController.h"
@@ -46,8 +48,6 @@
 #include "RenderLayerBacking.h"
 #include "RenderLayerCompositor.h"
 #include "RenderMultiColumnFlowThread.h"
-#include "RenderNamedFlowFragment.h"
-#include "RenderNamedFlowThread.h"
 #include "RenderRegion.h"
 #include "RenderTable.h"
 #include "RenderTableRow.h"
@@ -60,6 +60,10 @@
 #include <wtf/NeverDestroyed.h>
 #if !ASSERT_DISABLED
 #include <wtf/SetForScope.h>
+#endif
+
+#if PLATFORM(IOS)
+#include "RuntimeApplicationChecks.h"
 #endif
 
 namespace WebCore {
@@ -301,7 +305,44 @@ bool RenderBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
 
     return false;
 }
+
+DecodingMode RenderBoxModelObject::decodingModeForImageDraw(const Image& image, const PaintInfo& paintInfo) const
+{
+    if (!is<BitmapImage>(image))
+        return DecodingMode::Synchronous;
     
+    const BitmapImage& bitmapImage = downcast<BitmapImage>(image);
+    if (bitmapImage.canAnimate()) {
+        // The DecodingMode for the current frame has to be Synchronous. The DecodingMode
+        // for the next frame will be calculated in BitmapImage::internalStartAnimation().
+        return DecodingMode::Synchronous;
+    }
+
+    // Large image case.
+#if PLATFORM(IOS)
+    if (IOSApplication::isIBooksStorytime())
+        return DecodingMode::Synchronous;
+#endif
+    if (bitmapImage.isLargeImageAsyncDecodingEnabledForTesting())
+        return DecodingMode::Asynchronous;
+    if (is<HTMLImageElement>(element()) && element()->hasAttribute(asyncAttr))
+        return DecodingMode::Asynchronous;
+    if (document().isImageDocument())
+        return DecodingMode::Synchronous;
+    if (paintInfo.paintBehavior & PaintBehaviorSnapshotting)
+        return DecodingMode::Synchronous;
+    if (!settings().largeImageAsyncDecodingEnabled())
+        return DecodingMode::Synchronous;
+    if (!bitmapImage.canUseAsyncDecodingForLargeImages())
+        return DecodingMode::Synchronous;
+    if (paintInfo.paintBehavior & PaintBehaviorTileFirstPaint)
+        return DecodingMode::Asynchronous;
+    // FIXME: isVisibleInViewport() is not cheap. Find a way to make this condition faster.
+    if (!isVisibleInViewport())
+        return DecodingMode::Asynchronous;
+    return DecodingMode::Synchronous;
+}
+
 LayoutSize RenderBoxModelObject::relativePositionOffset() const
 {
     // This function has been optimized to avoid calls to containingBlock() in the common case
@@ -368,7 +409,7 @@ LayoutPoint RenderBoxModelObject::adjustedPositionRelativeToOffsetParent(const L
             // Since we will bypass the body’s renderer anyway, just end the loop if we encounter a region flow (named flow thread).
             // See http://dev.w3.org/csswg/css-regions/#cssomview-offset-attributes
             auto* ancestor = parent();
-            while (ancestor != offsetParent && !is<RenderNamedFlowThread>(*ancestor)) {
+            while (ancestor != offsetParent) {
                 // FIXME: What are we supposed to do inside SVG content?
                 
                 if (is<RenderMultiColumnFlowThread>(*ancestor)) {
@@ -384,11 +425,7 @@ LayoutPoint RenderBoxModelObject::adjustedPositionRelativeToOffsetParent(const L
                 ancestor = ancestor->parent();
             }
             
-            // Compute the offset position for elements inside named flow threads for which the offsetParent was the body.
-            // See https://bugs.webkit.org/show_bug.cgi?id=115899
-            if (is<RenderNamedFlowThread>(*ancestor))
-                referencePoint = downcast<RenderNamedFlowThread>(*ancestor).adjustedPositionRelativeToOffsetParent(*this, referencePoint);
-            else if (is<RenderBox>(*offsetParent) && offsetParent->isBody() && !offsetParent->isPositioned())
+            if (is<RenderBox>(*offsetParent) && offsetParent->isBody() && !offsetParent->isPositioned())
                 referencePoint.moveBy(downcast<RenderBox>(*offsetParent).topLeftLocation());
         }
     }
@@ -642,7 +679,7 @@ InterpolationQuality RenderBoxModelObject::chooseInterpolationQuality(GraphicsCo
 void RenderBoxModelObject::paintMaskForTextFillBox(ImageBuffer* maskImage, const IntRect& maskRect, InlineFlowBox* box, const LayoutRect& scrolledPaintRect)
 {
     GraphicsContext& maskImageContext = maskImage->context();
-    maskImageContext.translate(-maskRect.x(), -maskRect.y());
+    maskImageContext.translate(-maskRect.location());
 
     // Now add the text to the clip. We do this by painting using a special paint phase that signals to
     // InlineTextBoxes that they should just add their contents to the clip.
@@ -650,10 +687,6 @@ void RenderBoxModelObject::paintMaskForTextFillBox(ImageBuffer* maskImage, const
     if (box) {
         const RootInlineBox& rootBox = box->root();
         box->paint(info, LayoutPoint(scrolledPaintRect.x() - box->x(), scrolledPaintRect.y() - box->y()), rootBox.lineTop(), rootBox.lineBottom());
-    } else if (isRenderNamedFlowFragmentContainer()) {
-        RenderNamedFlowFragment& region = *downcast<RenderBlockFlow>(*this).renderNamedFlowFragment();
-        if (region.isValid())
-            region.flowThread()->layer()->paintNamedFlowThreadInsideRegion(maskImageContext, &region, maskRect, maskRect.location(), PaintBehaviorForceBlackText, RenderLayer::PaintLayerTemporaryClipRects);
     } else {
         LayoutSize localOffset = is<RenderBox>(*this) ? downcast<RenderBox>(*this).locationOffset() : LayoutSize();
         paint(info, scrolledPaintRect.location() - localOffset);
@@ -764,7 +797,7 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
     if (clippedWithLocalScrolling) {
         // Clip to the overflow area.
         auto& thisBox = downcast<RenderBox>(*this);
-        context.clip(thisBox.overflowClipRect(rect.location(), currentRenderNamedFlowFragment()));
+        context.clip(thisBox.overflowClipRect(rect.location()));
         
         // Adjust the paint rect to reflect a scrolled content box with borders at the ends.
         scrolledPaintRect.moveBy(-thisBox.scrollPosition());
@@ -882,8 +915,12 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
                 downcast<BitmapImage>(*image).updateFromSettings(settings());
 
             auto interpolation = chooseInterpolationQuality(context, *image, &bgLayer, geometry.tileSize());
-            auto decodingMode = (view().frameView().paintBehavior() & PaintBehaviorFlattenCompositingLayers) ? DecodingMode::Synchronous : DecodingMode::Asynchronous;
-            context.drawTiledImage(*image, geometry.destRect(), toLayoutPoint(geometry.relativePhase()), geometry.tileSize(), geometry.spaceSize(), ImagePaintingOptions(compositeOp, bgLayer.blendMode(), decodingMode, ImageOrientationDescription(), interpolation));
+            auto decodingMode = decodingModeForImageDraw(*image, paintInfo);
+            auto drawResult = context.drawTiledImage(*image, geometry.destRect(), toLayoutPoint(geometry.relativePhase()), geometry.tileSize(), geometry.spaceSize(), ImagePaintingOptions(compositeOp, bgLayer.blendMode(), decodingMode, ImageOrientationDescription(), interpolation));
+            if (drawResult == ImageDrawResult::DidRequestDecoding) {
+                ASSERT(bgImage->isCachedImage());
+                bgImage->cachedImage()->addPendingImageDrawingClient(*this);
+            }
         }
     }
 
@@ -1197,7 +1234,7 @@ BackgroundImageGeometry RenderBoxModelObject::calculateBackgroundImageGeometry(c
     auto clientForBackgroundImage = backgroundObject ? backgroundObject : this;
     LayoutSize tileSize = calculateFillTileSize(fillLayer, positioningAreaSize);
     if (StyleImage* layerImage = fillLayer.image())
-        layerImage->setContainerSizeForRenderer(clientForBackgroundImage, tileSize, style().effectiveZoom());
+        layerImage->setContainerContextForRenderer(*clientForBackgroundImage, tileSize, style().effectiveZoom());
     
     EFillRepeat backgroundRepeatX = fillLayer.repeatX();
     EFillRepeat backgroundRepeatY = fillLayer.repeatY();
@@ -1319,7 +1356,7 @@ bool RenderBoxModelObject::paintNinePieceImage(GraphicsContext& graphicsContext,
     LayoutSize source = calculateImageIntrinsicDimensions(styleImage, destination.size(), DoNotScaleByEffectiveZoom);
 
     // If both values are ‘auto’ then the intrinsic width and/or height of the image should be used, if any.
-    styleImage->setContainerSizeForRenderer(this, source, style.effectiveZoom());
+    styleImage->setContainerContextForRenderer(*this, source, style.effectiveZoom());
 
     ninePieceImage.paint(graphicsContext, this, style, destination, source, deviceScaleFactor, op);
     return true;
@@ -2390,7 +2427,7 @@ void RenderBoxModelObject::paintBoxShadow(const PaintInfo& info, const LayoutRec
                 context.clip(pixelSnappedBorderRect.rect());
 
             IntSize extraOffset(2 * roundToInt(paintRect.width()) + std::max(0, shadowOffset.width()) + shadowPaintingExtent - 2 * shadowSpread + 1, 0);
-            context.translate(extraOffset.width(), extraOffset.height());
+            context.translate(extraOffset);
             shadowOffset -= extraOffset;
 
             if (shadow->isWebkitBoxShadow())

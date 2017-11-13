@@ -143,8 +143,10 @@ void ResourceHandle::ensureReadBuffer()
     char* bufferFromClient = client()->getOrCreateReadBuffer(gDefaultReadBufferSize, bufferSize);
     if (bufferFromClient)
         d->m_soupBuffer.reset(soup_buffer_new(SOUP_MEMORY_TEMPORARY, bufferFromClient, bufferSize));
-    else
-        d->m_soupBuffer.reset(soup_buffer_new(SOUP_MEMORY_TAKE, static_cast<char*>(g_malloc(gDefaultReadBufferSize)), gDefaultReadBufferSize));
+    else {
+        auto* buffer = static_cast<uint8_t*>(fastMalloc(gDefaultReadBufferSize));
+        d->m_soupBuffer.reset(soup_buffer_new_with_owner(buffer, gDefaultReadBufferSize, buffer, fastFree));
+    }
 
     ASSERT(d->m_soupBuffer);
 }
@@ -236,7 +238,6 @@ static void applyAuthenticationToRequest(ResourceHandle* handle, ResourceRequest
     request.setURL(urlWithCredentials);
 }
 
-#if ENABLE(WEB_TIMING)
 // Called each time the message is going to be sent again except the first time.
 // This happens when libsoup handles HTTP authentication.
 static void restartedCallback(SoupMessage*, gpointer data)
@@ -247,7 +248,6 @@ static void restartedCallback(SoupMessage*, gpointer data)
 
     handle->m_requestTime = MonotonicTime::now();
 }
-#endif
 
 static bool shouldRedirect(ResourceHandle* handle)
 {
@@ -526,9 +526,7 @@ static void sendRequestCallback(GObject*, GAsyncResult* result, gpointer data)
         d->m_response.setExpectedContentLength(soup_request_get_content_length(d->m_soupRequest.get()));
     }
 
-#if ENABLE(WEB_TIMING)
     d->m_response.deprecatedNetworkLoadMetrics().responseStart = MonotonicTime::now() - handle->m_requestTime;
-#endif
 
     if (soupMessage && d->m_response.isMultipart())
         d->m_multipartInputStream = adoptGRef(soup_multipart_input_stream_new(soupMessage, inputStream.get()));
@@ -563,7 +561,6 @@ static void continueAfterDidReceiveResponse(ResourceHandle* handle)
         RunLoopSourcePriority::AsyncIONetwork, d->m_cancellable.get(), readCallback, handle);
 }
 
-#if ENABLE(WEB_TIMING)
 void ResourceHandle::didStartRequest()
 {
     getInternal()->m_response.deprecatedNetworkLoadMetrics().requestStart = MonotonicTime::now() - m_requestTime;
@@ -627,7 +624,6 @@ static void networkEventCallback(SoupMessage*, GSocketClientEvent event, GIOStre
         break;
     }
 }
-#endif
 
 static bool createSoupMessageForHandleAndRequest(ResourceHandle* handle, const ResourceRequest& request)
 {
@@ -669,13 +665,11 @@ static bool createSoupMessageForHandleAndRequest(ResourceHandle* handle, const R
     unsigned flags = SOUP_MESSAGE_NO_REDIRECT;
     soup_message_set_flags(d->m_soupMessage.get(), static_cast<SoupMessageFlags>(soup_message_get_flags(d->m_soupMessage.get()) | flags));
 
-#if ENABLE(WEB_TIMING)
 #if SOUP_CHECK_VERSION(2, 49, 91)
     g_signal_connect(d->m_soupMessage.get(), "starting", G_CALLBACK(startingCallback), handle);
 #endif
     g_signal_connect(d->m_soupMessage.get(), "network-event", G_CALLBACK(networkEventCallback), handle);
     g_signal_connect(d->m_soupMessage.get(), "restarted", G_CALLBACK(restartedCallback), handle);
-#endif
 
 #if SOUP_CHECK_VERSION(2, 43, 1)
     soup_message_set_priority(d->m_soupMessage.get(), toSoupMessagePriority(request.priority()));
@@ -767,9 +761,7 @@ void ResourceHandle::timeoutFired()
 
 void ResourceHandle::sendPendingRequest()
 {
-#if ENABLE(WEB_TIMING)
     m_requestTime = MonotonicTime::now();
-#endif
 
     if (d->m_firstRequest.timeoutInterval() > 0)
         d->m_timeoutSource.startOneShot(1_s * d->m_firstRequest.timeoutInterval());
@@ -972,7 +964,7 @@ void ResourceHandle::platformSetDefersLoading(bool defersLoading)
     }
 }
 
-void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext*, const ResourceRequest&, StoredCredentials, ResourceError&, ResourceResponse&, Vector<char>&)
+void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext*, const ResourceRequest&, StoredCredentialsPolicy, ResourceError&, ResourceResponse&, Vector<char>&)
 {
     ASSERT_NOT_REACHED();
 }

@@ -21,13 +21,19 @@
 #include "config.h"
 #include "JSTestPromiseRejectionEvent.h"
 
+#include "DOMPromiseProxy.h"
+#include "JSDOMAttribute.h"
 #include "JSDOMBinding.h"
-#include "JSDOMBindingCaller.h"
 #include "JSDOMConstructor.h"
+#include "JSDOMConvertAny.h"
+#include "JSDOMConvertBoolean.h"
+#include "JSDOMConvertInterface.h"
+#include "JSDOMConvertPromise.h"
+#include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
-#include "JSDOMPromise.h"
+#include "JSDOMGlobalObject.h"
 #include "JSDOMWrapperCache.h"
-#include <runtime/Error.h>
+#include <runtime/JSCInlines.h>
 #include <wtf/GetPtr.h>
 
 using namespace JSC;
@@ -41,10 +47,6 @@ template<> TestPromiseRejectionEvent::Init convertDictionary<TestPromiseRejectio
     bool isNullOrUndefined = value.isUndefinedOrNull();
     auto* object = isNullOrUndefined ? nullptr : value.getObject();
     if (UNLIKELY(!isNullOrUndefined && !object)) {
-        throwTypeError(&state, throwScope);
-        return { };
-    }
-    if (UNLIKELY(object && object->type() == RegExpObjectType)) {
         throwTypeError(&state, throwScope);
         return { };
     }
@@ -86,10 +88,10 @@ template<> TestPromiseRejectionEvent::Init convertDictionary<TestPromiseRejectio
 
 // Attributes
 
-JSC::EncodedJSValue jsTestPromiseRejectionEventPromise(JSC::ExecState*, JSC::EncodedJSValue, JSC::PropertyName);
-JSC::EncodedJSValue jsTestPromiseRejectionEventReason(JSC::ExecState*, JSC::EncodedJSValue, JSC::PropertyName);
 JSC::EncodedJSValue jsTestPromiseRejectionEventConstructor(JSC::ExecState*, JSC::EncodedJSValue, JSC::PropertyName);
 bool setJSTestPromiseRejectionEventConstructor(JSC::ExecState*, JSC::EncodedJSValue, JSC::EncodedJSValue);
+JSC::EncodedJSValue jsTestPromiseRejectionEventPromise(JSC::ExecState*, JSC::EncodedJSValue, JSC::PropertyName);
+JSC::EncodedJSValue jsTestPromiseRejectionEventReason(JSC::ExecState*, JSC::EncodedJSValue, JSC::PropertyName);
 
 class JSTestPromiseRejectionEventPrototype : public JSC::JSNonFinalObject {
 public:
@@ -143,9 +145,9 @@ template<> JSValue JSTestPromiseRejectionEventConstructor::prototypeForStructure
 
 template<> void JSTestPromiseRejectionEventConstructor::initializeProperties(VM& vm, JSDOMGlobalObject& globalObject)
 {
-    putDirect(vm, vm.propertyNames->prototype, JSTestPromiseRejectionEvent::prototype(vm, globalObject), DontDelete | ReadOnly | DontEnum);
-    putDirect(vm, vm.propertyNames->name, jsNontrivialString(&vm, String(ASCIILiteral("TestPromiseRejectionEvent"))), ReadOnly | DontEnum);
-    putDirect(vm, vm.propertyNames->length, jsNumber(2), ReadOnly | DontEnum);
+    putDirect(vm, vm.propertyNames->prototype, JSTestPromiseRejectionEvent::prototype(vm, globalObject), JSC::PropertyAttribute::DontDelete | JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
+    putDirect(vm, vm.propertyNames->name, jsNontrivialString(&vm, String(ASCIILiteral("TestPromiseRejectionEvent"))), JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
+    putDirect(vm, vm.propertyNames->length, jsNumber(2), JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontEnum);
 }
 
 template<> const ClassInfo JSTestPromiseRejectionEventConstructor::s_info = { "TestPromiseRejectionEvent", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSTestPromiseRejectionEventConstructor) };
@@ -154,9 +156,9 @@ template<> const ClassInfo JSTestPromiseRejectionEventConstructor::s_info = { "T
 
 static const HashTableValue JSTestPromiseRejectionEventPrototypeTableValues[] =
 {
-    { "constructor", DontEnum, NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestPromiseRejectionEventConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(setJSTestPromiseRejectionEventConstructor) } },
-    { "promise", ReadOnly | CustomAccessor, NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestPromiseRejectionEventPromise), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
-    { "reason", ReadOnly | CustomAccessor, NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestPromiseRejectionEventReason), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
+    { "constructor", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestPromiseRejectionEventConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(setJSTestPromiseRejectionEventConstructor) } },
+    { "promise", static_cast<unsigned>(JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::CustomAccessor), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestPromiseRejectionEventPromise), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
+    { "reason", static_cast<unsigned>(JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::CustomAccessor | JSC::PropertyAttribute::DOMAttribute), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestPromiseRejectionEventReason), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
 };
 
 const ClassInfo JSTestPromiseRejectionEventPrototype::s_info = { "TestPromiseRejectionEventPrototype", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSTestPromiseRejectionEventPrototype) };
@@ -164,7 +166,7 @@ const ClassInfo JSTestPromiseRejectionEventPrototype::s_info = { "TestPromiseRej
 void JSTestPromiseRejectionEventPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
-    reifyStaticProperties(vm, JSTestPromiseRejectionEventPrototypeTableValues, *this);
+    reifyStaticProperties(vm, JSTestPromiseRejectionEvent::info(), JSTestPromiseRejectionEventPrototypeTableValues, *this);
 }
 
 const ClassInfo JSTestPromiseRejectionEvent::s_info = { "TestPromiseRejectionEvent", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSTestPromiseRejectionEvent) };
@@ -191,16 +193,37 @@ JSObject* JSTestPromiseRejectionEvent::prototype(VM& vm, JSDOMGlobalObject& glob
     return getDOMPrototype<JSTestPromiseRejectionEvent>(vm, globalObject);
 }
 
-template<> inline JSTestPromiseRejectionEvent* BindingCaller<JSTestPromiseRejectionEvent>::castForAttribute(ExecState& state, EncodedJSValue thisValue)
+JSValue JSTestPromiseRejectionEvent::getConstructor(VM& vm, const JSGlobalObject* globalObject)
+{
+    return getDOMConstructor<JSTestPromiseRejectionEventConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+}
+
+template<> inline JSTestPromiseRejectionEvent* IDLAttribute<JSTestPromiseRejectionEvent>::cast(ExecState& state, EncodedJSValue thisValue)
 {
     return jsDynamicDowncast<JSTestPromiseRejectionEvent*>(state.vm(), JSValue::decode(thisValue));
 }
 
-static inline JSValue jsTestPromiseRejectionEventPromiseGetter(ExecState&, JSTestPromiseRejectionEvent&, ThrowScope& throwScope);
-
-EncodedJSValue jsTestPromiseRejectionEventPromise(ExecState* state, EncodedJSValue thisValue, PropertyName)
+EncodedJSValue jsTestPromiseRejectionEventConstructor(ExecState* state, EncodedJSValue thisValue, PropertyName)
 {
-    return BindingCaller<JSTestPromiseRejectionEvent>::attribute<jsTestPromiseRejectionEventPromiseGetter, CastedThisErrorBehavior::RejectPromise>(state, thisValue, "promise");
+    VM& vm = state->vm();
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto* prototype = jsDynamicDowncast<JSTestPromiseRejectionEventPrototype*>(vm, JSValue::decode(thisValue));
+    if (UNLIKELY(!prototype))
+        return throwVMTypeError(state, throwScope);
+    return JSValue::encode(JSTestPromiseRejectionEvent::getConstructor(state->vm(), prototype->globalObject()));
+}
+
+bool setJSTestPromiseRejectionEventConstructor(ExecState* state, EncodedJSValue thisValue, EncodedJSValue encodedValue)
+{
+    VM& vm = state->vm();
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto* prototype = jsDynamicDowncast<JSTestPromiseRejectionEventPrototype*>(vm, JSValue::decode(thisValue));
+    if (UNLIKELY(!prototype)) {
+        throwVMTypeError(state, throwScope);
+        return false;
+    }
+    // Shadowing a built-in constructor
+    return prototype->putDirect(vm, vm.propertyNames->constructor, JSValue::decode(encodedValue));
 }
 
 static inline JSValue jsTestPromiseRejectionEventPromiseGetter(ExecState& state, JSTestPromiseRejectionEvent& thisObject, ThrowScope& throwScope)
@@ -208,15 +231,13 @@ static inline JSValue jsTestPromiseRejectionEventPromiseGetter(ExecState& state,
     UNUSED_PARAM(throwScope);
     UNUSED_PARAM(state);
     auto& impl = thisObject.wrapped();
-    JSValue result = toJS<IDLPromise<IDLAny>>(impl.promise());
+    JSValue result = toJS<IDLPromise<IDLAny>>(state, *thisObject.globalObject(), throwScope, impl.promise());
     return result;
 }
 
-static inline JSValue jsTestPromiseRejectionEventReasonGetter(ExecState&, JSTestPromiseRejectionEvent&, ThrowScope& throwScope);
-
-EncodedJSValue jsTestPromiseRejectionEventReason(ExecState* state, EncodedJSValue thisValue, PropertyName)
+EncodedJSValue jsTestPromiseRejectionEventPromise(ExecState* state, EncodedJSValue thisValue, PropertyName)
 {
-    return BindingCaller<JSTestPromiseRejectionEvent>::attribute<jsTestPromiseRejectionEventReasonGetter>(state, thisValue, "reason");
+    return IDLAttribute<JSTestPromiseRejectionEvent>::get<jsTestPromiseRejectionEventPromiseGetter, CastedThisErrorBehavior::RejectPromise>(*state, thisValue, "promise");
 }
 
 static inline JSValue jsTestPromiseRejectionEventReasonGetter(ExecState& state, JSTestPromiseRejectionEvent& thisObject, ThrowScope& throwScope)
@@ -224,37 +245,13 @@ static inline JSValue jsTestPromiseRejectionEventReasonGetter(ExecState& state, 
     UNUSED_PARAM(throwScope);
     UNUSED_PARAM(state);
     auto& impl = thisObject.wrapped();
-    JSValue result = toJS<IDLAny>(impl.reason());
+    JSValue result = toJS<IDLAny>(state, throwScope, impl.reason());
     return result;
 }
 
-EncodedJSValue jsTestPromiseRejectionEventConstructor(ExecState* state, EncodedJSValue thisValue, PropertyName)
+EncodedJSValue jsTestPromiseRejectionEventReason(ExecState* state, EncodedJSValue thisValue, PropertyName)
 {
-    VM& vm = state->vm();
-    auto throwScope = DECLARE_THROW_SCOPE(vm);
-    JSTestPromiseRejectionEventPrototype* domObject = jsDynamicDowncast<JSTestPromiseRejectionEventPrototype*>(vm, JSValue::decode(thisValue));
-    if (UNLIKELY(!domObject))
-        return throwVMTypeError(state, throwScope);
-    return JSValue::encode(JSTestPromiseRejectionEvent::getConstructor(state->vm(), domObject->globalObject()));
-}
-
-bool setJSTestPromiseRejectionEventConstructor(ExecState* state, EncodedJSValue thisValue, EncodedJSValue encodedValue)
-{
-    VM& vm = state->vm();
-    auto throwScope = DECLARE_THROW_SCOPE(vm);
-    JSValue value = JSValue::decode(encodedValue);
-    JSTestPromiseRejectionEventPrototype* domObject = jsDynamicDowncast<JSTestPromiseRejectionEventPrototype*>(vm, JSValue::decode(thisValue));
-    if (UNLIKELY(!domObject)) {
-        throwVMTypeError(state, throwScope);
-        return false;
-    }
-    // Shadowing a built-in constructor
-    return domObject->putDirect(state->vm(), state->propertyNames().constructor, value);
-}
-
-JSValue JSTestPromiseRejectionEvent::getConstructor(VM& vm, const JSGlobalObject* globalObject)
-{
-    return getDOMConstructor<JSTestPromiseRejectionEventConstructor>(vm, *jsCast<const JSDOMGlobalObject*>(globalObject));
+    return IDLAttribute<JSTestPromiseRejectionEvent>::get<jsTestPromiseRejectionEventReasonGetter, CastedThisErrorBehavior::Assert>(*state, thisValue, "reason");
 }
 
 #if ENABLE(BINDING_INTEGRITY)
@@ -275,12 +272,12 @@ JSC::JSValue toJSNewlyCreated(JSC::ExecState*, JSDOMGlobalObject* globalObject, 
     void* expectedVTablePointer = reinterpret_cast<void*>(__identifier("??_7TestPromiseRejectionEvent@WebCore@@6B@"));
 #else
     void* expectedVTablePointer = &_ZTVN7WebCore25TestPromiseRejectionEventE[2];
-#if COMPILER(CLANG)
+#endif
+
     // If this fails TestPromiseRejectionEvent does not have a vtable, so you need to add the
     // ImplementationLacksVTable attribute to the interface definition
-    static_assert(__is_polymorphic(TestPromiseRejectionEvent), "TestPromiseRejectionEvent is not polymorphic");
-#endif
-#endif
+    static_assert(std::is_polymorphic<TestPromiseRejectionEvent>::value, "TestPromiseRejectionEvent is not polymorphic");
+
     // If you hit this assertion you either have a use after free bug, or
     // TestPromiseRejectionEvent has subclasses. If TestPromiseRejectionEvent has subclasses that get passed
     // to toJS() we currently require TestPromiseRejectionEvent you to opt out of binding hardening

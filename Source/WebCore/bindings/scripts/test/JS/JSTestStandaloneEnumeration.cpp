@@ -24,6 +24,7 @@
 
 #include "JSTestStandaloneEnumeration.h"
 
+#include <runtime/JSCInlines.h>
 #include <runtime/JSString.h>
 #include <wtf/NeverDestroyed.h>
 
@@ -31,16 +32,21 @@ using namespace JSC;
 
 namespace WebCore {
 
-template<> JSString* convertEnumerationToJS(ExecState& state, TestStandaloneEnumeration enumerationValue)
+String convertEnumerationToString(TestStandaloneEnumeration enumerationValue)
 {
-    static NeverDestroyed<const String> values[] = {
-        ASCIILiteral("enumValue1"),
-        ASCIILiteral("enumValue2"),
+    static const NeverDestroyed<String> values[] = {
+        MAKE_STATIC_STRING_IMPL("enumValue1"),
+        MAKE_STATIC_STRING_IMPL("enumValue2"),
     };
     static_assert(static_cast<size_t>(TestStandaloneEnumeration::EnumValue1) == 0, "TestStandaloneEnumeration::EnumValue1 is not 0 as expected");
     static_assert(static_cast<size_t>(TestStandaloneEnumeration::EnumValue2) == 1, "TestStandaloneEnumeration::EnumValue2 is not 1 as expected");
     ASSERT(static_cast<size_t>(enumerationValue) < WTF_ARRAY_LENGTH(values));
-    return jsStringWithCache(&state, values[static_cast<size_t>(enumerationValue)]);
+    return values[static_cast<size_t>(enumerationValue)];
+}
+
+template<> JSString* convertEnumerationToJS(ExecState& state, TestStandaloneEnumeration enumerationValue)
+{
+    return jsStringWithCache(&state, convertEnumerationToString(enumerationValue));
 }
 
 template<> std::optional<TestStandaloneEnumeration> parseEnumeration<TestStandaloneEnumeration>(ExecState& state, JSValue value)
@@ -51,18 +57,6 @@ template<> std::optional<TestStandaloneEnumeration> parseEnumeration<TestStandal
     if (stringValue == "enumValue2")
         return TestStandaloneEnumeration::EnumValue2;
     return std::nullopt;
-}
-
-template<> TestStandaloneEnumeration convertEnumeration<TestStandaloneEnumeration>(ExecState& state, JSValue value)
-{
-    VM& vm = state.vm();
-    auto throwScope = DECLARE_THROW_SCOPE(vm);
-    auto result = parseEnumeration<TestStandaloneEnumeration>(state, value);
-    if (UNLIKELY(!result)) {
-        throwTypeError(&state, throwScope);
-        return { };
-    }
-    return result.value();
 }
 
 template<> const char* expectedEnumerationValues<TestStandaloneEnumeration>()

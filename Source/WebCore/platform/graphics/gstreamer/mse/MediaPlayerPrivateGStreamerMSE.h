@@ -53,6 +53,8 @@ public:
     void load(const String&) override;
     void load(const String&, MediaSourcePrivateClient*) override;
 
+    FloatSize naturalSize() const final;
+
     void setDownloadBuffering() override { };
 
     bool isLiveStream() const override { return false; }
@@ -79,22 +81,16 @@ public:
     MediaSourcePrivateClient* mediaSourcePrivateClient() { return m_mediaSource.get(); }
 
     void markEndOfStream(MediaSourcePrivate::EndOfStreamStatus);
+    void unmarkEndOfStream();
 
-#if ENABLE(LEGACY_ENCRYPTED_MEDIA_V1) || ENABLE(LEGACY_ENCRYPTED_MEDIA)
-    void dispatchDecryptionKey(GstBuffer*) override;
-#if USE(PLAYREADY)
-    void emitPlayReadySession(PlayreadySession*) override;
-#endif
-#endif
-
-#if ENABLE(ENCRYPTED_MEDIA)
-    void attemptToDecryptWithInstance(const CDMInstance&) override;
-#endif
-
-    void trackDetected(RefPtr<AppendPipeline>, RefPtr<WebCore::TrackPrivateBase> oldTrack, RefPtr<WebCore::TrackPrivateBase> newTrack);
+    void trackDetected(RefPtr<AppendPipeline>, RefPtr<WebCore::TrackPrivateBase>, bool firstTrackDetected);
     void notifySeekNeedsDataForTime(const MediaTime&);
 
     static bool supportsCodecs(const String& codecs);
+
+#if ENABLE(ENCRYPTED_MEDIA)
+    void attemptToDecryptWithInstance(const CDMInstance&) final;
+#endif
 
 private:
     static void getSupportedTypes(HashSet<String, ASCIICaseInsensitiveHash>&);
@@ -112,11 +108,9 @@ private:
     void asyncStateChangeDone() override;
 
     // FIXME: Implement.
-    unsigned long totalVideoFrames() override { return 0; }
-    unsigned long droppedVideoFrames() override { return 0; }
-    unsigned long corruptedVideoFrames() override { return 0; }
-    MediaTime totalFrameDelay() override { return MediaTime::zeroTime(); }
+    std::optional<PlatformVideoPlaybackQualityMetrics> videoPlaybackQualityMetrics() override { return std::nullopt; }
     bool isTimeBuffered(const MediaTime&) const;
+    bool playbackPipelineHasFutureData() const;
 
     bool isMediaSource() const override { return true; }
 

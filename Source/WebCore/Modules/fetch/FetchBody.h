@@ -28,26 +28,18 @@
 
 #pragma once
 
-#if ENABLE(FETCH_API)
-
-#include "Blob.h"
+#include "DOMFormData.h"
 #include "FetchBodyConsumer.h"
-#include "FetchLoader.h"
 #include "FormData.h"
 #include "JSDOMPromiseDeferred.h"
+#include "ReadableStream.h"
 #include "URLSearchParams.h"
-#include <wtf/Optional.h>
 #include <wtf/Variant.h>
-
-namespace JSC {
-class ExecState;
-class JSValue;
-};
 
 namespace WebCore {
 
 class FetchBodyOwner;
-class FetchResponseSource;
+class FetchBodySource;
 class ScriptExecutionContext;
 
 class FetchBody {
@@ -56,10 +48,10 @@ public:
     void blob(FetchBodyOwner&, Ref<DeferredPromise>&&, const String&);
     void json(FetchBodyOwner&, Ref<DeferredPromise>&&);
     void text(FetchBodyOwner&, Ref<DeferredPromise>&&);
-    void formData(FetchBodyOwner&, Ref<DeferredPromise>&& promise) { promise.get().reject(0); }
+    void formData(FetchBodyOwner&, Ref<DeferredPromise>&& promise) { promise.get().reject(NotSupportedError); }
 
 #if ENABLE(STREAMS_API)
-    void consumeAsStream(FetchBodyOwner&, FetchResponseSource&);
+    void consumeAsStream(FetchBodyOwner&, FetchBodySource&);
 #endif
 
     bool isBlob() const { return WTF::holds_alternative<Ref<const Blob>>(m_data); }
@@ -68,22 +60,34 @@ public:
     bool isArrayBufferView() const { return WTF::holds_alternative<Ref<const ArrayBufferView>>(m_data); }
     bool isURLSearchParams() const { return WTF::holds_alternative<Ref<const URLSearchParams>>(m_data); }
     bool isText() const { return WTF::holds_alternative<String>(m_data); }
-    bool isReadableStream() const { return m_isReadableStream; }
+    bool hasReadableStream() const { return !!m_readableStream; }
 
-    static std::optional<FetchBody> extract(ScriptExecutionContext&, JSC::ExecState&, JSC::JSValue, String&);
-    static FetchBody loadingBody() { return { }; }
+    using Init = Variant<RefPtr<Blob>, RefPtr<ArrayBufferView>, RefPtr<ArrayBuffer>, RefPtr<DOMFormData>, RefPtr<URLSearchParams>, RefPtr<ReadableStream>, String>;
+    static FetchBody extract(ScriptExecutionContext&, Init&&, String&);
+    FetchBody() = default;
 
     void loadingFailed();
     void loadingSucceeded();
 
-    RefPtr<FormData> bodyForInternalRequest(ScriptExecutionContext&) const;
+    RefPtr<FormData> bodyAsFormData(ScriptExecutionContext&) const;
 
+    using TakenData = Variant<std::nullptr_t, Ref<FormData>, Ref<SharedBuffer>>;
+    TakenData take();
+
+    void setAsFormData(Ref<FormData>&& data) { m_data = WTFMove(data); }
     FetchBodyConsumer& consumer() { return m_consumer; }
 
     void consumeOnceLoadingFinished(FetchBodyConsumer::Type, Ref<DeferredPromise>&&, const String&);
-    void cleanConsumePromise() { m_consumePromise = nullptr; }
+    void cleanConsumer() { m_consumer.clean(); }
 
-    FetchBody clone() const;
+    FetchBody clone();
+    const ReadableStream* readableStream() const { return m_readableStream.get(); }
+    ReadableStream* readableStream() { return m_readableStream.get(); }
+    void setReadableStream(Ref<ReadableStream>&& stream)
+    {
+        ASSERT(!m_readableStream);
+        m_readableStream = WTFMove(stream);
+    }
 
 private:
     explicit FetchBody(Ref<const Blob>&& data) : m_data(WTFMove(data)) { }
@@ -93,7 +97,7 @@ private:
     explicit FetchBody(String&& data) : m_data(WTFMove(data)) { }
     explicit FetchBody(Ref<const URLSearchParams>&& data) : m_data(WTFMove(data)) { }
     explicit FetchBody(const FetchBodyConsumer& consumer) : m_consumer(consumer) { }
-    FetchBody() = default;
+    explicit FetchBody(Ref<ReadableStream>&& stream) : m_readableStream(WTFMove(stream)) { }
 
     void consume(FetchBodyOwner&, Ref<DeferredPromise>&&);
 
@@ -111,15 +115,11 @@ private:
     const String& textBody() const { return WTF::get<String>(m_data); }
     const URLSearchParams& urlSearchParamsBody() const { return WTF::get<Ref<const URLSearchParams>>(m_data).get(); }
 
-    Variant<std::nullptr_t, Ref<const Blob>, Ref<FormData>, Ref<const ArrayBuffer>, Ref<const ArrayBufferView>, Ref<const URLSearchParams>, String> m_data { nullptr };
+    using Data = Variant<std::nullptr_t, Ref<const Blob>, Ref<FormData>, Ref<const ArrayBuffer>, Ref<const ArrayBufferView>, Ref<const URLSearchParams>, String>;
+    Data m_data { nullptr };
 
     FetchBodyConsumer m_consumer { FetchBodyConsumer::Type::None };
-    RefPtr<DeferredPromise> m_consumePromise;
-
-    // FIXME: We probably want to keep the stream as a specific field in m_data when we will support stream data upload.
-    bool m_isReadableStream { false };
+    RefPtr<ReadableStream> m_readableStream;
 };
 
 } // namespace WebCore
-
-#endif // ENABLE(FETCH_API)

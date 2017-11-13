@@ -34,10 +34,10 @@
 #include "LegacyTileLayer.h"
 #include "LegacyTileLayerPool.h"
 #include "PlatformScreen.h"
-#include "QuartzCoreSPI.h"
 #include "WAKWindow.h"
 #include <algorithm>
 #include <functional>
+#include <pal/spi/cocoa/QuartzCoreSPI.h>
 
 namespace WebCore {
 
@@ -61,10 +61,9 @@ LegacyTileGridTile::LegacyTileGridTile(LegacyTileGrid* tileGrid, const IntRect& 
         m_tileLayer = adoptNS([[LegacyTileLayer alloc] init]);
     }
     LegacyTileLayer* layer = m_tileLayer.get();
-#if PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 90300
     if (screenSupportsExtendedColor())
         layer.contentsFormat = kCAContentsFormatRGBA10XR;
-#endif
+
     [layer setTileGrid:tileGrid];
     [layer setOpaque:m_tileGrid->tileCache().tilesOpaque()];
     [layer setEdgeAntialiasingMask:0];

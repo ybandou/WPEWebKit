@@ -34,6 +34,7 @@ namespace WebCore {
 class AlternativeTextClient;
 class ApplicationCacheStorage;
 class BackForwardClient;
+class CacheStorageProvider;
 class ChromeClient;
 class ContextMenuClient;
 class DatabaseProvider;
@@ -44,6 +45,7 @@ class FrameLoaderClient;
 class InspectorClient;
 class LibWebRTCProvider;
 class PaymentCoordinatorClient;
+class PerformanceLoggingClient;
 class PlugInClient;
 class PluginInfoProvider;
 class ProgressTrackerClient;
@@ -57,7 +59,7 @@ class WebGLStateTracker;
 class PageConfiguration {
     WTF_MAKE_NONCOPYABLE(PageConfiguration); WTF_MAKE_FAST_ALLOCATED;
 public:
-    WEBCORE_EXPORT PageConfiguration(UniqueRef<EditorClient>&&, Ref<SocketProvider>&&, UniqueRef<LibWebRTCProvider>&&);
+    WEBCORE_EXPORT PageConfiguration(UniqueRef<EditorClient>&&, Ref<SocketProvider>&&, UniqueRef<LibWebRTCProvider>&&, Ref<CacheStorageProvider>&&);
     WEBCORE_EXPORT ~PageConfiguration();
 
     AlternativeTextClient* alternativeTextClient { nullptr };
@@ -81,10 +83,12 @@ public:
     std::unique_ptr<ValidationMessageClient> validationMessageClient;
     FrameLoaderClient* loaderClientForMainFrame { nullptr };
     std::unique_ptr<DiagnosticLoggingClient> diagnosticLoggingClient;
+    std::unique_ptr<PerformanceLoggingClient> performanceLoggingClient;
     std::unique_ptr<WebGLStateTracker> webGLStateTracker;
 
     RefPtr<ApplicationCacheStorage> applicationCacheStorage;
     RefPtr<DatabaseProvider> databaseProvider;
+    Ref<CacheStorageProvider> cacheStorageProvider;
     RefPtr<PluginInfoProvider> pluginInfoProvider;
     RefPtr<StorageNamespaceProvider> storageNamespaceProvider;
     RefPtr<UserContentProvider> userContentProvider;

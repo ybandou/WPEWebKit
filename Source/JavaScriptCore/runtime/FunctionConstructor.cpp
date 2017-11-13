@@ -21,9 +21,11 @@
 #include "config.h"
 #include "FunctionConstructor.h"
 
+#include "Completion.h"
 #include "ExceptionHelpers.h"
 #include "FunctionPrototype.h"
 #include "JSAsyncFunction.h"
+#include "JSAsyncGeneratorFunction.h"
 #include "JSFunction.h"
 #include "JSGeneratorFunction.h"
 #include "JSGlobalObject.h"
@@ -44,8 +46,8 @@ FunctionConstructor::FunctionConstructor(VM& vm, Structure* structure)
 void FunctionConstructor::finishCreation(VM& vm, FunctionPrototype* functionPrototype)
 {
     Base::finishCreation(vm, functionPrototype->classInfo()->className);
-    putDirectWithoutTransition(vm, vm.propertyNames->prototype, functionPrototype, DontEnum | DontDelete | ReadOnly);
-    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), ReadOnly | DontEnum);
+    putDirectWithoutTransition(vm, vm.propertyNames->prototype, functionPrototype, PropertyAttribute::DontEnum | PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly);
+    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum);
 }
 
 static EncodedJSValue JSC_HOST_CALL constructWithFunctionConstructor(ExecState* exec)
@@ -98,45 +100,83 @@ JSObject* constructFunctionSkippingEvalEnabledCheck(
     switch (functionConstructionMode) {
     case FunctionConstructionMode::Function:
         structure = globalObject->functionStructure();
-        prefix = "{function ";
+        prefix = "function ";
         break;
     case FunctionConstructionMode::Generator:
         structure = globalObject->generatorFunctionStructure();
-        prefix = "{function *";
+        prefix = "function *";
         break;
     case FunctionConstructionMode::Async:
         structure = globalObject->asyncFunctionStructure();
-        prefix = "{async function ";
+        prefix = "async function ";
+        break;
+    case FunctionConstructionMode::AsyncGenerator:
+        structure = globalObject->asyncGeneratorFunctionStructure();
+        prefix = "{async function*";
         break;
     }
+
+    auto checkBody = [&] (const String& body) {
+        // The spec mandates that the body parses a valid function body independent
+        // of the parameters.
+        String program = makeString("(", prefix, "(){\n", body, "\n})");
+        SourceCode source = makeSource(program, sourceOrigin, sourceURL, position);
+        JSValue exception;
+        checkSyntax(exec, source, &exception);
+        if (exception) {
+            scope.throwException(exec, exception);
+            return;
+        }
+    };
 
     // How we stringify functions is sometimes important for web compatibility.
     // See https://bugs.webkit.org/show_bug.cgi?id=24350.
     String program;
     if (args.isEmpty())
-        program = makeString(prefix, functionName.string(), "() {\n\n}}");
+        program = makeString("{", prefix, functionName.string(), "() {\n\n}}");
     else if (args.size() == 1) {
         auto body = args.at(0).toWTFString(exec);
         RETURN_IF_EXCEPTION(scope, nullptr);
-        program = makeString(prefix, functionName.string(), "() {\n", body, "\n}}");
+        checkBody(body);
+        RETURN_IF_EXCEPTION(scope, nullptr);
+        program = makeString("{", prefix, functionName.string(), "() {\n", body, "\n}}");
     } else {
         StringBuilder builder;
+        builder.append('{');
         builder.append(prefix);
         builder.append(functionName.string());
         builder.append('(');
+        StringBuilder parameterBuilder;
         auto viewWithString = args.at(0).toString(exec)->viewWithUnderlyingString(exec);
         RETURN_IF_EXCEPTION(scope, nullptr);
-        builder.append(viewWithString.view);
+        parameterBuilder.append(viewWithString.view);
         for (size_t i = 1; i < args.size() - 1; i++) {
-            builder.appendLiteral(", ");
+            parameterBuilder.appendLiteral(", ");
             auto viewWithString = args.at(i).toString(exec)->viewWithUnderlyingString(exec);
             RETURN_IF_EXCEPTION(scope, nullptr);
-            builder.append(viewWithString.view);
+            parameterBuilder.append(viewWithString.view);
         }
+
+        {
+            // The spec mandates that the parameters parse as a valid parameter list
+            // independent of the function body.
+            String program = makeString("(", prefix, "(", parameterBuilder.toString(), "){\n\n})");
+            SourceCode source = makeSource(program, sourceOrigin, sourceURL, position);
+            JSValue exception;
+            checkSyntax(exec, source, &exception);
+            if (exception) {
+                scope.throwException(exec, exception);
+                return nullptr;
+            }
+        }
+
+        builder.append(parameterBuilder);
         builder.appendLiteral(") {\n");
-        viewWithString = args.at(args.size() - 1).toString(exec)->viewWithUnderlyingString(exec);
+        auto body = args.at(args.size() - 1).toWTFString(exec);
         RETURN_IF_EXCEPTION(scope, nullptr);
-        builder.append(viewWithString.view);
+        checkBody(body);
+        RETURN_IF_EXCEPTION(scope, nullptr);
+        builder.append(body);
         builder.appendLiteral("\n}}");
         program = builder.toString();
     }
@@ -159,6 +199,8 @@ JSObject* constructFunctionSkippingEvalEnabledCheck(
         return JSGeneratorFunction::create(vm, function, globalObject->globalScope(), subclassStructure);
     case FunctionConstructionMode::Async:
         return JSAsyncFunction::create(vm, function, globalObject->globalScope(), subclassStructure);
+    case FunctionConstructionMode::AsyncGenerator:
+        return JSAsyncGeneratorFunction::create(vm, function, globalObject->globalScope(), subclassStructure);
     }
 
     ASSERT_NOT_REACHED();
@@ -168,7 +210,8 @@ JSObject* constructFunctionSkippingEvalEnabledCheck(
 // ECMA 15.3.2 The Function Constructor
 JSObject* constructFunction(ExecState* exec, JSGlobalObject* globalObject, const ArgList& args, FunctionConstructionMode functionConstructionMode, JSValue newTarget)
 {
-    return constructFunction(exec, globalObject, args, exec->propertyNames().anonymous, exec->callerSourceOrigin(), String(), TextPosition(), functionConstructionMode, newTarget);
+    VM& vm = exec->vm();
+    return constructFunction(exec, globalObject, args, vm.propertyNames->anonymous, exec->callerSourceOrigin(), String(), TextPosition(), functionConstructionMode, newTarget);
 }
 
 } // namespace JSC

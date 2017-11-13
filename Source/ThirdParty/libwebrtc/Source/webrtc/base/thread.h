@@ -22,8 +22,8 @@
 #endif
 #include "webrtc/base/constructormagic.h"
 #include "webrtc/base/event.h"
-#include "webrtc/base/export.h"
 #include "webrtc/base/messagequeue.h"
+#include "webrtc/base/platform_thread_types.h"
 
 #if defined(WEBRTC_WIN)
 #include "webrtc/base/win32.h"
@@ -37,9 +37,7 @@ class ThreadManager {
  public:
   static const int kForever = -1;
 
-  ThreadManager();
-  ~ThreadManager();
-
+  // Singleton, constructor and destructor are private.
   static ThreadManager* Instance();
 
   Thread* CurrentThread();
@@ -61,7 +59,12 @@ class ThreadManager {
   Thread *WrapCurrentThread();
   void UnwrapCurrentThread();
 
+  bool IsMainThread();
+
  private:
+  ThreadManager();
+  ~ThreadManager();
+
 #if defined(WEBRTC_POSIX)
   pthread_key_t key_;
 #endif
@@ -69,6 +72,9 @@ class ThreadManager {
 #if defined(WEBRTC_WIN)
   DWORD key_;
 #endif
+
+  // The thread to potentially autowrap.
+  PlatformThreadRef main_thread_ref_;
 
   RTC_DISALLOW_COPY_AND_ASSIGN(ThreadManager);
 };
@@ -94,7 +100,7 @@ class Runnable {
 
 // WARNING! SUBCLASSES MUST CALL Stop() IN THEIR DESTRUCTORS!  See ~Thread().
 
-class WEBRTC_DYLIB_EXPORT LOCKABLE Thread : public MessageQueue {
+class LOCKABLE Thread : public MessageQueue {
  public:
   // Create a new Thread and optionally assign it to the passed SocketServer.
   Thread();
@@ -124,9 +130,7 @@ class WEBRTC_DYLIB_EXPORT LOCKABLE Thread : public MessageQueue {
     const bool previous_state_;
   };
 
-  bool IsCurrent() const {
-    return Current() == this;
-  }
+  bool IsCurrent() const;
 
   // Sleeps the calling thread for the specified number of milliseconds, during
   // which time no processing is performed. Returns false if sleeping was
@@ -239,6 +243,11 @@ class WEBRTC_DYLIB_EXPORT LOCKABLE Thread : public MessageQueue {
   friend class ScopedDisallowBlockingCalls;
 
  private:
+  struct ThreadInit {
+    Thread* thread;
+    Runnable* runnable;
+  };
+
 #if defined(WEBRTC_WIN)
   static DWORD WINAPI PreRun(LPVOID context);
 #else
@@ -302,36 +311,20 @@ class AutoThread : public Thread {
   RTC_DISALLOW_COPY_AND_ASSIGN(AutoThread);
 };
 
-// Win32 extension for threads that need to use COM
-#if defined(WEBRTC_WIN)
-class ComThread : public Thread {
- public:
-  ComThread() {}
-  ~ComThread() override;
+// AutoSocketServerThread automatically installs itself at
+// construction and uninstalls at destruction. If a Thread object is
+// already associated with the current OS thread, it is temporarily
+// disassociated and restored by the destructor.
 
- protected:
-  void Run() override;
+class AutoSocketServerThread : public Thread {
+ public:
+  explicit AutoSocketServerThread(SocketServer* ss);
+  ~AutoSocketServerThread() override;
 
  private:
-  RTC_DISALLOW_COPY_AND_ASSIGN(ComThread);
-};
-#endif
+  rtc::Thread* old_thread_;
 
-// Provides an easy way to install/uninstall a socketserver on a thread.
-class SocketServerScope {
- public:
-  explicit SocketServerScope(SocketServer* ss) {
-    old_ss_ = Thread::Current()->socketserver();
-    Thread::Current()->set_socketserver(ss);
-  }
-  ~SocketServerScope() {
-    Thread::Current()->set_socketserver(old_ss_);
-  }
-
- private:
-  SocketServer* old_ss_;
-
-  RTC_DISALLOW_IMPLICIT_CONSTRUCTORS(SocketServerScope);
+  RTC_DISALLOW_COPY_AND_ASSIGN(AutoSocketServerThread);
 };
 
 }  // namespace rtc

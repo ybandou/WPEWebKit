@@ -40,13 +40,13 @@
 #include "RenderDescendantIterator.h"
 #include "RenderIterator.h"
 #include "RenderLayer.h"
-#include "RenderNamedFlowFragment.h"
 #include "RenderTableCaption.h"
 #include "RenderTableCell.h"
 #include "RenderTableCol.h"
 #include "RenderTableSection.h"
 #include "RenderView.h"
 #include "StyleInheritedData.h"
+#include <wtf/SetForScope.h>
 #include <wtf/StackStats.h>
 
 namespace WebCore {
@@ -238,7 +238,7 @@ void RenderTable::removeCaption(const RenderTableCaption* oldCaption)
 void RenderTable::invalidateCachedColumns()
 {
     m_columnRenderersValid = false;
-    m_columnRenderers.resize(0);
+    m_columnRenderers.shrink(0);
     m_effectiveColumnIndexMap.clear();
 }
 
@@ -474,8 +474,11 @@ void RenderTable::layout()
 
     LayoutUnit totalSectionLogicalHeight = 0;
     LayoutUnit oldTableLogicalTop = 0;
-    for (unsigned i = 0; i < m_captions.size(); i++)
+    for (unsigned i = 0; i < m_captions.size(); i++) {
+        if (m_captions[i]->style().captionSide() == CAPBOTTOM)
+            continue;
         oldTableLogicalTop += m_captions[i]->logicalHeight() + m_captions[i]->marginBefore() + m_captions[i]->marginAfter();
+    }
 
     bool collapsing = collapseBorders();
 
@@ -598,8 +601,13 @@ void RenderTable::layout()
 
     bool paginated = view().layoutState() && view().layoutState()->isPaginated();
     if (sectionMoved && paginated) {
-        markForPaginationRelayoutIfNeeded();
-        layoutIfNeeded();
+        // FIXME: Table layout should always stabilize even when section moves (see webkit.org/b/174412).
+        if (!m_inRecursiveSectionMovedWithPagination) {
+            SetForScope<bool> paginatedSectionMoved(m_inRecursiveSectionMovedWithPagination, true);
+            markForPaginationRelayoutIfNeeded();
+            layoutIfNeeded();
+        } else
+            ASSERT_NOT_REACHED();
     }
     
     // FIXME: This value isn't the intrinsic content logical height, but we need
@@ -1476,10 +1484,6 @@ RenderBlock* RenderTable::firstLineBlock() const
     return nullptr;
 }
 
-void RenderTable::updateFirstLetter(RenderTreeMutationIsAllowed)
-{
-}
-
 int RenderTable::baselinePosition(FontBaseline baselineType, bool firstLine, LineDirectionMode direction, LinePositionMode linePositionMode) const
 {
     return valueOrCompute(firstLineBaseline(), [&] {
@@ -1525,7 +1529,7 @@ LayoutRect RenderTable::overflowClipRect(const LayoutPoint& location, RenderRegi
         rect.setLocation(location + rect.location());
     } else
         rect = RenderBox::overflowClipRect(location, region, relevancy);
-    
+
     // If we have a caption, expand the clip to include the caption.
     // FIXME: Technically this is wrong, but it's virtually impossible to fix this
     // for real until captions have been re-written.
@@ -1550,7 +1554,7 @@ bool RenderTable::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
     LayoutPoint adjustedLocation = accumulatedOffset + location();
 
     // Check kids first.
-    if (!hasOverflowClip() || locationInContainer.intersects(overflowClipRect(adjustedLocation, currentRenderNamedFlowFragment()))) {
+    if (!hasOverflowClip() || locationInContainer.intersects(overflowClipRect(adjustedLocation, nullptr))) {
         for (RenderObject* child = lastChild(); child; child = child->previousSibling()) {
             if (is<RenderBox>(*child) && !downcast<RenderBox>(*child).hasSelfPaintingLayer() && (child->isTableSection() || child->isTableCaption())) {
                 LayoutPoint childPoint = flipForWritingModeForChild(downcast<RenderBox>(child), adjustedLocation);
@@ -1566,7 +1570,7 @@ bool RenderTable::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
     LayoutRect boundsRect(adjustedLocation, size());
     if (visibleToHitTesting() && (action == HitTestBlockBackground || action == HitTestChildBlockBackground) && locationInContainer.intersects(boundsRect)) {
         updateHitTestResult(result, flipForWritingMode(locationInContainer.point() - toLayoutSize(adjustedLocation)));
-        if (!result.addNodeToRectBasedTestResult(element(), request, locationInContainer, boundsRect))
+        if (result.addNodeToListBasedTestResult(element(), request, locationInContainer, boundsRect) == HitTestProgress::Stop)
             return true;
     }
 

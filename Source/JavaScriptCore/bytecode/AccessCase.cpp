@@ -46,10 +46,14 @@
 #include "ScratchRegisterAllocator.h"
 #include "SlotVisitorInlines.h"
 #include "StructureStubInfo.h"
+#include "SuperSampler.h"
+#include "ThunkGenerators.h"
 
 namespace JSC {
 
+namespace AccessCaseInternal {
 static const bool verbose = false;
+}
 
 AccessCase::AccessCase(VM& vm, JSCell* owner, AccessType type, PropertyOffset offset, Structure* structure, const ObjectPropertyConditionSet& conditionSet)
     : m_type(type)
@@ -406,7 +410,7 @@ void AccessCase::generate(AccessGenerationState& state)
 void AccessCase::generateImpl(AccessGenerationState& state)
 {
     SuperSamplerScope superSamplerScope(false);
-    if (verbose)
+    if (AccessCaseInternal::verbose)
         dataLog("\n\nGenerating code for: ", *this, "\n");
 
     ASSERT(m_state == Generated); // We rely on the callers setting this for us.
@@ -525,6 +529,7 @@ void AccessCase::generateImpl(AccessGenerationState& state)
                 jit.loadPtr(
                     CCallHelpers::Address(baseForAccessGPR, JSObject::butterflyOffset()),
                     loadedValueGPR);
+                jit.cage(Gigacage::JSValue, loadedValueGPR);
                 storageGPR = loadedValueGPR;
             }
 
@@ -548,13 +553,18 @@ void AccessCase::generateImpl(AccessGenerationState& state)
             return;
         }
 
-        if (Options::useDOMJIT() && m_type == CustomAccessorGetter && this->as<GetterSetterAccessCase>().domJIT()) {
+        if (m_type == CustomAccessorGetter && this->as<GetterSetterAccessCase>().domAttribute()) {
             auto& access = this->as<GetterSetterAccessCase>();
             // We do not need to emit CheckDOM operation since structure check ensures
             // that the structure of the given base value is structure()! So all we should
             // do is performing the CheckDOM thingy in IC compiling time here.
-            if (structure()->classInfo()->isSubClassOf(access.domJIT()->thisClassInfo())) {
-                access.emitDOMJITGetter(state, baseForGetGPR);
+            if (!structure()->classInfo()->isSubClassOf(access.domAttribute()->classInfo)) {
+                state.failAndIgnore.append(jit.jump());
+                return;
+            }
+
+            if (Options::useDOMJIT() && access.domAttribute()->domJIT) {
+                access.emitDOMJITGetter(state, access.domAttribute()->domJIT, baseForGetGPR);
                 return;
             }
         }
@@ -782,11 +792,11 @@ void AccessCase::generateImpl(AccessGenerationState& state)
 
     case Replace: {
         if (InferredType* type = structure()->inferredTypeFor(ident.impl())) {
-            if (verbose)
+            if (AccessCaseInternal::verbose)
                 dataLog("Have type: ", type->descriptor(), "\n");
             state.failAndRepatch.append(
                 jit.branchIfNotType(valueRegs, scratchGPR, type->descriptor()));
-        } else if (verbose)
+        } else if (AccessCaseInternal::verbose)
             dataLog("Don't have type.\n");
 
         if (isInlineOffset(m_offset)) {
@@ -812,11 +822,11 @@ void AccessCase::generateImpl(AccessGenerationState& state)
         RELEASE_ASSERT(GPRInfo::numberOfRegisters >= 6 || !structure()->outOfLineCapacity() || structure()->outOfLineCapacity() == newStructure()->outOfLineCapacity());
 
         if (InferredType* type = newStructure()->inferredTypeFor(ident.impl())) {
-            if (verbose)
+            if (AccessCaseInternal::verbose)
                 dataLog("Have type: ", type->descriptor(), "\n");
             state.failAndRepatch.append(
                 jit.branchIfNotType(valueRegs, scratchGPR, type->descriptor()));
-        } else if (verbose)
+        } else if (AccessCaseInternal::verbose)
             dataLog("Don't have type.\n");
 
         // NOTE: This logic is duplicated in AccessCase::doesCalls(). It's important that doesCalls() knows
@@ -851,7 +861,7 @@ void AccessCase::generateImpl(AccessGenerationState& state)
             size_t newSize = newStructure()->outOfLineCapacity() * sizeof(JSValue);
 
             if (allocatingInline) {
-                MarkedAllocator* allocator = vm.auxiliarySpace.allocatorFor(newSize);
+                MarkedAllocator* allocator = vm.jsValueGigacageAuxiliarySpace.allocatorFor(newSize);
 
                 if (!allocator) {
                     // Yuck, this case would suck!
@@ -870,6 +880,7 @@ void AccessCase::generateImpl(AccessGenerationState& state)
                     // already had out-of-line property storage).
 
                     jit.loadPtr(CCallHelpers::Address(baseGPR, JSObject::butterflyOffset()), scratchGPR3);
+                    jit.cage(Gigacage::JSValue, scratchGPR3);
 
                     // We have scratchGPR = new storage, scratchGPR3 = old storage,
                     // scratchGPR2 = available
@@ -948,8 +959,10 @@ void AccessCase::generateImpl(AccessGenerationState& state)
                     JSObject::offsetOfInlineStorage() +
                     offsetInInlineStorage(m_offset) * sizeof(JSValue)));
         } else {
-            if (!allocating)
+            if (!allocating) {
                 jit.loadPtr(CCallHelpers::Address(baseGPR, JSObject::butterflyOffset()), scratchGPR);
+                jit.cage(Gigacage::JSValue, scratchGPR);
+            }
             jit.storeValue(
                 valueRegs,
                 CCallHelpers::Address(scratchGPR, offsetInButterfly(m_offset) * sizeof(JSValue)));
@@ -985,6 +998,7 @@ void AccessCase::generateImpl(AccessGenerationState& state)
         
     case ArrayLength: {
         jit.loadPtr(CCallHelpers::Address(baseGPR, JSObject::butterflyOffset()), scratchGPR);
+        jit.cage(Gigacage::JSValue, scratchGPR);
         jit.load32(CCallHelpers::Address(scratchGPR, ArrayStorage::lengthOffset()), scratchGPR);
         state.failAndIgnore.append(
             jit.branch32(CCallHelpers::LessThan, scratchGPR, CCallHelpers::TrustedImm32(0)));

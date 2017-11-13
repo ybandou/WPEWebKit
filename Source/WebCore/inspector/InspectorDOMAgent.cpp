@@ -42,10 +42,12 @@
 #include "CSSStyleRule.h"
 #include "CSSStyleSheet.h"
 #include "CharacterData.h"
+#include "CommandLineAPIHost.h"
 #include "ContainerNode.h"
 #include "Cookie.h"
 #include "CookieJar.h"
 #include "DOMEditor.h"
+#include "DOMException.h"
 #include "DOMPatchSupport.h"
 #include "DOMWindow.h"
 #include "Document.h"
@@ -54,7 +56,6 @@
 #include "Element.h"
 #include "Event.h"
 #include "EventListener.h"
-#include "ExceptionCodeDescription.h"
 #include "FrameTree.h"
 #include "HTMLElement.h"
 #include "HTMLFrameOwnerElement.h"
@@ -85,12 +86,14 @@
 #include "RenderStyleConstants.h"
 #include "ScriptState.h"
 #include "ShadowRoot.h"
+#include "StaticNodeList.h"
 #include "StyleProperties.h"
 #include "StyleResolver.h"
 #include "StyleSheetList.h"
 #include "Text.h"
 #include "TextNodeTraversal.h"
 #include "Timer.h"
+#include "WebInjectedScriptManager.h"
 #include "XPathResult.h"
 #include "markup.h"
 #include <inspector/IdentifiersFactory.h>
@@ -199,18 +202,29 @@ void RevalidateStyleAttributeTask::timerFired()
     m_elements.clear();
 }
 
+class InspectableNode final : public CommandLineAPIHost::InspectableObject {
+public:
+    explicit InspectableNode(Node* node)
+        : m_node(node)
+    {
+    }
+
+    JSC::JSValue get(JSC::ExecState& state) final
+    {
+        return InspectorDOMAgent::nodeAsScriptValue(state, m_node.get());
+    }
+private:
+    RefPtr<Node> m_node;
+};
+
 String InspectorDOMAgent::toErrorString(ExceptionCode ec)
 {
-    if (ec) {
-        ExceptionCodeDescription description(ec);
-        return description.name;
-    }
-    return emptyString();
+    return ec ? String(DOMException::name(ec)) : emptyString();
 }
 
 String InspectorDOMAgent::toErrorString(Exception&& exception)
 {
-    return ExceptionCodeDescription { exception.code() }.name;
+    return DOMException::name(exception.code());
 }
 
 InspectorDOMAgent::InspectorDOMAgent(WebAgentContext& context, InspectorPageAgent* pageAgent, InspectorOverlay* overlay)
@@ -1146,6 +1160,40 @@ void InspectorDOMAgent::highlightNode(ErrorString& errorString, const InspectorO
     m_overlay->highlightNode(node, *highlightConfig);
 }
 
+void InspectorDOMAgent::highlightNodeList(ErrorString& errorString, const InspectorArray& nodeIds, const InspectorObject& highlightInspectorObject)
+{
+    Vector<Ref<Node>> nodes;
+    for (auto& nodeValue : nodeIds) {
+        if (!nodeValue) {
+            errorString = ASCIILiteral("Invalid nodeIds item.");
+            return;
+        }
+
+        int nodeId = 0;
+        if (!nodeValue->asInteger(nodeId)) {
+            errorString = ASCIILiteral("Invalid nodeIds item type. Expecting integer types.");
+            return;
+        }
+
+        // In the case that a node is removed in the time between when highlightNodeList is invoked
+        // by the frontend and it is executed by the backend, we should still attempt to highlight
+        // as many nodes as possible. As such, we should ignore any errors generated when attempting
+        // to get a Node from a given nodeId. 
+        ErrorString ignored;
+        Node* node = assertNode(ignored, nodeId);
+        if (!node)
+            continue;
+
+        nodes.append(*node);
+    }
+
+    std::unique_ptr<HighlightConfig> highlightConfig = highlightConfigFromInspectorObject(errorString, &highlightInspectorObject);
+    if (!highlightConfig)
+        return;
+
+    m_overlay->highlightNodeList(StaticNodeList::create(WTFMove(nodes)), *highlightConfig);
+}
+
 void InspectorDOMAgent::highlightFrame(ErrorString& errorString, const String& frameId, const InspectorObject* color, const InspectorObject* outlineColor)
 {
     Frame* frame = m_pageAgent->assertFrame(errorString, frameId);
@@ -1222,6 +1270,18 @@ void InspectorDOMAgent::focus(ErrorString& errorString, int nodeId)
         return;
     }
     element->focus();
+}
+
+void InspectorDOMAgent::setInspectedNode(ErrorString& errorString, int nodeId)
+{
+    Node* node = nodeForId(nodeId);
+    if (!node || node->isInUserAgentShadowTree()) {
+        errorString = ASCIILiteral("No node with given id found");
+        return;
+    }
+
+    if (CommandLineAPIHost* commandLineAPIHost = static_cast<WebInjectedScriptManager&>(m_injectedScriptManager).commandLineAPIHost())
+        commandLineAPIHost->addInspectedObject(std::make_unique<InspectableNode>(node));
 }
 
 void InspectorDOMAgent::resolveNode(ErrorString& errorString, int nodeId, const String* const objectGroup, RefPtr<Inspector::Protocol::Runtime::RemoteObject>& result)
@@ -1508,7 +1568,7 @@ Ref<Inspector::Protocol::DOM::EventListener> InspectorDOMAgent::buildObjectForEv
     if (auto scriptListener = JSEventListener::cast(eventListener.ptr())) {
         JSC::JSLockHolder lock(scriptListener->isolatedWorld().vm());
         state = execStateFromNode(scriptListener->isolatedWorld(), &node->document());
-        handler = scriptListener->jsFunction(&node->document());
+        handler = scriptListener->jsFunction(node->document());
         if (handler && state) {
             body = handler->toString(state)->value(state);
             if (auto function = jsDynamicDowncast<JSC::JSFunction*>(state->vm(), handler)) {
@@ -2145,6 +2205,32 @@ void InspectorDOMAgent::pseudoElementDestroyed(PseudoElement& pseudoElement)
 
     unbind(&pseudoElement, &m_documentNodeToIdMap);
     m_frontendDispatcher->pseudoElementRemoved(parentId, pseudoElementId);
+}
+
+void InspectorDOMAgent::didAddEventListener(EventTarget& target)
+{
+    Node* node = target.toNode();
+    if (!node)
+        return;
+
+    int nodeId = boundNodeId(node);
+    if (!nodeId)
+        return;
+
+    m_frontendDispatcher->didAddEventListener(nodeId);
+}
+
+void InspectorDOMAgent::willRemoveEventListener(EventTarget& target)
+{
+    Node* node = target.toNode();
+    if (!node)
+        return;
+
+    int nodeId = boundNodeId(node);
+    if (!nodeId)
+        return;
+
+    m_frontendDispatcher->willRemoveEventListener(nodeId);
 }
 
 Node* InspectorDOMAgent::nodeForPath(const String& path)

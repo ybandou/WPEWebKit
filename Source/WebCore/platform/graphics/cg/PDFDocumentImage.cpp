@@ -40,13 +40,13 @@
 #include "Length.h"
 #include "NotImplemented.h"
 #include "SharedBuffer.h"
-#include "TextStream.h"
 #include <CoreGraphics/CGContext.h>
 #include <CoreGraphics/CGPDFDocument.h>
 #include <wtf/MathExtras.h>
 #include <wtf/RAMSize.h>
 #include <wtf/RetainPtr.h>
 #include <wtf/StdLibExtras.h>
+#include <wtf/text/TextStream.h>
 
 #if !PLATFORM(COCOA)
 #include "ImageSourceCG.h"
@@ -153,7 +153,7 @@ static void transformContextForPainting(GraphicsContext& context, const FloatRec
     // drawPDFPage() relies on drawing the whole PDF into a context starting at (0, 0). We need
     // to transform the destination context such that srcRect of the source context will be drawn
     // in dstRect of destination context.
-    context.translate(dstRect.x() - srcRect.x(), dstRect.y() - srcRect.y());
+    context.translate(dstRect.location() - srcRect.location());
     context.scale(FloatSize(hScale, -vScale));
     context.translate(0, -srcRect.height());
 }
@@ -263,10 +263,10 @@ void PDFDocumentImage::updateCachedImageIfNeeded(GraphicsContext& context, const
     decodedSizeChanged(internalSize.unclampedArea() * 4);
 }
 
-void PDFDocumentImage::draw(GraphicsContext& context, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator op, BlendMode, DecodingMode, ImageOrientationDescription)
+ImageDrawResult PDFDocumentImage::draw(GraphicsContext& context, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator op, BlendMode, DecodingMode, ImageOrientationDescription)
 {
     if (!m_document || !m_hasPage)
-        return;
+        return ImageDrawResult::DidNothing;
 
     updateCachedImageIfNeeded(context, dstRect, srcRect);
 
@@ -289,6 +289,8 @@ void PDFDocumentImage::draw(GraphicsContext& context, const FloatRect& dstRect, 
 
     if (imageObserver())
         imageObserver()->didDraw(*this);
+
+    return ImageDrawResult::DidDraw;
 }
 
 void PDFDocumentImage::destroyDecodedData(bool)
@@ -332,7 +334,7 @@ static void applyRotationForPainting(GraphicsContext& context, FloatSize size, i
     if (rotationDegrees == 90)
         context.translate(0, size.height());
     else if (rotationDegrees == 180)
-        context.translate(size.width(), size.height());
+        context.translate(size);
     else if (rotationDegrees == 270)
         context.translate(size.width(), 0);
 
@@ -343,13 +345,13 @@ void PDFDocumentImage::drawPDFPage(GraphicsContext& context)
 {
     applyRotationForPainting(context, size(), m_rotationDegrees);
 
-    context.translate(-m_cropBox.x(), -m_cropBox.y());
+    context.translate(-m_cropBox.location());
 
 #if USE(DIRECT2D)
     notImplemented();
 #else
     // CGPDF pages are indexed from 1.
-#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000)
+#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200) || PLATFORM(IOS)
     CGContextDrawPDFPageWithAnnotations(context.platformContext(), CGPDFDocumentGetPage(m_document.get(), 1), nullptr);
 #else
     CGContextDrawPDFPage(context.platformContext(), CGPDFDocumentGetPage(m_document.get(), 1));

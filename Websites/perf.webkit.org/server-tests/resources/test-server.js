@@ -78,6 +78,7 @@ class TestServer {
             },
             'uploadFileLimitInMB': 2,
             'uploadUserQuotaInMB': 5,
+            'uploadTotalQuotaInMB': 6,
             'uploadDirectory': Config.value('dataDirectory') + '/uploaded',
             'universalSlavePassword': null,
             'maintenanceMode': false,
@@ -169,6 +170,7 @@ class TestServer {
         let port = Config.value('testServer.port');
         let errorLog = Config.path('testServer.httpdErrorLog');
         let mutexFile = Config.path('testServer.httpdMutexDir');
+        let phpVersion = childProcess.execFileSync('php', ['-v'], {stdio: ['pipe', 'pipe', 'ignore']}).toString().includes('PHP 5') ? 'PHP5' : 'PHP7';
 
         if (!fs.existsSync(mutexFile))
             fs.mkdirSync(mutexFile, 0o755);
@@ -180,7 +182,8 @@ class TestServer {
             '-c', `PidFile ${pidFile}`,
             '-c', `ErrorLog ${errorLog}`,
             '-c', `Mutex file:${mutexFile}`,
-            '-c', `DocumentRoot ${Config.serverRoot()}`];
+            '-c', `DocumentRoot ${Config.serverRoot()}`,
+            '-D', phpVersion];
 
         if (this._shouldLog)
             console.log(args);
@@ -191,7 +194,7 @@ class TestServer {
             scheme: 'http',
             host: 'localhost',
             port: port,
-        }
+        };
         this._pidWaitStart = Date.now();
         this._pidFile = pidFile;
 
@@ -212,6 +215,7 @@ class TestServer {
 
         childProcess.execFileSync('kill', ['-TERM', pid]);
 
+        this._pidWaitStart = Date.now();
         return new Promise(this._waitForPid.bind(this, false));
     }
 

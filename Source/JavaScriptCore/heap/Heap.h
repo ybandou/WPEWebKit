@@ -35,18 +35,14 @@
 #include "HeapObserver.h"
 #include "ListableHandler.h"
 #include "MarkedBlock.h"
-#include "MarkedBlockSet.h"
 #include "MarkedSpace.h"
 #include "MutatorState.h"
 #include "Options.h"
 #include "StructureIDTable.h"
 #include "Synchronousness.h"
-#include "TinyBloomFilter.h"
 #include "UnconditionalFinalizer.h"
-#include "VisitRaceKey.h"
 #include "WeakHandleOwner.h"
 #include "WeakReferenceHarvester.h"
-#include "WriteBarrierSupport.h"
 #include <wtf/AutomaticThread.h>
 #include <wtf/Deque.h>
 #include <wtf/HashCountedSet.h>
@@ -208,17 +204,6 @@ public:
     void reportExtraMemoryAllocated(size_t);
     JS_EXPORT_PRIVATE void reportExtraMemoryVisited(size_t);
 
-    // Same as above, but for uncommitted virtual memory allocations caused by
-    // WebAssembly fast memories. This is counted separately because virtual
-    // memory is logically a different type of resource than committed physical
-    // memory. We can often allocate huge amounts of virtual memory (think
-    // gigabytes) without adversely affecting regular GC'd memory. At some point
-    // though, too much virtual memory becomes prohibitive and we want to
-    // collect GC-able objects which keep this virtual memory alive.
-    // This is counted in number of fast memories, not bytes.
-    void reportWebAssemblyFastMemoriesAllocated(size_t);
-    bool webAssemblyFastMemoriesThisCycleAtThreshold() const;
-
 #if ENABLE(RESOURCE_USAGE)
     // Use this API to report the subset of extra memory that lives outside this process.
     JS_EXPORT_PRIVATE void reportExternalMemoryVisited(size_t);
@@ -268,7 +253,6 @@ public:
     void deleteAllUnlinkedCodeBlocks(DeleteAllCodeEffort);
 
     void didAllocate(size_t);
-    void didAllocateWebAssemblyFastMemories(size_t);
     bool isPagedOut(double deadline);
     
     const JITStubRoutineSet& jitStubRoutines() { return *m_jitStubRoutines; }
@@ -368,11 +352,6 @@ public:
     JS_EXPORT_PRIVATE void addMarkingConstraint(std::unique_ptr<MarkingConstraint>);
     
     size_t numOpaqueRoots() const { return m_opaqueRoots.size(); }
-
-#if USE(CF)
-    CFRunLoopRef runLoop() const { return m_runLoop.get(); }
-    JS_EXPORT_PRIVATE void setRunLoop(CFRunLoopRef);
-#endif // USE(CF)
 
     HeapVerifier* verifier() const { return m_verifier.get(); }
     
@@ -510,7 +489,7 @@ private:
     void gatherExtraHeapSnapshotData(HeapProfiler&);
     void removeDeadHeapSnapshotNodes(HeapProfiler&);
     void finalize();
-    void sweepLargeAllocations();
+    void sweepInFinalize();
     
     void sweepAllLogicallyEmptyWeakBlocks();
     bool sweepNextLogicallyEmptyWeakBlock();
@@ -557,7 +536,6 @@ private:
     size_t m_sizeBeforeLastEdenCollect;
 
     size_t m_bytesAllocatedThisCycle;
-    size_t m_webAssemblyFastMemoriesAllocatedThisCycle;
     size_t m_bytesAbandonedSinceLastFullCollect;
     size_t m_maxEdenSize;
     size_t m_maxEdenSizeWhenCritical;
@@ -623,9 +601,6 @@ private:
     Vector<WeakBlock*> m_logicallyEmptyWeakBlocks;
     size_t m_indexOfNextLogicallyEmptyWeakBlockToSweep { WTF::notFound };
     
-#if USE(CF)
-    RetainPtr<CFRunLoopRef> m_runLoop;
-#endif // USE(CF)
     RefPtr<FullGCActivityCallback> m_fullActivityCallback;
     RefPtr<GCActivityCallback> m_edenActivityCallback;
     RefPtr<IncrementalSweeper> m_sweeper;

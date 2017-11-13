@@ -28,7 +28,6 @@
 #include "InspectorBackendDispatchers.h"
 #include "InspectorFrontendDispatchers.h"
 #include "inspector/InspectorAgentBase.h"
-#include "runtime/ConsoleTypes.h"
 #include <wtf/Forward.h>
 #include <wtf/HashMap.h>
 #include <wtf/Noncopyable.h>
@@ -63,7 +62,6 @@ public:
     void disable(ErrorString&) override;
     void clearMessages(ErrorString&) override;
     void setMonitoringXHREnabled(ErrorString&, bool enabled) override = 0;
-    void addInspectedNode(ErrorString&, int nodeId) override = 0;
 
     bool enabled() const { return m_enabled; }
     void reset();

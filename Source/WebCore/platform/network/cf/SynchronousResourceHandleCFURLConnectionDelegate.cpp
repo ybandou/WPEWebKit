@@ -41,9 +41,9 @@
 #include <wtf/text/WTFString.h>
 
 #if PLATFORM(COCOA)
-#include "CFNetworkSPI.h"
 #include "WebCoreSystemInterface.h"
 #include "WebCoreURLResponse.h"
+#include <pal/spi/cf/CFNetworkSPI.h>
 #endif // PLATFORM(COCOA)
 
 #if PLATFORM(IOS)
@@ -170,7 +170,7 @@ void SynchronousResourceHandleCFURLConnectionDelegate::didReceiveResponse(CFURLC
 #endif
 
     ResourceResponse resourceResponse(cfResponse);
-#if PLATFORM(COCOA) && ENABLE(WEB_TIMING)
+#if PLATFORM(COCOA)
     ResourceHandle::getConnectionTimingData(connection, resourceResponse.deprecatedNetworkLoadMetrics());
 #else
     UNUSED_PARAM(connection);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2006-2017 Apple Inc. All rights reserved.
  * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,9 +52,9 @@
 #include "FrameTree.h"
 #include "HTMLFormElement.h"
 #include "HTMLFrameOwnerElement.h"
+#include "HTTPHeaderField.h"
 #include "HTTPHeaderNames.h"
 #include "HistoryItem.h"
-#include "IconController.h"
 #include "IconLoader.h"
 #include "InspectorInstrumentation.h"
 #include "LinkIconCollector.h"
@@ -75,6 +75,7 @@
 #include "SubresourceLoader.h"
 #include "TextResourceDecoder.h"
 #include <wtf/Assertions.h>
+#include <wtf/CompletionHandler.h>
 #include <wtf/NeverDestroyed.h>
 #include <wtf/Ref.h>
 #include <wtf/text/CString.h>
@@ -134,7 +135,8 @@ static bool areAllLoadersPageCacheAcceptable(const ResourceLoaderMap& loaders)
 }
 
 DocumentLoader::DocumentLoader(const ResourceRequest& request, const SubstituteData& substituteData)
-    : m_cachedResourceLoader(CachedResourceLoader::create(this))
+    : FrameDestructionObserver(nullptr)
+    , m_cachedResourceLoader(CachedResourceLoader::create(this))
     , m_writer(m_frame)
     , m_originalRequest(request)
     , m_substituteData(substituteData)
@@ -163,15 +165,11 @@ SubresourceLoader* DocumentLoader::mainResourceLoader() const
 
 DocumentLoader::~DocumentLoader()
 {
-    ASSERT(!m_frame || frameLoader()->activeDocumentLoader() != this || !isLoading());
+    ASSERT(!m_frame || !isLoading() || frameLoader()->activeDocumentLoader() != this);
     ASSERT_WITH_MESSAGE(!m_waitingForContentPolicy, "The content policy callback should never outlive its DocumentLoader.");
     ASSERT_WITH_MESSAGE(!m_waitingForNavigationPolicy, "The navigation policy callback should never outlive its DocumentLoader.");
-    if (m_iconLoadDecisionCallback)
-        m_iconLoadDecisionCallback->invalidate();
-    if (m_iconDataCallback)
-        m_iconDataCallback->invalidate();
-    m_cachedResourceLoader->clearDocumentLoader();
 
+    m_cachedResourceLoader->clearDocumentLoader();
     clearMainResource();
 }
 
@@ -281,6 +279,11 @@ void DocumentLoader::stopLoading()
         if (loading || doc->parsing())
             m_frame->loader().stopLoading(UnloadEventPolicyNone);
     }
+
+    for (auto callbackIdentifier : m_iconLoaders.values())
+        notifyFinishedLoadingIcon(callbackIdentifier, nullptr);
+    m_iconLoaders.clear();
+    m_iconsPendingLoadDecision.clear();
 
     // Always cancel multipart loaders
     cancelAll(m_multipartSubresourceLoaders);
@@ -515,7 +518,7 @@ void DocumentLoader::willSendRequest(ResourceRequest& newRequest, const Resource
     ASSERT(m_frame->document());
     ASSERT(topFrame.document());
 
-    ResourceLoadObserver::sharedObserver().logFrameNavigation(*m_frame, topFrame, newRequest, redirectResponse);
+    ResourceLoadObserver::shared().logFrameNavigation(*m_frame, topFrame, newRequest);
     
     // Update cookie policy base URL as URL changes, except for subframes, which use the
     // URL of the main frame which doesn't change when we redirect.
@@ -692,19 +695,19 @@ void DocumentLoader::responseReceived(const ResourceResponse& response)
 
     // Always show content with valid substitute data.
     if (m_substituteData.isValid()) {
-        continueAfterContentPolicy(PolicyUse);
+        continueAfterContentPolicy(PolicyAction::Use);
         return;
     }
 
 #if ENABLE(FTPDIR)
     // Respect the hidden FTP Directory Listing pref so it can be tested even if the policy delegate might otherwise disallow it
     if (m_frame->settings().forceFTPDirectoryListings() && m_response.mimeType() == "application/x-ftp-directory") {
-        continueAfterContentPolicy(PolicyUse);
+        continueAfterContentPolicy(PolicyAction::Use);
         return;
     }
 #endif
 
-    frameLoader()->policyChecker().checkContentPolicy(m_response, [this](PolicyAction policy) {
+    frameLoader()->checkContentPolicy(m_response, [this, protectedThis = makeRef(*this)](PolicyAction policy) {
         continueAfterContentPolicy(policy);
     });
 }
@@ -744,7 +747,7 @@ void DocumentLoader::continueAfterContentPolicy(PolicyAction policy)
         return;
 
     switch (policy) {
-    case PolicyUse: {
+    case PolicyAction::Use: {
         // Prevent remote web archives from loading because they can claim to be from any domain and thus avoid cross-domain security checks (4120255).
         if (!frameLoader()->client().canShowMIMEType(m_response.mimeType()) || isRemoteWebArchive(*this)) {
             frameLoader()->policyChecker().cannotShowMIMEType(m_response);
@@ -755,7 +758,7 @@ void DocumentLoader::continueAfterContentPolicy(PolicyAction policy)
         break;
     }
 
-    case PolicyDownload: {
+    case PolicyAction::Download: {
         // m_mainResource can be null, e.g. when loading a substitute resource from application cache.
         if (!m_mainResource) {
             mainReceivedError(frameLoader()->client().cannotShowURLError(m_request));
@@ -769,7 +772,7 @@ void DocumentLoader::continueAfterContentPolicy(PolicyAction policy)
         // Download may use this knowledge for purposes unrelated to cookies, notably for setting file quarantine data.
         frameLoader()->setOriginalURLForDownloadRequest(m_request);
 
-        SessionID sessionID = SessionID::defaultSessionID();
+        PAL::SessionID sessionID = PAL::SessionID::defaultSessionID();
         if (frame() && frame()->page())
             sessionID = frame()->page()->sessionID();
 
@@ -784,7 +787,7 @@ void DocumentLoader::continueAfterContentPolicy(PolicyAction policy)
             static_cast<ResourceLoader*>(mainResourceLoader())->didFail(interruptedForPolicyChangeError());
         return;
     }
-    case PolicyIgnore:
+    case PolicyAction::Ignore:
         if (ResourceLoader* mainResourceLoader = this->mainResourceLoader())
             InspectorInstrumentation::continueWithPolicyIgnore(*m_frame, mainResourceLoader->identifier(), *this, m_response);
         stopLoadingForPolicyChange();
@@ -982,7 +985,7 @@ void DocumentLoader::attachToFrame(Frame& frame)
         return;
 
     ASSERT(!m_frame);
-    m_frame = &frame;
+    observeFrame(&frame);
     m_writer.setFrame(&frame);
     attachToFrame();
 
@@ -1023,7 +1026,7 @@ void DocumentLoader::detachFromFrame()
 
     InspectorInstrumentation::loaderDetachedFromFrame(*m_frame, *this);
 
-    m_frame = nullptr;
+    observeFrame(nullptr);
 }
 
 void DocumentLoader::clearMainResourceLoader()
@@ -1032,6 +1035,11 @@ void DocumentLoader::clearMainResourceLoader()
 
     if (this == frameLoader()->activeDocumentLoader())
         checkLoadComplete();
+}
+
+void DocumentLoader::setCustomHeaderFields(Vector<HTTPHeaderField>&& fields)
+{
+    m_customHeaderFields = WTFMove(fields);
 }
 
 bool DocumentLoader::isLoadingInAPISense() const
@@ -1047,6 +1055,8 @@ bool DocumentLoader::isLoadingInAPISense() const
         if ((isLoadingMainResource() || !document.loadEventFinished()) && isLoading())
             return true;
         if (m_cachedResourceLoader->requestCount())
+            return true;
+        if (document.isDelayingLoadEvent())
             return true;
         if (document.processingLoadEvent())
             return true;
@@ -1475,7 +1485,7 @@ void DocumentLoader::startLoadingMainResource()
 
     RELEASE_LOG_IF_ALLOWED("startLoadingMainResource: Starting load (frame = %p, main = %d)", m_frame, m_frame->isMainFrame());
 
-    static NeverDestroyed<ResourceLoaderOptions> mainResourceLoadOptions(SendCallbacks, SniffContent, BufferData, AllowStoredCredentials, ClientCredentialPolicy::MayAskClientForCredentials, FetchOptions::Credentials::Include, SkipSecurityCheck, FetchOptions::Mode::NoCors, IncludeCertificateInfo, ContentSecurityPolicyImposition::SkipPolicyCheck, DefersLoadingPolicy::AllowDefersLoading, CachingPolicy::AllowCaching);
+    static NeverDestroyed<ResourceLoaderOptions> mainResourceLoadOptions(SendCallbacks, SniffContent, BufferData, StoredCredentialsPolicy::Use, ClientCredentialPolicy::MayAskClientForCredentials, FetchOptions::Credentials::Include, SkipSecurityCheck, FetchOptions::Mode::NoCors, IncludeCertificateInfo, ContentSecurityPolicyImposition::SkipPolicyCheck, DefersLoadingPolicy::AllowDefersLoading, CachingPolicy::AllowCaching);
     CachedResourceRequest mainResourceRequest(ResourceRequest(request), mainResourceLoadOptions);
     if (!m_frame->isMainFrame() && m_frame->document()) {
         // If we are loading the main resource of a subframe, use the cache partition of the main document.
@@ -1485,7 +1495,7 @@ void DocumentLoader::startLoadingMainResource()
         origin->setStorageBlockingPolicy(frameLoader()->frame().settings().storageBlockingPolicy());
         mainResourceRequest.setDomainForCachePartition(origin->domainForCachePartition());
     }
-    m_mainResource = m_cachedResourceLoader->requestMainResource(WTFMove(mainResourceRequest));
+    m_mainResource = m_cachedResourceLoader->requestMainResource(WTFMove(mainResourceRequest)).valueOr(nullptr);
 
 #if ENABLE(CONTENT_EXTENSIONS)
     if (m_mainResource && m_mainResource->errorOccurred() && m_frame->page() && m_mainResource->resourceError().domain() == ContentExtensions::WebKitContentBlockerDomain) {
@@ -1536,7 +1546,7 @@ void DocumentLoader::cancelPolicyCheckIfNeeded()
     RELEASE_ASSERT(frameLoader());
 
     if (m_waitingForContentPolicy || m_waitingForNavigationPolicy) {
-        frameLoader()->policyChecker().cancelCheck();
+        frameLoader()->policyChecker().stopCheck();
         m_waitingForContentPolicy = false;
         m_waitingForNavigationPolicy = false;
     }
@@ -1605,84 +1615,76 @@ void DocumentLoader::maybeFinishLoadingMultipartContent()
     commitLoad(resourceData->data(), resourceData->size());
 }
 
-void DocumentLoader::iconLoadDecisionAvailable()
-{
-    if (m_frame)
-        m_frame->loader().icon().loadDecisionReceived(iconDatabase().synchronousLoadDecisionForIconURL(frameLoader()->icon().url(), this));
-}
-
-static void iconLoadDecisionCallback(IconLoadDecision decision, void* context)
-{
-    static_cast<DocumentLoader*>(context)->continueIconLoadWithDecision(decision);
-}
-
-void DocumentLoader::getIconLoadDecisionForIconURL(const String& urlString)
-{
-    if (m_iconLoadDecisionCallback)
-        m_iconLoadDecisionCallback->invalidate();
-    m_iconLoadDecisionCallback = IconLoadDecisionCallback::create(this, iconLoadDecisionCallback);
-    iconDatabase().loadDecisionForIconURL(urlString, *m_iconLoadDecisionCallback);
-}
-
-void DocumentLoader::continueIconLoadWithDecision(IconLoadDecision decision)
-{
-    ASSERT(m_iconLoadDecisionCallback);
-    m_iconLoadDecisionCallback = nullptr;
-    if (m_frame)
-        m_frame->loader().icon().continueLoadWithDecision(decision);
-}
-
-static void iconDataCallback(SharedBuffer*, void*)
-{
-    // FIXME: Implement this once we know what parts of WebCore actually need the icon data returned.
-}
-
-void DocumentLoader::getIconDataForIconURL(const String& urlString)
-{   
-    if (m_iconDataCallback)
-        m_iconDataCallback->invalidate();
-    m_iconDataCallback = IconDataCallback::create(this, iconDataCallback);
-    iconDatabase().iconDataForIconURL(urlString, *m_iconDataCallback);
-}
-
 void DocumentLoader::startIconLoading()
 {
-    ASSERT(m_frame->loader().client().useIconLoadingClient());
-
     static uint64_t nextIconCallbackID = 1;
 
     auto* document = this->document();
     if (!document)
         return;
 
-    Vector<LinkIcon> icons = LinkIconCollector { *document }.iconsOfTypes({ LinkIconType::Favicon, LinkIconType::TouchIcon, LinkIconType::TouchPrecomposedIcon });
+    if (!m_frame->isMainFrame())
+        return;
 
-    if (icons.isEmpty())
-        icons.append({ m_frame->document()->completeURL(ASCIILiteral("/favicon.ico")), LinkIconType::Favicon, String(), std::nullopt });
+    if (document->url().isEmpty() || document->url().isBlankURL())
+        return;
 
-    for (auto& icon : icons) {
+    m_linkIcons = LinkIconCollector { *document }.iconsOfTypes({ LinkIconType::Favicon, LinkIconType::TouchIcon, LinkIconType::TouchPrecomposedIcon });
+
+    auto findResult = m_linkIcons.findMatching([](auto& icon) { return icon.type == LinkIconType::Favicon; });
+    if (findResult == notFound)
+        m_linkIcons.append({ document->completeURL(ASCIILiteral("/favicon.ico")), LinkIconType::Favicon, String(), std::nullopt });
+
+    if (!m_linkIcons.size())
+        return;
+
+    Vector<std::pair<WebCore::LinkIcon&, uint64_t>> iconDecisions;
+    iconDecisions.reserveInitialCapacity(m_linkIcons.size());
+    for (auto& icon : m_linkIcons) {
         auto result = m_iconsPendingLoadDecision.add(nextIconCallbackID++, icon);
-        m_frame->loader().client().getLoadDecisionForIcon(icon, result.iterator->key);
+        iconDecisions.uncheckedAppend({ icon, result.iterator->key });
     }
+
+    m_frame->loader().client().getLoadDecisionForIcons(iconDecisions);
 }
 
 void DocumentLoader::didGetLoadDecisionForIcon(bool decision, uint64_t loadIdentifier, uint64_t newCallbackID)
 {
     auto icon = m_iconsPendingLoadDecision.take(loadIdentifier);
-    if (!decision || icon.url.isEmpty() || !m_frame)
+
+    // If the decision was not to load or this DocumentLoader is already detached, there is no load to perform.
+    if (!decision || !m_frame)
         return;
 
+    // If the LinkIcon we just took is empty, then the DocumentLoader had all of its loaders stopped
+    // while this icon load decision was pending.
+    // In this case we need to notify the client that the icon finished loading with empty data.
+    if (icon.url.isEmpty()) {
+        notifyFinishedLoadingIcon(newCallbackID, nullptr);
+        return;
+    }
+
     auto iconLoader = std::make_unique<IconLoader>(*this, icon.url);
-    iconLoader->startLoading();
+    auto* rawIconLoader = iconLoader.get();
     m_iconLoaders.set(WTFMove(iconLoader), newCallbackID);
+
+    rawIconLoader->startLoading();
 }
 
 void DocumentLoader::finishedLoadingIcon(IconLoader& loader, SharedBuffer* buffer)
 {
-    auto loadIdentifier = m_iconLoaders.take(&loader);
-    ASSERT(loadIdentifier);
+    // If the DocumentLoader has detached from its frame, all icon loads should have already been cancelled.
+    ASSERT(m_frame);
 
-    m_frame->loader().client().finishedLoadingIcon(loadIdentifier, buffer);
+    auto callbackIdentifier = m_iconLoaders.take(&loader);
+    notifyFinishedLoadingIcon(callbackIdentifier, buffer);
+}
+
+void DocumentLoader::notifyFinishedLoadingIcon(uint64_t callbackIdentifier, SharedBuffer* buffer)
+{
+    RELEASE_ASSERT(callbackIdentifier);
+    RELEASE_ASSERT(m_frame);
+    m_frame->loader().client().finishedLoadingIcon(callbackIdentifier, buffer);
 }
 
 void DocumentLoader::dispatchOnloadEvents()

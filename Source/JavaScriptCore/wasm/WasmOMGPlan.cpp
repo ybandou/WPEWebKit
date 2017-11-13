@@ -44,11 +44,12 @@
 #include <wtf/MonotonicTime.h>
 #include <wtf/StdLibExtras.h>
 #include <wtf/ThreadMessage.h>
-#include <wtf/text/StringBuilder.h>
 
 namespace JSC { namespace Wasm {
 
+namespace WasmOMGPlanInternal {
 static const bool verbose = false;
+}
 
 OMGPlan::OMGPlan(Ref<Module> module, uint32_t functionIndex, MemoryMode mode, CompletionTask&& task)
     : Base(nullptr, makeRef(const_cast<ModuleInformation&>(module->moduleInformation())), WTFMove(task))
@@ -59,7 +60,7 @@ OMGPlan::OMGPlan(Ref<Module> module, uint32_t functionIndex, MemoryMode mode, Co
     setMode(mode);
     ASSERT(m_codeBlock->runnable());
     ASSERT(m_codeBlock.ptr() == m_module->codeBlockFor(m_mode));
-    dataLogLnIf(verbose, "Starting OMG plan for ", functionIndex, " of module: ", RawPointer(&m_module.get()));
+    dataLogLnIf(WasmOMGPlanInternal::verbose, "Starting OMG plan for ", functionIndex, " of module: ", RawPointer(&m_module.get()));
 }
 
 void OMGPlan::work(CompilationEffort)
@@ -88,18 +89,23 @@ void OMGPlan::work(CompilationEffort)
     }
 
     Entrypoint omgEntrypoint;
-    LinkBuffer linkBuffer(*context.wasmEntrypointJIT, nullptr);
+    LinkBuffer linkBuffer(*context.wasmEntrypointJIT, nullptr, JITCompilationCanFail);
+    if (UNLIKELY(linkBuffer.didFailToAllocate())) {
+        Base::fail(holdLock(m_lock), makeString("Out of executable memory while tiering up function at index ", String::number(m_functionIndex)));
+        return;
+    }
+
     omgEntrypoint.compilation = std::make_unique<B3::Compilation>(
         FINALIZE_CODE(linkBuffer, ("WebAssembly OMG function[%i] %s", m_functionIndex, SignatureInformation::get(signatureIndex).toString().ascii().data())),
         WTFMove(context.wasmEntrypointByproducts));
 
-    omgEntrypoint.calleeSaveRegisters = WTFMove(parseAndCompileResult.value()->wasmEntrypoint.calleeSaveRegisters);
+    omgEntrypoint.calleeSaveRegisters = WTFMove(parseAndCompileResult.value()->entrypoint.calleeSaveRegisters);
 
     void* entrypoint;
     {
         ASSERT(m_codeBlock.ptr() == m_module->codeBlockFor(mode()));
         Ref<Callee> callee = Callee::create(WTFMove(omgEntrypoint), functionIndexSpace, m_moduleInformation->nameSection.get(functionIndexSpace));
-        MacroAssembler::repatchPointer(parseAndCompileResult.value()->wasmCalleeMoveLocation, CalleeBits::boxWasm(callee.ptr()));
+        MacroAssembler::repatchPointer(parseAndCompileResult.value()->calleeMoveLocation, CalleeBits::boxWasm(callee.ptr()));
         ASSERT(!m_codeBlock->m_optimizedCallees[m_functionIndex]);
         entrypoint = callee->entrypoint();
 
@@ -134,9 +140,9 @@ void OMGPlan::work(CompilationEffort)
 
         auto repatchCalls = [&] (const Vector<UnlinkedWasmToWasmCall>&  callsites) {
             for (auto& call : callsites) {
-                dataLogLnIf(verbose, "Considering repatching call at: ", RawPointer(call.callLocation.dataLocation()), " that targets ", call.functionIndexSpace);
+                dataLogLnIf(WasmOMGPlanInternal::verbose, "Considering repatching call at: ", RawPointer(call.callLocation.dataLocation()), " that targets ", call.functionIndexSpace);
                 if (call.functionIndexSpace == functionIndexSpace) {
-                    dataLogLnIf(verbose, "Repatching call at: ", RawPointer(call.callLocation.dataLocation()), " to ", RawPointer(entrypoint));
+                    dataLogLnIf(WasmOMGPlanInternal::verbose, "Repatching call at: ", RawPointer(call.callLocation.dataLocation()), " to ", RawPointer(entrypoint));
                     MacroAssembler::repatchNearCall(call.callLocation, CodeLocationLabel(entrypoint));
                 }
             }
@@ -152,7 +158,7 @@ void OMGPlan::work(CompilationEffort)
         repatchCalls(unlinkedCalls);
     }
 
-    dataLogLnIf(verbose, "Finished with tier up count at: ", m_codeBlock->tierUpCount(m_functionIndex).count());
+    dataLogLnIf(WasmOMGPlanInternal::verbose, "Finished with tier up count at: ", m_codeBlock->tierUpCount(m_functionIndex).count());
     complete(holdLock(m_lock));
 }
 
@@ -161,7 +167,6 @@ void runOMGPlanForIndex(Context* context, uint32_t functionIndex)
     JSWebAssemblyCodeBlock* codeBlock = context->codeBlock();
     ASSERT(context->memoryMode() == codeBlock->m_codeBlock->mode());
 
-    // We use the least significant bit of the tierUpCount to represent whether or not someone has already started the tier up.
     if (codeBlock->m_codeBlock->tierUpCount(functionIndex).shouldStartTierUp()) {
         Ref<Plan> plan = adoptRef(*new OMGPlan(context->module()->module(), functionIndex, codeBlock->m_codeBlock->mode(), Plan::dontFinalize()));
         ensureWorklist().enqueue(plan.copyRef());

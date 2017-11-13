@@ -37,7 +37,7 @@
 #include <sqlite3.h>
 
 #if PLATFORM(IOS)
-#include <sqlite3_private.h>
+#include <pal/spi/ios/SQLite3SPI.h>
 #endif
 
 namespace WebCore {

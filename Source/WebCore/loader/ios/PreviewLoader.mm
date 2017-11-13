@@ -35,8 +35,8 @@
 #import "PreviewConverter.h"
 #import "PreviewLoaderClient.h"
 #import "QuickLook.h"
-#import "QuickLookSPI.h"
 #import "ResourceLoader.h"
+#import <pal/spi/ios/QuickLookSPI.h>
 #import <wtf/NeverDestroyed.h>
 
 using namespace WebCore;
@@ -117,6 +117,7 @@ static PreviewLoaderClient& emptyClient()
 
 - (void)_sendDidReceiveResponseIfNecessary
 {
+    ASSERT(!_resourceLoader->reachedTerminalState());
     if (_hasSentDidReceiveResponse)
         return;
 
@@ -135,6 +136,9 @@ static PreviewLoaderClient& emptyClient()
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data lengthReceived:(long long)lengthReceived
 {
     ASSERT_UNUSED(connection, !connection);
+    if (_resourceLoader->reachedTerminalState())
+        return;
+    
     [self _sendDidReceiveResponseIfNecessary];
 
     // QuickLook code sends us a nil data at times. The check below is the same as the one in
@@ -146,6 +150,9 @@ static PreviewLoaderClient& emptyClient()
 - (void)connectionDidFinishLoading:(NSURLConnection *)connection
 {
     ASSERT_UNUSED(connection, !connection);
+    if (_resourceLoader->reachedTerminalState())
+        return;
+    
     ASSERT(_hasSentDidReceiveResponse);
 
     NetworkLoadMetrics emptyMetrics;
@@ -160,6 +167,8 @@ static inline bool isQuickLookPasswordError(NSError *error)
 - (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
 {
     ASSERT_UNUSED(connection, !connection);
+    if (_resourceLoader->reachedTerminalState())
+        return;
 
     if (!isQuickLookPasswordError(error)) {
         [self _sendDidReceiveResponseIfNecessary];
@@ -194,7 +203,17 @@ PreviewLoader::~PreviewLoader()
 
 bool PreviewLoader::shouldCreateForMIMEType(const String& mimeType)
 {
-    return [QLPreviewGetSupportedMIMETypesSet() containsObject:mimeType];
+    static std::once_flag onceFlag;
+    static NeverDestroyed<HashSet<String, ASCIICaseInsensitiveHash>> supportedMIMETypes;
+    std::call_once(onceFlag, [] {
+        for (NSString *mimeType in QLPreviewGetSupportedMIMETypesSet())
+            supportedMIMETypes.get().add(mimeType);
+    });
+
+    if (mimeType.isNull())
+        return false;
+
+    return supportedMIMETypes.get().contains(mimeType);
 }
 
 std::unique_ptr<PreviewLoader> PreviewLoader::create(ResourceLoader& loader, const ResourceResponse& response)

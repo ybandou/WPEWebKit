@@ -35,6 +35,7 @@
 #include "DocumentFragment.h"
 #include "DocumentType.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "HTMLEntityParser.h"
 #include "HTMLHtmlElement.h"
 #include "HTMLTemplateElement.h"
@@ -46,6 +47,7 @@
 #include "ScriptElement.h"
 #include "ScriptSourceCode.h"
 #include "Settings.h"
+#include "SharedBuffer.h"
 #include "StyleScope.h"
 #include "TransformSource.h"
 #include "XMLNSNames.h"
@@ -450,7 +452,7 @@ static void* openFunc(const char* uri)
         // FIXME: We should restore the original global error handler as well.
 
         if (cachedResourceLoader->frame())
-            cachedResourceLoader->frame()->loader().loadResourceSynchronously(url, AllowStoredCredentials, ClientCredentialPolicy::MayAskClientForCredentials, error, response, data);
+            cachedResourceLoader->frame()->loader().loadResourceSynchronously(url, StoredCredentialsPolicy::Use, ClientCredentialPolicy::MayAskClientForCredentials, error, response, data);
     }
 
     // We have to check the URL again after the load to catch redirects.
@@ -546,8 +548,8 @@ RefPtr<XMLParserContext> XMLParserContext::createMemoryParser(xmlSAXHandlerPtr h
     parser->sax2 = 1;
     parser->instate = XML_PARSER_CONTENT; // We are parsing a CONTENT
     parser->depth = 0;
-    parser->str_xml = xmlDictLookup(parser->dict, BAD_CAST "xml", 3);
-    parser->str_xmlns = xmlDictLookup(parser->dict, BAD_CAST "xmlns", 5);
+    parser->str_xml = xmlDictLookup(parser->dict, reinterpret_cast<xmlChar*>(const_cast<char*>("xml")), 3);
+    parser->str_xmlns = xmlDictLookup(parser->dict, reinterpret_cast<xmlChar*>(const_cast<char*>("xmlns")), 5);
     parser->str_xml_ns = xmlDictLookup(parser->dict, XML_XML_NAMESPACE, 36);
     parser->_private = userData;
 
@@ -598,9 +600,9 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment& fragment, Element* parent
         Element* element = elemStack.last();
         if (element->hasAttributes()) {
             for (const Attribute& attribute : element->attributesIterator()) {
-                if (attribute.localName() == xmlnsAtom)
+                if (attribute.localName() == xmlnsAtom())
                     m_defaultNamespaceURI = attribute.value();
-                else if (attribute.prefix() == xmlnsAtom)
+                else if (attribute.prefix() == xmlnsAtom())
                     m_prefixToNamespaceMap.set(attribute.localName(), attribute.value());
             }
         }
@@ -693,7 +695,7 @@ static inline bool handleNamespaceAttributes(Vector<Attribute>& prefixedAttribut
 {
     xmlSAX2Namespace* namespaces = reinterpret_cast<xmlSAX2Namespace*>(libxmlNamespaces);
     for (int i = 0; i < numNamespaces; i++) {
-        AtomicString namespaceQName = xmlnsAtom;
+        AtomicString namespaceQName = xmlnsAtom();
         AtomicString namespaceURI = toAtomicString(namespaces[i].uri);
         if (namespaces[i].prefix)
             namespaceQName = "xmlns:" + toString(namespaces[i].prefix);
@@ -723,7 +725,7 @@ static inline bool handleElementAttributes(Vector<Attribute>& prefixedAttributes
         int valueLength = static_cast<int>(attributes[i].end - attributes[i].value);
         AtomicString attrValue = toAtomicString(attributes[i].value, valueLength);
         String attrPrefix = toString(attributes[i].prefix);
-        AtomicString attrURI = attrPrefix.isEmpty() ? nullAtom : toAtomicString(attributes[i].uri);
+        AtomicString attrURI = attrPrefix.isEmpty() ? nullAtom() : toAtomicString(attributes[i].uri);
         AtomicString attrQName = attrPrefix.isEmpty() ? toAtomicString(attributes[i].localname) : attrPrefix + ":" + toString(attributes[i].localname);
 
         auto result = Element::parseAttributeName(attrURI, attrQName);

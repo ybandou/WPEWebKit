@@ -26,6 +26,7 @@
 #pragma once
 
 #include "TextFlags.h"
+#include <wtf/Function.h>
 #include <wtf/GetPtr.h>
 #include <wtf/Hasher.h>
 #include <wtf/NeverDestroyed.h>
@@ -39,6 +40,8 @@ namespace WebCore {
 // the maximum representable value is 8191.75, and the minimum representable value is -8192.
 class FontSelectionValue {
 public:
+    typedef int16_t BackingType;
+
     FontSelectionValue() = default;
 
     // Explicit because it is lossy.
@@ -71,20 +74,20 @@ public:
     bool operator>(const FontSelectionValue other) const;
     bool operator>=(const FontSelectionValue other) const;
 
-    int16_t rawValue() const
+    BackingType rawValue() const
     {
         return m_backing;
     }
 
     static FontSelectionValue maximumValue()
     {
-        static NeverDestroyed<FontSelectionValue> result = FontSelectionValue(std::numeric_limits<int16_t>::max(), RawTag::RawTag);
+        static NeverDestroyed<FontSelectionValue> result = FontSelectionValue(std::numeric_limits<BackingType>::max(), RawTag::RawTag);
         return result.get();
     }
 
     static FontSelectionValue minimumValue()
     {
-        static NeverDestroyed<FontSelectionValue> result = FontSelectionValue(std::numeric_limits<int16_t>::min(), RawTag::RawTag);
+        static NeverDestroyed<FontSelectionValue> result = FontSelectionValue(std::numeric_limits<BackingType>::min(), RawTag::RawTag);
         return result.get();
     }
 
@@ -100,13 +103,13 @@ public:
 private:
     enum class RawTag { RawTag };
 
-    FontSelectionValue(int16_t rawValue, RawTag)
+    FontSelectionValue(BackingType rawValue, RawTag)
         : m_backing(rawValue)
     {
     }
 
     static constexpr int fractionalEntropy = 4;
-    int16_t m_backing { 0 };
+    BackingType m_backing { 0 };
 };
 
 inline FontSelectionValue FontSelectionValue::operator+(const FontSelectionValue other) const
@@ -216,7 +219,13 @@ static inline bool isFontWeightBold(FontSelectionValue fontWeight)
     return fontWeight >= boldThreshold();
 }
 
-static inline FontSelectionValue weightSearchThreshold()
+static inline FontSelectionValue lowerWeightSearchThreshold()
+{
+    static NeverDestroyed<FontSelectionValue> result = FontSelectionValue(400);
+    return result.get();
+}
+
+static inline FontSelectionValue upperWeightSearchThreshold()
 {
     static NeverDestroyed<FontSelectionValue> result = FontSelectionValue(500);
     return result.get();
@@ -513,10 +522,10 @@ public:
 
 private:
     template <typename T>
-    using IterateActiveCapabilitiesWithReturnCallback = std::function<std::optional<T>(FontSelectionCapabilities, size_t)>;
+    using IterateActiveCapabilitiesWithReturnCallback = WTF::Function<std::optional<T>(FontSelectionCapabilities, size_t)>;
 
     template <typename T>
-    inline std::optional<T> iterateActiveCapabilitiesWithReturn(IterateActiveCapabilitiesWithReturnCallback<T> callback)
+    inline std::optional<T> iterateActiveCapabilitiesWithReturn(const IterateActiveCapabilitiesWithReturnCallback<T>& callback)
     {
         for (size_t i = 0; i < m_capabilities.size(); ++i) {
             if (!m_filter[i])

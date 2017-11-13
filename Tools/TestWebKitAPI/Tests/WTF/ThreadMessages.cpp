@@ -25,13 +25,10 @@
 
 #include "config.h"
 
-#include <type_traits>
-#include <wtf/DataLog.h>
 #include <wtf/HashSet.h>
 #include <wtf/Ref.h>
 #include <wtf/ThreadMessage.h>
 #include <wtf/Vector.h>
-#include <wtf/threads/Signals.h>
 
 static void runThreadMessageTest(unsigned numSenders, unsigned numMessages)
 {
@@ -50,7 +47,7 @@ static void runThreadMessageTest(unsigned numSenders, unsigned numMessages)
     for (unsigned senderID = 0; senderID < numSenders; ++senderID) {
         senderThreads[senderID] = Thread::create("ThreadMessage sender", [senderID, numMessages, receiverThread, &messagesRun, &handlersRun] () {
             for (unsigned i = 0; i < numMessages; ++i) {
-                auto result = sendMessage(*receiverThread.get(), [senderID, &handlersRun] (siginfo_t*, ucontext_t*) {
+                auto result = sendMessage(*receiverThread.get(), [senderID, &handlersRun] (PlatformRegisters&) {
                     handlersRun[senderID]++;
                 });
                 EXPECT_TRUE(result == WTF::MessageStatus::MessageRan);
@@ -84,40 +81,3 @@ TEST(ThreadMessage, MultipleSenders)
     runThreadMessageTest(10, 100);
     runThreadMessageTest(10, 10000);
 }
-
-class ReflectedThread : public Thread {
-public:
-    using Thread::m_mutex;
-    using Thread::m_handle;
-    using Thread::hasExited;
-};
-
-TEST(ThreadMessage, SignalsWorkOnExit)
-{
-    static bool handlerRan = false;
-    installSignalHandler(Signal::Usr, [] (int, siginfo_t*, void*) -> SignalAction {
-        dataLogLn("here");
-        handlerRan = true;
-        return SignalAction::Handled;
-    });
-
-    Atomic<bool> receiverShouldKeepRunning(true);
-    RefPtr<Thread> receiverThread = (Thread::create("ThreadMessage receiver",
-        [&receiverShouldKeepRunning] () {
-            while (receiverShouldKeepRunning.load()) { }
-    }));
-    ASSERT_TRUE(receiverThread);
-
-    bool signalFired;
-    {
-        std::unique_lock<std::mutex> locker(static_cast<ReflectedThread*>(receiverThread.get())->m_mutex);
-        receiverShouldKeepRunning.store(false);
-        EXPECT_FALSE(static_cast<ReflectedThread*>(receiverThread.get())->hasExited());
-        sleep(1);
-        signalFired = !pthread_kill(static_cast<ReflectedThread*>(receiverThread.get())->m_handle, toSystemSignal(Signal::Usr));
-    }
-
-    receiverThread->waitForCompletion();
-    EXPECT_TRUE(handlerRan || !signalFired);
-}
-

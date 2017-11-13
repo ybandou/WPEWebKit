@@ -62,8 +62,7 @@ MediaSourcePrivate::AddStatus MockMediaSourcePrivate::addSourceBuffer(const Cont
 {
     MediaEngineSupportParameters parameters;
     parameters.isMediaSource = true;
-    parameters.type = contentType.type();
-    parameters.codecs = contentType.parameter(ASCIILiteral("codecs"));
+    parameters.type = contentType;
     if (MockMediaPlayerMediaSource::supportsType(parameters) == MediaPlayer::IsNotSupported)
         return NotSupported;
 
@@ -182,6 +181,16 @@ MediaTime MockMediaSourcePrivate::seekToTime(const MediaTime& targetTime, const 
         (*it)->seekToTime(seekTime);
     
     return seekTime;
+}
+
+std::optional<PlatformVideoPlaybackQualityMetrics> MockMediaSourcePrivate::videoPlaybackQualityMetrics()
+{
+    return PlatformVideoPlaybackQualityMetrics(
+        m_totalVideoFrames,
+        m_droppedVideoFrames,
+        m_corruptedVideoFrames,
+        m_totalFrameDelay.toDouble()
+    );
 }
 
 };

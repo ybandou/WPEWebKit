@@ -127,7 +127,7 @@ public:
             return true;
         if (m_family.isNull() || other.m_family.isNull())
             return false;
-        return ASCIICaseInsensitiveHash::equal(m_family, other.m_family);
+        return FontCascadeDescription::familyNamesAreEqual(m_family, other.m_family);
     }
 
     FontDescriptionKey m_fontDescriptionKey;
@@ -141,7 +141,7 @@ struct FontPlatformDataCacheKeyHash {
     static unsigned hash(const FontPlatformDataCacheKey& fontKey)
     {
         IntegerHasher hasher;
-        hasher.add(ASCIICaseInsensitiveHash::hash(fontKey.m_family));
+        hasher.add(FontCascadeDescription::familyNameHash(fontKey.m_family));
         hasher.add(fontKey.m_fontDescriptionKey.computeHash());
         hasher.add(fontKey.m_fontFaceFeatures.hash());
         hasher.add(fontKey.m_fontFaceVariantSettings.uniqueValue());
@@ -225,7 +225,7 @@ const AtomicString& FontCache::alternateFamilyName(const AtomicString& familyNam
         break;
     }
 
-    return nullAtom;
+    return nullAtom();
 }
 
 FontPlatformData* FontCache::getCachedFontPlatformData(const FontDescription& fontDescription, const AtomicString& passedFamilyName,

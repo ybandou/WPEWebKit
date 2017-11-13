@@ -28,6 +28,8 @@
 @globalPrivate
 function createArrayIterator(iteratedObject, kind, iterationFunction)
 {
+    "use strict";
+
     this.@iteratedObject = iteratedObject;
     this.@arrayIteratorKind = kind;
     this.@arrayIteratorNextIndex = 0;
@@ -268,7 +270,6 @@ function map(callback /*, thisArg */)
     else
         result = new constructor(length);
 
-    var nextIndex = 0;
     for (var i = 0; i < length; i++) {
         if (!(i in array))
             continue;
@@ -654,6 +655,7 @@ function sort(comparator)
     return array;
 }
 
+@globalPrivate
 function concatSlowPath()
 {
     "use strict";

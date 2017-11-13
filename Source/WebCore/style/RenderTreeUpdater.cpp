@@ -27,17 +27,22 @@
 #include "RenderTreeUpdater.h"
 
 #include "AXObjectCache.h"
+#include "CSSAnimationController.h"
 #include "ComposedTreeAncestorIterator.h"
 #include "ComposedTreeIterator.h"
 #include "Document.h"
 #include "Element.h"
-#include "FlowThreadController.h"
 #include "HTMLSlotElement.h"
 #include "InspectorInstrumentation.h"
 #include "NodeRenderStyle.h"
 #include "PseudoElement.h"
+#include "RenderDescendantIterator.h"
 #include "RenderFullScreen.h"
-#include "RenderNamedFlowThread.h"
+#include "RenderListItem.h"
+#include "RenderTreeUpdaterFirstLetter.h"
+#include "RenderTreeUpdaterGeneratedContent.h"
+#include "RenderTreeUpdaterListItem.h"
+#include "RenderTreeUpdaterMultiColumn.h"
 #include "StyleResolver.h"
 #include "StyleTreeResolver.h"
 #include <wtf/SystemTracing.h>
@@ -76,9 +81,13 @@ RenderTreeUpdater::Parent::Parent(Element& element, Style::Change styleChange)
 {
 }
 
-
 RenderTreeUpdater::RenderTreeUpdater(Document& document)
     : m_document(document)
+    , m_generatedContent(std::make_unique<GeneratedContent>(*this))
+{
+}
+
+RenderTreeUpdater::~RenderTreeUpdater()
 {
 }
 
@@ -123,6 +132,10 @@ void RenderTreeUpdater::commit(std::unique_ptr<const Style::Update> styleUpdate)
     for (auto* root : findRenderingRoots(*m_styleUpdate))
         updateRenderTree(*root);
 
+    generatedContent().updateRemainingQuotes();
+
+    MultiColumn::update(renderView());
+
     m_styleUpdate = nullptr;
 }
 
@@ -156,11 +169,14 @@ void RenderTreeUpdater::updateRenderTree(ContainerNode& root)
 
         if (auto* renderer = node.renderer())
             renderTreePosition().invalidateNextSibling(*renderer);
+        else if (is<Element>(node) && downcast<Element>(node).hasDisplayContents())
+            renderTreePosition().invalidateNextSibling();
 
         if (is<Text>(node)) {
             auto& text = downcast<Text>(node);
-            if (parent().styleChange == Style::Detach || m_styleUpdate->textUpdate(text) || m_invalidatedWhitespaceOnlyTextSiblings.contains(&text))
-                updateTextRenderer(text);
+            auto* textUpdate = m_styleUpdate->textUpdate(text);
+            if (parent().styleChange == Style::Detach || textUpdate || m_invalidatedWhitespaceOnlyTextSiblings.contains(&text))
+                updateTextRenderer(text, textUpdate);
 
             it.traverseNextSkippingChildren();
             continue;
@@ -169,12 +185,16 @@ void RenderTreeUpdater::updateRenderTree(ContainerNode& root)
         auto& element = downcast<Element>(node);
 
         auto* elementUpdate = m_styleUpdate->elementUpdate(element);
-        if (!elementUpdate) {
+
+        // We hop through display: contents elements in findRenderingRoot, so
+        // there may be other updates down the tree.
+        if (!elementUpdate && !element.hasDisplayContents()) {
             it.traverseNextSkippingChildren();
             continue;
         }
 
-        updateElementRenderer(element, *elementUpdate);
+        if (elementUpdate)
+            updateElementRenderer(element, *elementUpdate);
 
         bool mayHaveRenderedDescendants = element.renderer() || (element.hasDisplayContents() && shouldCreateRenderer(element, renderTreePosition().parent()));
         if (!mayHaveRenderedDescendants) {
@@ -206,19 +226,15 @@ void RenderTreeUpdater::pushParent(Element& element, Style::Change changeType)
 {
     m_parentStack.append(Parent(element, changeType));
 
-    updateBeforeOrAfterPseudoElement(element, BEFORE);
+    updateBeforeDescendants(element);
 }
 
 void RenderTreeUpdater::popParent()
 {
     auto& parent = m_parentStack.last();
+    if (parent.element)
+        updateAfterDescendants(*parent.element, parent.styleChange);
 
-    if (parent.element) {
-        updateBeforeOrAfterPseudoElement(*parent.element, AFTER);
-
-        if (parent.element->hasCustomStyleResolveCallbacks() && parent.styleChange == Style::Detach && parent.element->renderer())
-            parent.element->didAttachRenderers();
-    }
     m_parentStack.removeLast();
 }
 
@@ -228,6 +244,31 @@ void RenderTreeUpdater::popParentsToDepth(unsigned depth)
 
     while (m_parentStack.size() > depth)
         popParent();
+}
+
+void RenderTreeUpdater::updateBeforeDescendants(Element& element)
+{
+    generatedContent().updateBeforePseudoElement(element);
+}
+
+void RenderTreeUpdater::updateAfterDescendants(Element& element, Style::Change styleChange)
+{
+    generatedContent().updateAfterPseudoElement(element);
+
+    auto* renderer = element.renderer();
+    if (!renderer)
+        return;
+
+    // These functions do render tree mutations that require descendant renderers.
+    if (is<RenderBlock>(*renderer))
+        FirstLetter::update(downcast<RenderBlock>(*renderer));
+    if (is<RenderListItem>(*renderer))
+        ListItem::updateMarker(downcast<RenderListItem>(*renderer));
+    if (is<RenderBlockFlow>(*renderer))
+        MultiColumn::update(downcast<RenderBlockFlow>(*renderer));
+
+    if (element.hasCustomStyleResolveCallbacks() && styleChange == Style::Detach)
+        element.didAttachRenderers();
 }
 
 static bool pseudoStyleCacheIsInvalid(RenderElement* renderer, RenderStyle* newStyle)
@@ -257,22 +298,23 @@ void RenderTreeUpdater::updateElementRenderer(Element& element, const Style::Ele
     CheckForVisibilityChange checkForVisibilityChange(element);
 #endif
 
-    bool shouldTearDownRenderers = update.change == Style::Detach
-        && (element.renderer() || element.isNamedFlowContentElement() || element.hasDisplayContents());
+    bool shouldTearDownRenderers = update.change == Style::Detach && (element.renderer() || element.hasDisplayContents());
     if (shouldTearDownRenderers) {
         if (!element.renderer()) {
             // We may be tearing down a descendant renderer cached in renderTreePosition.
             renderTreePosition().invalidateNextSibling();
         }
-        tearDownRenderers(element, TeardownType::KeepHoverAndActive);
+
+        // display:none cancels animations.
+        auto teardownType = update.style->display() == NONE ? TeardownType::RendererUpdateCancelingAnimations : TeardownType::RendererUpdate;
+        tearDownRenderers(element, teardownType);
     }
 
     bool hasDisplayContents = update.style->display() == CONTENTS;
-    if (hasDisplayContents != element.hasDisplayContents()) {
-        element.setHasDisplayContents(hasDisplayContents);
-        // Render tree position needs to be recomputed as rendering siblings may be found from the display:contents subtree.
-        renderTreePosition().invalidateNextSibling();
-    }
+    if (hasDisplayContents)
+        element.storeDisplayContentsStyle(RenderStyle::clonePtr(*update.style));
+    else
+        element.resetComputedStyle();
 
     bool shouldCreateNewRenderer = !element.renderer() && !hasDisplayContents;
     if (shouldCreateNewRenderer) {
@@ -303,34 +345,15 @@ void RenderTreeUpdater::updateElementRenderer(Element& element, const Style::Ele
     renderer.setStyle(RenderStyle::clone(*update.style), StyleDifferenceEqual);
 }
 
-#if ENABLE(CSS_REGIONS)
-static void registerElementForFlowThreadIfNeeded(Element& element, const RenderStyle& style)
-{
-    if (!element.shouldMoveToFlowThread(style))
-        return;
-    FlowThreadController& flowThreadController = element.document().renderView()->flowThreadController();
-    flowThreadController.registerNamedFlowContentElement(element, flowThreadController.ensureRenderFlowThreadWithName(style.flowThread()));
-}
-#endif
-
 void RenderTreeUpdater::createRenderer(Element& element, RenderStyle&& style)
 {
-    auto computeInsertionPosition = [this, &element, &style] () {
-#if ENABLE(CSS_REGIONS)
-        if (element.shouldMoveToFlowThread(style))
-            return RenderTreePosition::insertionPositionForFlowThread(renderTreePosition().parent().element(), element, style);
-#endif
+    auto computeInsertionPosition = [this, &element] () {
         renderTreePosition().computeNextSibling(element);
         return renderTreePosition();
     };
     
     if (!shouldCreateRenderer(element, renderTreePosition().parent()))
         return;
-
-#if ENABLE(CSS_REGIONS)
-    // Even display: none elements need to be registered in FlowThreadController.
-    registerElementForFlowThreadIfNeeded(element, style);
-#endif
 
     if (!element.rendererIsNeeded(style))
         return;
@@ -344,19 +367,7 @@ void RenderTreeUpdater::createRenderer(Element& element, RenderStyle&& style)
         return;
     }
 
-    // Make sure the RenderObject already knows it is going to be added to a RenderFlowThread before we set the style
-    // for the first time. Otherwise code using inRenderFlowThread() in the styleWillChange and styleDidChange will fail.
-    newRenderer->setFlowThreadState(insertionPosition.parent().flowThreadState());
-
     element.setRenderer(newRenderer);
-
-    auto& initialStyle = newRenderer->style();
-    std::unique_ptr<RenderStyle> animatedStyle;
-    newRenderer->animation().updateAnimations(*newRenderer, initialStyle, animatedStyle);
-    if (animatedStyle) {
-        newRenderer->setStyleInternal(WTFMove(*animatedStyle));
-        newRenderer->setHasInitialAnimatedStyle(true);
-    }
 
     newRenderer->initializeStyle();
 
@@ -433,13 +444,16 @@ static void createTextRenderer(Text& textNode, RenderTreePosition& renderTreePos
     renderTreePosition.insert(*newRenderer.leakPtr());
 }
 
-void RenderTreeUpdater::updateTextRenderer(Text& text)
+void RenderTreeUpdater::updateTextRenderer(Text& text, const Style::TextUpdate* textUpdate)
 {
-    bool hasRenderer = text.renderer();
+    auto* existingRenderer = text.renderer();
     bool needsRenderer = textRendererIsNeeded(text, renderTreePosition());
-    if (hasRenderer) {
-        if (needsRenderer)
+    if (existingRenderer) {
+        if (needsRenderer) {
+            if (textUpdate)
+                existingRenderer->setTextWithOffset(text.data(), textUpdate->offset, textUpdate->length);
             return;
+        }
         tearDownRenderer(text);
         invalidateWhitespaceOnlyTextSiblingsAfterAttachIfNeeded(text);
         return;
@@ -461,9 +475,9 @@ void RenderTreeUpdater::invalidateWhitespaceOnlyTextSiblingsAfterAttachIfNeeded(
             if (m_styleUpdate->elementUpdate(downcast<Element>(*sibling)))
                 return;
             // Text renderers beyond rendered elements can't be affected.
-            if (!sibling->renderer() || RenderTreePosition::isRendererReparented(*sibling->renderer()))
-                continue;
-            return;
+            if (sibling->renderer())
+                return;
+            continue;
         }
         if (!is<Text>(*sibling))
             continue;
@@ -476,62 +490,9 @@ void RenderTreeUpdater::invalidateWhitespaceOnlyTextSiblingsAfterAttachIfNeeded(
     }
 }
 
-static bool needsPseudoElement(Element& current, PseudoId pseudoId)
+void RenderTreeUpdater::tearDownRenderers(Element& root)
 {
-    if (!current.renderer() || !current.renderer()->canHaveGeneratedChildren())
-        return false;
-    if (current.isPseudoElement())
-        return false;
-    if (!pseudoElementRendererIsNeeded(current.renderer()->getCachedPseudoStyle(pseudoId)))
-        return false;
-    return true;
-}
-
-void RenderTreeUpdater::updateBeforeOrAfterPseudoElement(Element& current, PseudoId pseudoId)
-{
-    PseudoElement* pseudoElement = pseudoId == BEFORE ? current.beforePseudoElement() : current.afterPseudoElement();
-
-    if (auto* renderer = pseudoElement ? pseudoElement->renderer() : nullptr)
-        renderTreePosition().invalidateNextSibling(*renderer);
-
-    bool needsPseudoElement = WebCore::needsPseudoElement(current, pseudoId);
-    if (!needsPseudoElement) {
-        if (pseudoElement) {
-            if (pseudoId == BEFORE)
-                current.clearBeforePseudoElement();
-            else
-                current.clearAfterPseudoElement();
-        }
-        return;
-    }
-
-    RefPtr<PseudoElement> newPseudoElement;
-    if (!pseudoElement) {
-        newPseudoElement = PseudoElement::create(current, pseudoId);
-        pseudoElement = newPseudoElement.get();
-    }
-
-    auto newStyle = RenderStyle::clonePtr(*current.renderer()->getCachedPseudoStyle(pseudoId, &current.renderer()->style()));
-
-    auto elementUpdate = Style::TreeResolver::createAnimatedElementUpdate(WTFMove(newStyle), *pseudoElement, Style::NoChange);
-
-    if (elementUpdate.change == Style::NoChange)
-        return;
-
-    if (newPseudoElement) {
-        InspectorInstrumentation::pseudoElementCreated(m_document.page(), *newPseudoElement);
-        if (pseudoId == BEFORE)
-            current.setBeforePseudoElement(newPseudoElement.releaseNonNull());
-        else
-            current.setAfterPseudoElement(newPseudoElement.releaseNonNull());
-    }
-
-    updateElementRenderer(*pseudoElement, elementUpdate);
-
-    if (elementUpdate.change == Style::Detach)
-        pseudoElement->didAttachRenderers();
-    else
-        pseudoElement->didRecalcStyle(elementUpdate.change);
+    tearDownRenderers(root, TeardownType::Full);
 }
 
 void RenderTreeUpdater::tearDownRenderers(Element& root, TeardownType teardownType)
@@ -546,12 +507,18 @@ void RenderTreeUpdater::tearDownRenderers(Element& root, TeardownType teardownTy
         teardownStack.append(&element);
     };
 
+    auto& animationController = root.document().frame()->animation();
+
     auto pop = [&] (unsigned depth) {
         while (teardownStack.size() > depth) {
             auto& element = *teardownStack.takeLast();
 
-            if (teardownType != TeardownType::KeepHoverAndActive)
+            if (teardownType == TeardownType::Full || teardownType == TeardownType::RendererUpdateCancelingAnimations)
+                animationController.cancelAnimations(element);
+
+            if (teardownType == TeardownType::Full)
                 element.clearHoverAndActiveStatusBeforeDetachingRenderer();
+
             element.clearStyleDerivedDataBeforeDetachingRenderer();
 
             if (auto* renderer = element.renderer()) {
@@ -587,6 +554,11 @@ void RenderTreeUpdater::tearDownRenderer(Text& text)
         return;
     renderer->destroyAndCleanupAnonymousWrappers();
     text.setRenderer(nullptr);
+}
+
+RenderView& RenderTreeUpdater::renderView()
+{
+    return *m_document.renderView();
 }
 
 #if PLATFORM(IOS)

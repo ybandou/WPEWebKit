@@ -52,7 +52,6 @@ my (
     $accelerated2DCanvasSupport,
     $allInOneBuild,
     $attachmentElementSupport,
-    $canvasPathSupport,
     $canvasProxySupport,
     $channelMessagingSupport,
     $css3TextSupport,
@@ -80,6 +79,7 @@ my (
     $fullscreenAPISupport,
     $gamepadSupport,
     $geolocationSupport,
+    $gstreamerGLSupport,
     $hardwareConcurrencySupport,
     $highDPICanvasSupport,
     $icondatabaseSupport,
@@ -109,7 +109,6 @@ my (
     $mhtmlSupport,
     $mouseCursorScaleSupport,
     $netscapePluginAPISupport,
-    $nosniffSupport,
     $notificationsSupport,
     $orientationEventsSupport,
     $performanceTimelineSupport,
@@ -134,11 +133,9 @@ my (
     $webAssemblySupport,
     $webAudioSupport,
     $webRTCSupport,
-    $webReplaySupport,
-    $webSocketsSupport,
-    $webTimingSupport,
     $writableStreamAPISupport,
     $webglSupport,
+    $webgl2Support,
     $xsltSupport,
 );
 
@@ -156,12 +153,6 @@ my @features = (
 
     { option => "attachment-element", desc => "Toggle Attachment Element support",
       define => "ENABLE_ATTACHMENT_ELEMENT", default => 0, value => \$attachmentElementSupport },
-
-    { option => "canvas-path", desc => "Toggle Canvas Path support",
-      define => "ENABLE_CANVAS_PATH", default => 1, value => \$canvasPathSupport },
-
-    { option => "canvas-proxy", desc => "Toggle CanvasProxy support",
-      define => "ENABLE_CANVAS_PROXY", default => 0, value => \$canvasProxySupport },
 
     { option => "channel-messaging", desc => "Toggle Channel Messaging support",
       define => "ENABLE_CHANNEL_MESSAGING", default => 1, value => \$channelMessagingSupport },
@@ -185,7 +176,7 @@ my @features = (
       define => "ENABLE_CSS_IMAGE_SET", default => (isGtk() || isWPE()), value => \$cssImageSetSupport },
 
     { option => "css-regions", desc => "Toggle CSS Regions support",
-      define => "ENABLE_CSS_REGIONS", default => 1, value => \$cssRegionsSupport },
+      define => "ENABLE_CSS_REGIONS", default => 0, value => \$cssRegionsSupport },
 
     { option => "css-shapes", desc => "Toggle CSS Shapes support",
       define => "ENABLE_CSS_SHAPES", default => 1, value => \$cssShapesSupport },
@@ -215,7 +206,7 @@ my @features = (
       define => "ENABLE_DOWNLOAD_ATTRIBUTE", default => isGtk(), value => \$downloadAttributeSupport },
 
     { option => "encrypted-media", desc => "Toggle EME V3 support",
-      define => "ENABLE_ENCRYPTED_MEDIA", default => 0, value => \$encryptedMediaSupport },
+      define => "ENABLE_ENCRYPTED_MEDIA", default => isWPE(), value => \$encryptedMediaSupport },
 
     { option => "fetch-api", desc => "Toggle Fetch API support",
       define => "ENABLE_FETCH_API", default => 1, value => \$fetchAPISupport },
@@ -236,7 +227,10 @@ my @features = (
       define => "ENABLE_GAMEPAD", default => 0, value => \$gamepadSupport },
 
     { option => "geolocation", desc => "Toggle Geolocation support",
-      define => "ENABLE_GEOLOCATION", default => (isAppleWebKit() || isIOSWebKit() || isGtk() || isWPE()), value => \$geolocationSupport },
+      define => "ENABLE_GEOLOCATION", default => (isAppleWebKit() || isIOSWebKit() || isGtk()), value => \$geolocationSupport },
+
+    { option => "gstreamer-gl", desc => "Toggle GStreamer GL support",
+      define => "USE_GSTREAMER_GL", default => (isGtk() || isWPE()), value => \$gstreamerGLSupport },
 
     { option => "high-dpi-canvas", desc => "Toggle High DPI Canvas support",
       define => "ENABLE_HIGH_DPI_CANVAS", default => (isAppleWebKit()), value => \$highDPICanvasSupport },
@@ -296,7 +290,7 @@ my @features = (
       define => "ENABLE_MEDIA_CAPTURE", default => 0, value => \$mediaCaptureSupport },
 
     { option => "media-source", desc => "Toggle Media Source support",
-      define => "ENABLE_MEDIA_SOURCE", default => isGtk(), value => \$mediaSourceSupport },
+      define => "ENABLE_MEDIA_SOURCE", default => (isGtk() || isWPE()), value => \$mediaSourceSupport },
 
     { option => "media-statistics", desc => "Toggle Media Statistics support",
       define => "ENABLE_MEDIA_STATISTICS", default => 0, value => \$mediaStatisticsSupport },
@@ -321,9 +315,6 @@ my @features = (
 
     { option => "netscape-plugin-api", desc => "Toggle Netscape Plugin API support",
       define => "ENABLE_NETSCAPE_PLUGIN_API", default => (!isIOSWebKit() && !isWPE()), value => \$netscapePluginAPISupport },
-
-    { option => "nosniff", desc => "Toggle support for 'X-Content-Type-Options: nosniff'",
-      define => "ENABLE_NOSNIFF", default => (isAppleCocoaWebKit() || isAppleWinWebKit()), value => \$nosniffSupport },
 
     { option => "notifications", desc => "Toggle Notifications support",
       define => "ENABLE_NOTIFICATIONS", default => isGtk(), value => \$notificationsSupport },
@@ -353,7 +344,7 @@ my @features = (
       define => "ENABLE_SCRIPTED_SPEECH", default => 0, value => \$scriptedSpeechSupport },
 
     { option => "subtle-crypto", desc => "Toggle WebCrypto Subtle-Crypto support",
-      define => "ENABLE_SUBTLE_CRYPTO", default => (isGtk() || isAppleCocoaWebKit() || isIOSWebKit()), value => \$subtleCrypto },
+      define => "ENABLE_SUBTLE_CRYPTO", default => (isGtk() || isAppleCocoaWebKit() || isIOSWebKit() || isWPE()), value => \$subtleCrypto },
 
     { option => "svg-fonts", desc => "Toggle SVG Fonts support",
       define => "ENABLE_SVG_FONTS", default => 1, value => \$svgFontsSupport },
@@ -382,23 +373,17 @@ my @features = (
     { option => "web-audio", desc => "Toggle Web Audio support",
       define => "ENABLE_WEB_AUDIO", default => (isGtk() || isWPE()), value => \$webAudioSupport },
 
-    { option => "web-replay", desc => "Toggle Web Replay support",
-      define => "ENABLE_WEB_REPLAY", default => isAppleCocoaWebKit(), value => \$webReplaySupport },
-
     { option => "web-rtc", desc => "Toggle WebRTC support",
       define => "ENABLE_WEB_RTC", default => (isAppleCocoaWebKit() || isIOSWebKit() || isGtk()), value => \$webRTCSupport },
-
-    { option => "web-sockets", desc => "Toggle Web Sockets support",
-      define => "ENABLE_WEB_SOCKETS", default => 1, value => \$webSocketsSupport },
-
-    { option => "web-timing", desc => "Toggle Web Timing support",
-      define => "ENABLE_WEB_TIMING", default => 1, value => \$webTimingSupport },
 
     { option => "webassembly", desc => "Toggle WebAssembly support",
       define => "ENABLE_WEBASSEMBLY", default => ((isARM64() || isX86_64()) && (isGtk() || isJSCOnly() || isWPE())) , value => \$webAssemblySupport },
 
     { option => "webgl", desc => "Toggle WebGL support",
       define => "ENABLE_WEBGL", default => (isAppleCocoaWebKit() || isGtk() || isWPE()), value => \$webglSupport },
+
+    { option => "webgl2", desc => "Toggle WebGL2 support",
+      define => "ENABLE_WEBGL2", default => (isAppleCocoaWebKit() || isWPE()), value => \$webgl2Support },
 
     { option => "writableStreamAPI", desc => "Toggle WritableStream API support",
       define => "ENABLE_WRITABLE_STREAM_API", default => 1, value => \$writableStreamAPISupport },

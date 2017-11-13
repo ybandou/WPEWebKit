@@ -29,9 +29,8 @@
 
 #include "AuthenticationCF.h"
 #include "AuthenticationChallenge.h"
-#include "CFNetworkSPI.h"
-#include "CredentialStorage.h"
 #include "CachedResourceLoader.h"
+#include "CredentialStorage.h"
 #include "FormDataStreamCFNet.h"
 #include "Frame.h"
 #include "FrameLoader.h"
@@ -46,6 +45,7 @@
 #include "SynchronousLoaderClient.h"
 #include "SynchronousResourceHandleCFURLConnectionDelegate.h"
 #include <CFNetwork/CFNetwork.h>
+#include <pal/spi/cf/CFNetworkSPI.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <wtf/HashMap.h>
@@ -179,7 +179,9 @@ void ResourceHandle::createCFURLConnection(bool shouldUseCredentialStorage, bool
         CFDictionaryAddValue(sslProps.get(), kCFStreamSSLAllowsExpiredRoots, kCFBooleanTrue);
         CFDictionaryAddValue(sslProps.get(), kCFStreamSSLAllowsExpiredCertificates, kCFBooleanTrue);
 #pragma clang diagnostic pop
+#if !PLATFORM(WIN) // <rdar://problem/33993462> - Disabling validation of certificate chain breaks SSL on Windows.
         CFDictionaryAddValue(sslProps.get(), kCFStreamSSLValidatesCertificateChain, kCFBooleanFalse);
+#endif
     }
 
     auto clientCert = clientCertificates().find(firstRequest().url().host());
@@ -270,7 +272,7 @@ bool ResourceHandle::start()
 
     bool shouldUseCredentialStorage = !client() || client()->shouldUseCredentialStorage(this);
 
-#if ENABLE(WEB_TIMING) && PLATFORM(COCOA) && !HAVE(TIMINGDATAOPTIONS)
+#if PLATFORM(COCOA) && !HAVE(TIMINGDATAOPTIONS)
     setCollectsTimingData();
 #endif
 
@@ -282,7 +284,7 @@ bool ResourceHandle::start()
     CFURLConnectionStart(d->m_connection.get());
 
     LOG(Network, "CFNet - Starting URL %s (handle=%p, conn=%p)", firstRequest().url().string().utf8().data(), this, d->m_connection.get());
-    
+
     return true;
 }
 
@@ -573,9 +575,9 @@ CFStringRef ResourceHandle::synchronousLoadRunLoopMode()
     return CFSTR("WebCoreSynchronousLoaderRunLoopMode");
 }
 
-void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext* context, const ResourceRequest& request, StoredCredentials storedCredentials, ResourceError& error, ResourceResponse& response, Vector<char>& data)
+void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext* context, const ResourceRequest& request, StoredCredentialsPolicy storedCredentialsPolicy, ResourceError& error, ResourceResponse& response, Vector<char>& data)
 {
-    LOG(Network, "ResourceHandle::platformLoadResourceSynchronously:%s allowStoredCredentials:%u", request.url().string().utf8().data(), storedCredentials);
+    LOG(Network, "ResourceHandle::platformLoadResourceSynchronously:%s sstoredCredentialsPolicy:%u", request.url().string().utf8().data(), static_cast<unsigned>(storedCredentialsPolicy));
 
     ASSERT(!request.isEmpty());
 
@@ -583,7 +585,7 @@ void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext* contex
     ASSERT(error.isNull());
 
     SynchronousLoaderClient client;
-    client.setAllowStoredCredentials(storedCredentials == AllowStoredCredentials);
+    client.setAllowStoredCredentials(storedCredentialsPolicy == StoredCredentialsPolicy::Use);
 
     RefPtr<ResourceHandle> handle = adoptRef(new ResourceHandle(context, request, &client, false /*defersLoading*/, true /*shouldContentSniff*/));
 
@@ -594,7 +596,7 @@ void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext* contex
         return;
     }
 
-    handle->createCFURLConnection(storedCredentials == AllowStoredCredentials, ResourceHandle::shouldContentSniffURL(request.url()),
+    handle->createCFURLConnection(storedCredentialsPolicy == StoredCredentialsPolicy::Use, ResourceHandle::shouldContentSniffURL(request.url()),
         SchedulingBehavior::Synchronous, handle->client()->connectionProperties(handle.get()).get());
 
     CFURLConnectionScheduleWithRunLoop(handle->connection(), CFRunLoopGetCurrent(), synchronousLoadRunLoopMode());

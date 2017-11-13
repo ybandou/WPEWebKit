@@ -28,20 +28,20 @@
 
 #if USE(CG)
 
-#include "ImageIOSPI.h"
 #include "ImageOrientation.h"
+#include "ImageSourceCG.h"
 #include "IntPoint.h"
 #include "IntSize.h"
 #include "Logging.h"
 #include "SharedBuffer.h"
-#include "URL.h"
-#include <wtf/NeverDestroyed.h>
+#include "UTIRegistry.h"
+#include <pal/spi/cg/ImageIOSPI.h>
 
 #if !PLATFORM(IOS)
 #include <ApplicationServices/ApplicationServices.h>
 #else
-#include "CoreGraphicsSPI.h"
 #include <ImageIO/ImageIO.h>
+#include <pal/spi/cg/CoreGraphicsSPI.h>
 #endif
 
 namespace WebCore {
@@ -76,10 +76,9 @@ static RetainPtr<CFMutableDictionaryRef> createImageSourceAsyncOptions()
 
 static RetainPtr<CFMutableDictionaryRef> appendImageSourceOption(RetainPtr<CFMutableDictionaryRef>&& options, SubsamplingLevel subsamplingLevel)
 {
-    RetainPtr<CFNumberRef> subsampleNumber;
     subsamplingLevel = std::min(SubsamplingLevel::Last, std::max(SubsamplingLevel::First, subsamplingLevel));
     int subsampleInt = 1 << static_cast<int>(subsamplingLevel); // [0..3] => [1, 2, 4, 8]
-    subsampleNumber = adoptCF(CFNumberCreate(nullptr,  kCFNumberIntType,  &subsampleInt));
+    auto subsampleNumber = adoptCF(CFNumberCreate(nullptr,  kCFNumberIntType,  &subsampleInt));
     CFDictionarySetValue(options.get(), kCGImageSourceSubsampleFactor, subsampleNumber.get());
     return WTFMove(options);
 }
@@ -103,16 +102,16 @@ static RetainPtr<CFMutableDictionaryRef> appendImageSourceOptions(RetainPtr<CFMu
     
 static RetainPtr<CFDictionaryRef> imageSourceOptions(SubsamplingLevel subsamplingLevel = SubsamplingLevel::Default)
 {
-    static NeverDestroyed<RetainPtr<CFMutableDictionaryRef>> options = createImageSourceOptions();
+    static const auto options = createImageSourceOptions().leakRef();
     if (subsamplingLevel == SubsamplingLevel::Default)
-        return options.get();
-    return appendImageSourceOption(adoptCF(CFDictionaryCreateMutableCopy(nullptr, 0, options.get().get())), subsamplingLevel);
+        return options;
+    return appendImageSourceOption(adoptCF(CFDictionaryCreateMutableCopy(nullptr, 0, options)), subsamplingLevel);
 }
 
 static RetainPtr<CFDictionaryRef> imageSourceAsyncOptions(SubsamplingLevel subsamplingLevel, const IntSize& sizeForDrawing)
 {
-    static NeverDestroyed<RetainPtr<CFMutableDictionaryRef>> options = createImageSourceAsyncOptions();
-    return appendImageSourceOptions(adoptCF(CFDictionaryCreateMutableCopy(nullptr, 0, options.get().get())), subsamplingLevel, sizeForDrawing);
+    static const auto options = createImageSourceAsyncOptions().leakRef();
+    return appendImageSourceOptions(adoptCF(CFDictionaryCreateMutableCopy(nullptr, 0, options)), subsamplingLevel, sizeForDrawing);
 }
     
 static ImageOrientation orientationFromProperties(CFDictionaryRef imageProperties)
@@ -148,11 +147,11 @@ void sharedBufferRelease(void* info)
 }
 #endif
 
-ImageDecoder::ImageDecoder(const URL& sourceURL, AlphaOption, GammaAndColorProfileOption)
+ImageDecoderCG::ImageDecoderCG(SharedBuffer& data, AlphaOption, GammaAndColorProfileOption)
 {
-#if 0
-    RetainPtr<CFURLRef> url = sourceURL.createCFURL();
-    RetainPtr<CFStringRef> utiHint = adoptCF(CGImageSourceGetTypeWithURL(url.get(), nullptr));
+    RetainPtr<CFStringRef> utiHint;
+    if (data.size() >= 32)
+        utiHint = adoptCF(CGImageSourceGetTypeWithData(data.createCFData().get(), nullptr, nullptr));
     
     if (utiHint) {
         const void* key = kCGImageSourceTypeIdentifierHint;
@@ -161,13 +160,9 @@ ImageDecoder::ImageDecoder(const URL& sourceURL, AlphaOption, GammaAndColorProfi
         m_nativeDecoder = adoptCF(CGImageSourceCreateIncremental(options.get()));
     } else
         m_nativeDecoder = adoptCF(CGImageSourceCreateIncremental(nullptr));
-#else
-    UNUSED_PARAM(sourceURL);
-    m_nativeDecoder = adoptCF(CGImageSourceCreateIncremental(nullptr));
-#endif
 }
 
-size_t ImageDecoder::bytesDecodedToDetermineProperties()
+size_t ImageDecoderCG::bytesDecodedToDetermineProperties() const
 {
     // Measured by tracing malloc/calloc calls on Mac OS 10.6.6, x86_64.
     // A non-zero value ensures cached images with no decoded frames still enter
@@ -178,18 +173,22 @@ size_t ImageDecoder::bytesDecodedToDetermineProperties()
     return 13088;
 }
     
-String ImageDecoder::uti() const
+String ImageDecoderCG::uti() const
 {
     return CGImageSourceGetType(m_nativeDecoder.get());
 }
 
-String ImageDecoder::filenameExtension() const
+String ImageDecoderCG::filenameExtension() const
 {
     return WebCore::preferredExtensionForImageSourceType(uti());
 }
 
-EncodedDataStatus ImageDecoder::encodedDataStatus() const
+EncodedDataStatus ImageDecoderCG::encodedDataStatus() const
 {
+    String uti = this->uti();
+    if (uti.isEmpty())
+        return EncodedDataStatus::Unknown;
+
     switch (CGImageSourceGetStatus(m_nativeDecoder.get())) {
     case kCGImageStatusUnknownType:
         return EncodedDataStatus::Error;
@@ -204,6 +203,9 @@ EncodedDataStatus ImageDecoder::encodedDataStatus() const
         return EncodedDataStatus::Error;
 
     case kCGImageStatusIncomplete: {
+        if (!isAllowedImageUTI(uti))
+            return EncodedDataStatus::Error;
+
         RetainPtr<CFDictionaryRef> image0Properties = adoptCF(CGImageSourceCopyPropertiesAtIndex(m_nativeDecoder.get(), 0, imageSourceOptions().get()));
         if (!image0Properties)
             return EncodedDataStatus::TypeAvailable;
@@ -215,6 +217,9 @@ EncodedDataStatus ImageDecoder::encodedDataStatus() const
     }
 
     case kCGImageStatusComplete:
+        if (!isAllowedImageUTI(uti))
+            return EncodedDataStatus::Error;
+
         return EncodedDataStatus::Complete;
     }
 
@@ -222,12 +227,12 @@ EncodedDataStatus ImageDecoder::encodedDataStatus() const
     return EncodedDataStatus::Unknown;
 }
 
-size_t ImageDecoder::frameCount() const
+size_t ImageDecoderCG::frameCount() const
 {
     return CGImageSourceGetCount(m_nativeDecoder.get());
 }
 
-RepetitionCount ImageDecoder::repetitionCount() const
+RepetitionCount ImageDecoderCG::repetitionCount() const
 {
     RetainPtr<CFDictionaryRef> properties = adoptCF(CGImageSourceCopyProperties(m_nativeDecoder.get(), imageSourceOptions().get()));
     if (!properties)
@@ -263,7 +268,7 @@ RepetitionCount ImageDecoder::repetitionCount() const
     return RepetitionCountNone;
 }
 
-std::optional<IntPoint> ImageDecoder::hotSpot() const
+std::optional<IntPoint> ImageDecoderCG::hotSpot() const
 {
     RetainPtr<CFDictionaryRef> properties = adoptCF(CGImageSourceCopyPropertiesAtIndex(m_nativeDecoder.get(), 0, imageSourceOptions().get()));
     if (!properties)
@@ -284,7 +289,7 @@ std::optional<IntPoint> ImageDecoder::hotSpot() const
     return IntPoint(x, y);
 }
 
-IntSize ImageDecoder::frameSizeAtIndex(size_t index, SubsamplingLevel subsamplingLevel) const
+IntSize ImageDecoderCG::frameSizeAtIndex(size_t index, SubsamplingLevel subsamplingLevel) const
 {
     RetainPtr<CFDictionaryRef> properties = adoptCF(CGImageSourceCopyPropertiesAtIndex(m_nativeDecoder.get(), index, imageSourceOptions(subsamplingLevel).get()));
     
@@ -304,7 +309,7 @@ IntSize ImageDecoder::frameSizeAtIndex(size_t index, SubsamplingLevel subsamplin
     return IntSize(width, height);
 }
 
-bool ImageDecoder::frameIsCompleteAtIndex(size_t index) const
+bool ImageDecoderCG::frameIsCompleteAtIndex(size_t index) const
 {
     ASSERT(frameCount());
     // CGImageSourceGetStatusAtIndex() changes the return status value from kCGImageStatusIncomplete
@@ -316,7 +321,7 @@ bool ImageDecoder::frameIsCompleteAtIndex(size_t index) const
     return CGImageSourceGetStatusAtIndex(m_nativeDecoder.get(), index) == kCGImageStatusComplete;
 }
 
-ImageOrientation ImageDecoder::frameOrientationAtIndex(size_t index) const
+ImageOrientation ImageDecoderCG::frameOrientationAtIndex(size_t index) const
 {
     RetainPtr<CFDictionaryRef> properties = adoptCF(CGImageSourceCopyPropertiesAtIndex(m_nativeDecoder.get(), index, imageSourceOptions().get()));
     if (!properties)
@@ -325,41 +330,43 @@ ImageOrientation ImageDecoder::frameOrientationAtIndex(size_t index) const
     return orientationFromProperties(properties.get());
 }
 
-float ImageDecoder::frameDurationAtIndex(size_t index) const
+Seconds ImageDecoderCG::frameDurationAtIndex(size_t index) const
 {
-    float duration = 0;
+    float value = 0;
     RetainPtr<CFDictionaryRef> properties = adoptCF(CGImageSourceCopyPropertiesAtIndex(m_nativeDecoder.get(), index, imageSourceOptions().get()));
     if (properties) {
         CFDictionaryRef gifProperties = (CFDictionaryRef)CFDictionaryGetValue(properties.get(), kCGImagePropertyGIFDictionary);
         if (gifProperties) {
             if (CFNumberRef num = (CFNumberRef)CFDictionaryGetValue(gifProperties, kCGImagePropertyGIFUnclampedDelayTime)) {
                 // Use the unclamped frame delay if it exists.
-                CFNumberGetValue(num, kCFNumberFloatType, &duration);
+                CFNumberGetValue(num, kCFNumberFloatType, &value);
             } else if (CFNumberRef num = (CFNumberRef)CFDictionaryGetValue(gifProperties, kCGImagePropertyGIFDelayTime)) {
                 // Fall back to the clamped frame delay if the unclamped frame delay does not exist.
-                CFNumberGetValue(num, kCFNumberFloatType, &duration);
+                CFNumberGetValue(num, kCFNumberFloatType, &value);
             }
         }
         
         CFDictionaryRef pngProperties = (CFDictionaryRef)CFDictionaryGetValue(properties.get(), kCGImagePropertyPNGDictionary);
         if (pngProperties) {
             if (CFNumberRef num = (CFNumberRef)CFDictionaryGetValue(pngProperties, WebCoreCGImagePropertyAPNGUnclampedDelayTime))
-                CFNumberGetValue(num, kCFNumberFloatType, &duration);
+                CFNumberGetValue(num, kCFNumberFloatType, &value);
             else if (CFNumberRef num = (CFNumberRef)CFDictionaryGetValue(pngProperties, WebCoreCGImagePropertyAPNGDelayTime))
-                CFNumberGetValue(num, kCFNumberFloatType, &duration);
+                CFNumberGetValue(num, kCFNumberFloatType, &value);
         }
     }
-    
+
+    Seconds duration(value);
+
     // Many annoying ads specify a 0 duration to make an image flash as quickly as possible.
     // We follow Firefox's behavior and use a duration of 100 ms for any frames that specify
     // a duration of <= 10 ms. See <rdar://problem/7689300> and <http://webkit.org/b/36082>
     // for more information.
-    if (duration < 0.011f)
-        return 0.1f;
+    if (duration < 11_ms)
+        return 100_ms;
     return duration;
 }
 
-bool ImageDecoder::frameAllowSubsamplingAtIndex(size_t) const
+bool ImageDecoderCG::frameAllowSubsamplingAtIndex(size_t) const
 {
     RetainPtr<CFDictionaryRef> properties = adoptCF(CGImageSourceCopyPropertiesAtIndex(m_nativeDecoder.get(), 0, imageSourceOptions().get()));
     if (!properties)
@@ -381,7 +388,7 @@ bool ImageDecoder::frameAllowSubsamplingAtIndex(size_t) const
     return true;
 }
 
-bool ImageDecoder::frameHasAlphaAtIndex(size_t index) const
+bool ImageDecoderCG::frameHasAlphaAtIndex(size_t index) const
 {
     if (!frameIsCompleteAtIndex(index))
         return true;
@@ -399,13 +406,13 @@ bool ImageDecoder::frameHasAlphaAtIndex(size_t index) const
     return true;
 }
 
-unsigned ImageDecoder::frameBytesAtIndex(size_t index, SubsamplingLevel subsamplingLevel) const
+unsigned ImageDecoderCG::frameBytesAtIndex(size_t index, SubsamplingLevel subsamplingLevel) const
 {
     IntSize frameSize = frameSizeAtIndex(index, subsamplingLevel);
     return (frameSize.area() * 4).unsafeGet();
 }
 
-NativeImagePtr ImageDecoder::createFrameImageAtIndex(size_t index, SubsamplingLevel subsamplingLevel, const DecodingOptions& decodingOptions) const
+NativeImagePtr ImageDecoderCG::createFrameImageAtIndex(size_t index, SubsamplingLevel subsamplingLevel, const DecodingOptions& decodingOptions)
 {
     LOG(Images, "ImageDecoder %p createFrameImageAtIndex %lu", this, index);
     RetainPtr<CFDictionaryRef> options;
@@ -455,7 +462,7 @@ NativeImagePtr ImageDecoder::createFrameImageAtIndex(size_t index, SubsamplingLe
     return maskedImage ? maskedImage : image;
 }
 
-void ImageDecoder::setData(SharedBuffer& data, bool allDataReceived)
+void ImageDecoderCG::setData(SharedBuffer& data, bool allDataReceived)
 {
     m_isAllDataReceived = allDataReceived;
 

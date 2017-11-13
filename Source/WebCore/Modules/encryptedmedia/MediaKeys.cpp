@@ -48,11 +48,7 @@ MediaKeys::MediaKeys(bool useDistinctiveIdentifier, bool persistentStateAllowed,
 {
 }
 
-MediaKeys::~MediaKeys()
-{
-    for (auto& session : m_sessions)
-        session->detachKeys();
-}
+MediaKeys::~MediaKeys() = default;
 
 ExceptionOr<Ref<MediaKeySession>> MediaKeys::createSession(ScriptExecutionContext& context, MediaKeySessionType sessionType)
 {
@@ -62,16 +58,16 @@ ExceptionOr<Ref<MediaKeySession>> MediaKeys::createSession(ScriptExecutionContex
     // When this method is invoked, the user agent must run the following steps:
     // 1. If this object's supported session types value does not contain sessionType, throw [WebIDL] a NotSupportedError.
     if (!m_supportedSessionTypes.contains(sessionType))
-        return Exception(NOT_SUPPORTED_ERR);
+        return Exception(NotSupportedError);
 
     // 2. If the implementation does not support MediaKeySession operations in the current state, throw [WebIDL] an InvalidStateError.
     if (!m_implementation->supportsSessions())
-        return Exception(INVALID_STATE_ERR);
+        return Exception(InvalidStateError);
 
     // 3. Let session be a new MediaKeySession object, and initialize it as follows:
     // NOTE: Continued in MediaKeySession.
     // 4. Return session.
-    auto session = MediaKeySession::create(context, *this, sessionType, m_useDistinctiveIdentifier, m_implementation.copyRef(), m_instance.copyRef());
+    auto session = MediaKeySession::create(context, m_weakPtrFactory.createWeakPtr(*this), sessionType, m_useDistinctiveIdentifier, m_implementation.copyRef(), m_instance.copyRef());
     m_sessions.append(session.copyRef());
     return WTFMove(session);
 }
@@ -105,7 +101,7 @@ void MediaKeys::setServerCertificate(const BufferSource& serverCertificate, Ref<
         // 5.1. Use this object's cdm instance to process certificate.
         if (m_instance->setServerCertificate(WTFMove(certificate)) == CDMInstance::Failed) {
             // 5.2. If the preceding step failed, resolve promise with a new DOMException whose name is the appropriate error name.
-            promise->reject(INVALID_STATE_ERR);
+            promise->reject(InvalidStateError);
             return;
         }
 
@@ -134,34 +130,12 @@ void MediaKeys::attemptToResumePlaybackOnClients()
         cdmClient->cdmClientAttemptToResumePlaybackIfNecessary();
 }
 
-#if USE(OCDM)
-void MediaKeys::receivedGenerateKeyRequest(String& keySystem)
+bool MediaKeys::hasOpenSessions() const
 {
-    for (auto* cdmClient : m_cdmClients)
-        cdmClient->receivedGenerateKeyRequest(keySystem);
-}
-
-void MediaKeys::decryptWithSession(String& sessionId)
-{
-    for (auto* cdmClient : m_cdmClients)
-        cdmClient->emitSession(sessionId);
-}
-#endif
-
-void MediaKeys::attemptToDecrypt(CDMClient& client)
-{
-    // https://w3c.github.io/encrypted-media/#attempt-to-decrypt
-    // W3C Editor's Draft 09 November 2016
-
-    // Continuing from HTMLMediaElement::attemptToDecrypt().
-
-    // 3.4. If there is at least one MediaKeySession created by the media keys that is not closed, run the following steps:
-    if (std::any_of(m_sessions.begin(), m_sessions.end(), [] (auto& session) { return !session->isClosed(); })) {
-        // 3.4.1. Let block be the first entry in the media element's encrypted block queue.
-        // 3.4.2. Let the block key ID be the key ID of block.
-        // 3.4.3. Use the cdm to execute the following steps:
-        client.cdmClientAttemptToDecryptWithInstance(m_instance);
-    }
+    return std::any_of(m_sessions.begin(), m_sessions.end(),
+        [](auto& session) {
+            return !session->isClosed();
+        });
 }
 
 } // namespace WebCore

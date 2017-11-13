@@ -25,12 +25,11 @@
 
 #include "config.h"
 
-#if HAVE(NSSCROLLING_FILTERS)
+#if PLATFORM(MAC)
+#import "WheelEventDeltaFilterMac.h"
 
-#include "WheelEventDeltaFilterMac.h"
-#include "FloatPoint.h"
-
-#import "NSScrollingInputFilterSPI.h"
+#import "FloatPoint.h"
+#import <pal/spi/mac/NSScrollingInputFilterSPI.h>
 #import <wtf/CurrentTime.h>
 
 namespace WebCore {
@@ -69,4 +68,4 @@ void WheelEventDeltaFilterMac::endFilteringDeltas()
 
 }
 
-#endif /* HAVE(NSSCROLLING_FILTERS) */
+#endif /* PLATFORM(MAC) */

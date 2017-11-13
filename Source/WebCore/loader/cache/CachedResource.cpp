@@ -78,6 +78,7 @@ ResourceLoadPriority CachedResource::defaultPriorityForResourceType(Type type)
     case CachedResource::MediaResource:
     case CachedResource::FontResource:
     case CachedResource::RawResource:
+    case CachedResource::Icon:
         return ResourceLoadPriority::Medium;
     case CachedResource::ImageResource:
         return ResourceLoadPriority::Low;
@@ -87,6 +88,8 @@ ResourceLoadPriority CachedResource::defaultPriorityForResourceType(Type type)
 #endif
     case CachedResource::SVGDocumentResource:
         return ResourceLoadPriority::Low;
+    case CachedResource::Beacon:
+        return ResourceLoadPriority::VeryLow;
 #if ENABLE(LINK_PREFETCH)
     case CachedResource::LinkPrefetch:
         return ResourceLoadPriority::VeryLow;
@@ -112,7 +115,7 @@ static Seconds deadDecodedDataDeletionIntervalForResourceType(CachedResource::Ty
 
 DEFINE_DEBUG_ONLY_GLOBAL(RefCountedLeakCounter, cachedResourceLeakCounter, ("CachedResource"));
 
-CachedResource::CachedResource(CachedResourceRequest&& request, Type type, SessionID sessionID)
+CachedResource::CachedResource(CachedResourceRequest&& request, Type type, PAL::SessionID sessionID)
     : m_resourceRequest(request.releaseResourceRequest())
     , m_options(request.options())
     , m_decodedDataDeletionTimer(*this, &CachedResource::destroyDecodedData, deadDecodedDataDeletionIntervalForResourceType(type))
@@ -123,7 +126,9 @@ CachedResource::CachedResource(CachedResourceRequest&& request, Type type, Sessi
     , m_origin(request.releaseOrigin())
     , m_initiatorName(request.initiatorName())
     , m_isLinkPreload(request.isLinkPreload())
+    , m_hasUnknownEncoding(request.isLinkPreload())
     , m_type(type)
+    , m_ignoreForRequestCount(request.ignoreForRequestCount())
 {
     ASSERT(sessionID.isValid());
 
@@ -140,7 +145,7 @@ CachedResource::CachedResource(CachedResourceRequest&& request, Type type, Sessi
 }
 
 // FIXME: For this constructor, we should probably mandate that the URL has no fragment identifier.
-CachedResource::CachedResource(const URL& url, Type type, SessionID sessionID)
+CachedResource::CachedResource(const URL& url, Type type, PAL::SessionID sessionID)
     : m_resourceRequest(url)
     , m_decodedDataDeletionTimer(*this, &CachedResource::destroyDecodedData, deadDecodedDataDeletionIntervalForResourceType(type))
     , m_sessionID(sessionID)
@@ -255,6 +260,28 @@ void CachedResource::load(CachedResourceLoader& cachedResourceLoader)
         m_fragmentIdentifierForRequest = String();
     }
 
+    if (m_options.keepAlive) {
+        if (!cachedResourceLoader.keepaliveRequestTracker().tryRegisterRequest(*this)) {
+            setResourceError({ errorDomainWebKitInternal, 0, request.url(), ASCIILiteral("Reached maximum amount of queued data of 64Kb for keepalive requests") });
+            failBeforeStarting();
+            return;
+        }
+        // FIXME: We should not special-case Beacon here.
+        if (shouldUsePingLoad(type())) {
+            ASSERT(m_originalRequestHeaders);
+            CachedResourceHandle<CachedResource> protectedThis(this);
+            platformStrategies()->loaderStrategy()->startPingLoad(frame, request, *m_originalRequestHeaders, m_options, [this, protectedThis = WTFMove(protectedThis)] (const ResourceError& error) {
+                if (error.isNull())
+                    finishLoading(nullptr);
+                else {
+                    setResourceError(error);
+                    this->error(LoadError);
+                }
+            });
+            return;
+        }
+    }
+
     m_loader = platformStrategies()->loaderStrategy()->loadResource(frame, *this, request, m_options);
     if (!m_loader) {
         RELEASE_LOG_IF_ALLOWED("load: Unable to create SubresourceLoader (frame = %p)", &frame);
@@ -274,7 +301,7 @@ void CachedResource::loadFrom(const CachedResource& resource)
     if (isCrossOrigin() && m_options.mode == FetchOptions::Mode::Cors) {
         ASSERT(m_origin);
         String errorMessage;
-        if (!WebCore::passesAccessControlCheck(resource.response(), m_options.allowCredentials, *m_origin, errorMessage)) {
+        if (!WebCore::passesAccessControlCheck(resource.response(), m_options.storedCredentialsPolicy, *m_origin, errorMessage)) {
             setResourceError(ResourceError(String(), 0, url(), errorMessage, ResourceError::Type::AccessControl));
             return;
         }
@@ -289,6 +316,7 @@ void CachedResource::setBodyDataFrom(const CachedResource& resource)
 {
     m_data = resource.m_data;
     m_response = resource.m_response;
+    m_response.setTainting(m_responseTainting);
     setDecodedSize(resource.decodedSize());
     setEncodedSize(resource.encodedSize());
 }
@@ -394,6 +422,8 @@ static inline bool shouldCacheSchemeIndefinitely(StringView scheme)
 
 std::chrono::microseconds CachedResource::freshnessLifetime(const ResourceResponse& response) const
 {
+    using namespace std::literals::chrono_literals;
+
     if (!response.url().protocolIsInHTTPFamily()) {
         StringView protocol = response.url().protocol();
         if (!shouldCacheSchemeIndefinitely(protocol)) {
@@ -424,6 +454,8 @@ void CachedResource::setResponse(const ResourceResponse& response)
     ASSERT(m_response.type() == ResourceResponse::Type::Default);
     m_response = response;
     m_response.setRedirected(m_redirectChainCacheStatus.status != RedirectChainCacheStatus::NoRedirection);
+    if (m_response.tainting() == ResourceResponse::Tainting::Basic || m_response.tainting() == ResourceResponse::Tainting::Cors)
+        m_response.setTainting(m_responseTainting);
 
     m_varyingHeaderValues = collectVaryingRequestHeaders(m_resourceRequest, m_response, m_sessionID);
 }

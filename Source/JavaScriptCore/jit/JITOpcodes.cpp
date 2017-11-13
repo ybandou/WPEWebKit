@@ -29,9 +29,10 @@
 #include "JIT.h"
 
 #include "BasicBlockLocation.h"
+#include "BytecodeStructs.h"
 #include "Exception.h"
 #include "Heap.h"
-#include "Interpreter.h"
+#include "InterpreterInlines.h"
 #include "JITInlines.h"
 #include "JSArray.h"
 #include "JSCell.h"
@@ -40,6 +41,7 @@
 #include "LinkBuffer.h"
 #include "MaxFrameExtentForSlowPathCall.h"
 #include "SlowPathCall.h"
+#include "ThunkGenerators.h"
 #include "TypeLocation.h"
 #include "TypeProfilerLog.h"
 #include "VirtualRegister.h"
@@ -111,9 +113,10 @@ void JIT::emitSlow_op_new_object(Instruction* currentInstruction, Vector<SlowCas
 
 void JIT::emit_op_overrides_has_instance(Instruction* currentInstruction)
 {
-    int dst = currentInstruction[1].u.operand;
-    int constructor = currentInstruction[2].u.operand;
-    int hasInstanceValue = currentInstruction[3].u.operand;
+    auto& bytecode = *reinterpret_cast<OpOverridesHasInstance*>(currentInstruction);
+    int dst = bytecode.dst();
+    int constructor = bytecode.constructor();
+    int hasInstanceValue = bytecode.hasInstanceValue();
 
     emitGetVirtualRegister(hasInstanceValue, regT0);
 
@@ -136,9 +139,10 @@ void JIT::emit_op_overrides_has_instance(Instruction* currentInstruction)
 
 void JIT::emit_op_instanceof(Instruction* currentInstruction)
 {
-    int dst = currentInstruction[1].u.operand;
-    int value = currentInstruction[2].u.operand;
-    int proto = currentInstruction[3].u.operand;
+    auto& bytecode = *reinterpret_cast<OpInstanceof*>(currentInstruction);
+    int dst = bytecode.dst();
+    int value = bytecode.value();
+    int proto = bytecode.prototype();
 
     // Load the operands (baseVal, proto, and value respectively) into registers.
     // We use regT0 for baseVal since we will be done with this first, and we can then use it for the result.
@@ -550,12 +554,40 @@ void JIT::emit_op_catch(Instruction* currentInstruction)
 
     load64(Address(regT0, Exception::valueOffset()), regT0);
     emitPutVirtualRegister(currentInstruction[2].u.operand);
+
+#if ENABLE(DFG_JIT)
+    // FIXME: consider inline caching the process of doing OSR entry, including
+    // argument type proofs, storing locals to the buffer, etc
+    // https://bugs.webkit.org/show_bug.cgi?id=175598
+
+    ValueProfileAndOperandBuffer* buffer = static_cast<ValueProfileAndOperandBuffer*>(currentInstruction[3].u.pointer);
+    if (buffer || !shouldEmitProfiling())
+        callOperation(operationTryOSREnterAtCatch, m_bytecodeOffset);
+    else
+        callOperation(operationTryOSREnterAtCatchAndValueProfile, m_bytecodeOffset);
+    auto skipOSREntry = branchTestPtr(Zero, returnValueGPR);
+    emitRestoreCalleeSaves();
+    jump(returnValueGPR);
+    skipOSREntry.link(this);
+    if (buffer && shouldEmitProfiling()) {
+        buffer->forEach([&] (ValueProfileAndOperand& profile) {
+            JSValueRegs regs(regT0);
+            emitGetVirtualRegister(profile.m_operand, regs);
+            emitValueProfilingSite(profile.m_profile);
+        });
+    }
+#endif // ENABLE(DFG_JIT)
 }
 
 void JIT::emit_op_assert(Instruction* currentInstruction)
 {
     JITSlowPathCall slowPathCall(this, currentInstruction, slow_path_assert);
     slowPathCall.call();
+}
+
+void JIT::emit_op_identity_with_profile(Instruction*)
+{
+    // We don't need to do anything here...
 }
 
 void JIT::emit_op_create_lexical_environment(Instruction* currentInstruction)
@@ -854,9 +886,10 @@ void JIT::emitSlow_op_nstricteq(Instruction* currentInstruction, Vector<SlowCase
 
 void JIT::emitSlow_op_instanceof(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
 {
-    int dst = currentInstruction[1].u.operand;
-    int value = currentInstruction[2].u.operand;
-    int proto = currentInstruction[3].u.operand;
+    auto& bytecode = *reinterpret_cast<OpInstanceof*>(currentInstruction);
+    int dst = bytecode.dst();
+    int value = bytecode.value();
+    int proto = bytecode.prototype();
 
     linkSlowCaseIfNotJSCell(iter, value);
     linkSlowCaseIfNotJSCell(iter, proto);
@@ -869,10 +902,11 @@ void JIT::emitSlow_op_instanceof(Instruction* currentInstruction, Vector<SlowCas
 
 void JIT::emitSlow_op_instanceof_custom(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
 {
-    int dst = currentInstruction[1].u.operand;
-    int value = currentInstruction[2].u.operand;
-    int constructor = currentInstruction[3].u.operand;
-    int hasInstanceValue = currentInstruction[4].u.operand;
+    auto& bytecode = *reinterpret_cast<OpInstanceofCustom*>(currentInstruction);
+    int dst = bytecode.dst();
+    int value = bytecode.value();
+    int constructor = bytecode.constructor();
+    int hasInstanceValue = bytecode.hasInstanceValue();
 
     linkSlowCase(iter);
     emitGetVirtualRegister(value, regT0);
@@ -948,6 +982,10 @@ void JIT::emit_op_check_traps(Instruction*)
     addSlowCase(branchTest8(NonZero, AbsoluteAddress(m_vm->needTrapHandlingAddress())));
 }
 
+void JIT::emit_op_nop(Instruction*)
+{
+}
+
 void JIT::emitSlow_op_check_traps(Instruction*, Vector<SlowCaseEntry>::iterator& iter)
 {
     linkSlowCase(iter);
@@ -971,14 +1009,16 @@ void JIT::emitNewFuncCommon(Instruction* currentInstruction)
 #endif
     FunctionExecutable* funcExec = m_codeBlock->functionDecl(currentInstruction[3].u.operand);
 
-    OpcodeID opcodeID = m_vm->interpreter->getOpcodeID(currentInstruction->u.opcode);
+    OpcodeID opcodeID = Interpreter::getOpcodeID(currentInstruction->u.opcode);
     if (opcodeID == op_new_func)
         callOperation(operationNewFunction, dst, regT0, funcExec);
     else if (opcodeID == op_new_generator_func)
         callOperation(operationNewGeneratorFunction, dst, regT0, funcExec);
-    else {
-        ASSERT(opcodeID == op_new_async_func);
+    else if (opcodeID == op_new_async_func)
         callOperation(operationNewAsyncFunction, dst, regT0, funcExec);
+    else {
+        ASSERT(opcodeID == op_new_async_generator_func);
+        callOperation(operationNewAsyncGeneratorFunction, dst, regT0, funcExec);
     }
 }
 
@@ -992,11 +1032,16 @@ void JIT::emit_op_new_generator_func(Instruction* currentInstruction)
     emitNewFuncCommon(currentInstruction);
 }
 
-void JIT::emit_op_new_async_func(Instruction* currentInstruction)
+void JIT::emit_op_new_async_generator_func(Instruction* currentInstruction)
 {
     emitNewFuncCommon(currentInstruction);
 }
 
+void JIT::emit_op_new_async_func(Instruction* currentInstruction)
+{
+    emitNewFuncCommon(currentInstruction);
+}
+    
 void JIT::emitNewFuncExprCommon(Instruction* currentInstruction)
 {
     Jump notUndefinedScope;
@@ -1014,15 +1059,17 @@ void JIT::emitNewFuncExprCommon(Instruction* currentInstruction)
     notUndefinedScope.link(this);
         
     FunctionExecutable* function = m_codeBlock->functionExpr(currentInstruction[3].u.operand);
-    OpcodeID opcodeID = m_vm->interpreter->getOpcodeID(currentInstruction->u.opcode);
+    OpcodeID opcodeID = Interpreter::getOpcodeID(currentInstruction->u.opcode);
 
     if (opcodeID == op_new_func_exp)
         callOperation(operationNewFunction, dst, regT0, function);
     else if (opcodeID == op_new_generator_func_exp)
         callOperation(operationNewGeneratorFunction, dst, regT0, function);
-    else {
-        ASSERT(opcodeID == op_new_async_func_exp);
+    else if (opcodeID == op_new_async_func_exp)
         callOperation(operationNewAsyncFunction, dst, regT0, function);
+    else {
+        ASSERT(opcodeID == op_new_async_generator_func_exp);
+        callOperation(operationNewAsyncGeneratorFunction, dst, regT0, function);
     }
 
     done.link(this);
@@ -1042,7 +1089,12 @@ void JIT::emit_op_new_async_func_exp(Instruction* currentInstruction)
 {
     emitNewFuncExprCommon(currentInstruction);
 }
-
+    
+void JIT::emit_op_new_async_generator_func_exp(Instruction* currentInstruction)
+{
+    emitNewFuncExprCommon(currentInstruction);
+}
+    
 void JIT::emit_op_new_array(Instruction* currentInstruction)
 {
     int dst = currentInstruction[1].u.operand;
@@ -1514,6 +1566,12 @@ void JIT::emit_op_get_argument(Instruction* currentInstruction)
     done.link(this);
     emitValueProfilingSite();
     emitPutVirtualRegister(dst, resultRegs);
+}
+
+void JIT::emit_op_unreachable(Instruction* currentInstruction)
+{
+    JITSlowPathCall slowPathCall(this, currentInstruction, slow_path_unreachable);
+    slowPathCall.call();
 }
 
 } // namespace JSC

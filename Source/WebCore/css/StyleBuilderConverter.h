@@ -35,7 +35,6 @@
 #include "CSSFunctionValue.h"
 #include "CSSGridAutoRepeatValue.h"
 #include "CSSGridLineNamesValue.h"
-#include "CSSGridTemplateAreasValue.h"
 #include "CSSImageGeneratorValue.h"
 #include "CSSImageSetValue.h"
 #include "CSSImageValue.h"
@@ -44,7 +43,7 @@
 #include "CSSReflectValue.h"
 #include "FontSelectionValueInlines.h"
 #include "Frame.h"
-#include "LayoutUnit.h"
+#include "GridPositionsResolver.h"
 #include "Length.h"
 #include "Pair.h"
 #include "QuotesData.h"
@@ -144,11 +143,7 @@ public:
     static BreakInside convertPageBreakInside(StyleResolver&, const CSSValue&);
     static BreakBetween convertColumnBreakBetween(StyleResolver&, const CSSValue&);
     static BreakInside convertColumnBreakInside(StyleResolver&, const CSSValue&);
-#if ENABLE(CSS_REGIONS)
-    static BreakBetween convertRegionBreakBetween(StyleResolver&, const CSSValue&);
-    static BreakInside convertRegionBreakInside(StyleResolver&, const CSSValue&);
-#endif
-    
+
     static HangingPunctuation convertHangingPunctuation(StyleResolver&, const CSSValue&);
 
     static Length convertPositionComponentX(StyleResolver&, const CSSValue&);
@@ -323,9 +318,11 @@ inline Length StyleBuilderConverter::convertTo100PercentMinusLength(const Length
         return Length(100 - length.value(), Percent);
     
     // Turn this into a calc expression: calc(100% - length)
-    auto lhs = std::make_unique<CalcExpressionLength>(Length(100, Percent));
-    auto rhs = std::make_unique<CalcExpressionLength>(length);
-    auto op = std::make_unique<CalcExpressionBinaryOperation>(WTFMove(lhs), WTFMove(rhs), CalcSubtract);
+    Vector<std::unique_ptr<CalcExpressionNode>> lengths;
+    lengths.reserveInitialCapacity(2);
+    lengths.uncheckedAppend(std::make_unique<CalcExpressionLength>(Length(100, Percent)));
+    lengths.uncheckedAppend(std::make_unique<CalcExpressionLength>(length));
+    auto op = std::make_unique<CalcExpressionOperation>(WTFMove(lengths), CalcSubtract);
     return Length(CalculationValue::create(WTFMove(op), ValueRangeAll));
 }
 
@@ -458,14 +455,14 @@ inline String StyleBuilderConverter::convertString(StyleResolver&, const CSSValu
 inline String StyleBuilderConverter::convertStringOrAuto(StyleResolver& styleResolver, const CSSValue& value)
 {
     if (downcast<CSSPrimitiveValue>(value).valueID() == CSSValueAuto)
-        return nullAtom;
+        return nullAtom();
     return convertString(styleResolver, value);
 }
 
 inline String StyleBuilderConverter::convertStringOrNone(StyleResolver& styleResolver, const CSSValue& value)
 {
     if (downcast<CSSPrimitiveValue>(value).valueID() == CSSValueNone)
-        return nullAtom;
+        return nullAtom();
     return convertString(styleResolver, value);
 }
 
@@ -1238,11 +1235,6 @@ inline FontSelectionValue StyleBuilderConverter::convertFontStretch(StyleResolve
     return convertFontStretchFromValue(value);
 }
 
-inline FontSelectionValue StyleBuilderConverter::convertFontStyle(StyleResolver&, const CSSValue& value)
-{
-    return convertFontStyleFromValue(value);
-}
-
 #if ENABLE(VARIATION_FONTS)
 inline FontVariationSettings StyleBuilderConverter::convertFontVariationSettings(StyleResolver&, const CSSValue& value)
 {
@@ -1440,14 +1432,22 @@ inline std::optional<Length> StyleBuilderConverter::convertLineHeight(StyleResol
             length = Length(length.value() * multiplier, Fixed);
         return length;
     }
+
+    // Line-height percentages need to inherit as if they were Fixed pixel values. In the example:
+    // <div style="font-size: 10px; line-height: 150%;"><div style="font-size: 100px;"></div></div>
+    // the inner element should have line-height of 15px. However, in this example:
+    // <div style="font-size: 10px; line-height: 1.5;"><div style="font-size: 100px;"></div></div>
+    // the inner element should have a line-height of 150px. Therefore, we map percentages to Fixed
+    // values and raw numbers to percentages.
     if (primitiveValue.isPercentage()) {
         // FIXME: percentage should not be restricted to an integer here.
         return Length((styleResolver.style()->computedFontSize() * primitiveValue.intValue()) / 100, Fixed);
     }
-    if (primitiveValue.isNumber()) {
-        // FIXME: number and percentage values should produce the same type of Length (ie. Fixed or Percent).
-        return Length(primitiveValue.doubleValue() * multiplier * 100.0, Percent);
-    }
+    if (primitiveValue.isNumber())
+        return Length(primitiveValue.doubleValue() * 100.0, Percent);
+
+    // FIXME: The parser should only emit the above types, so this should never be reached. We should change the
+    // type of this function to return just a Length (and not an Optional).
     return std::nullopt;
 }
 
@@ -1515,26 +1515,6 @@ inline BreakInside StyleBuilderConverter::convertColumnBreakInside(StyleResolver
         return AvoidColumnBreakInside;
     return primitiveValue;
 }
-
-#if ENABLE(CSS_REGIONS)
-inline BreakBetween StyleBuilderConverter::convertRegionBreakBetween(StyleResolver&, const CSSValue& value)
-{
-    auto& primitiveValue = downcast<CSSPrimitiveValue>(value);
-    if (primitiveValue.valueID() == CSSValueAlways)
-        return RegionBreakBetween;
-    if (primitiveValue.valueID() == CSSValueAvoid)
-        return AvoidRegionBreakBetween;
-    return primitiveValue;
-}
-
-inline BreakInside StyleBuilderConverter::convertRegionBreakInside(StyleResolver&, const CSSValue& value)
-{
-    auto& primitiveValue = downcast<CSSPrimitiveValue>(value);
-    if (primitiveValue.valueID() == CSSValueAvoid)
-        return AvoidRegionBreakInside;
-    return primitiveValue;
-}
-#endif
 
 inline HangingPunctuation StyleBuilderConverter::convertHangingPunctuation(StyleResolver&, const CSSValue& value)
 {

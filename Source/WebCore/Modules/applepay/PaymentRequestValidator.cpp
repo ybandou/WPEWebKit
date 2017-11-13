@@ -28,8 +28,7 @@
 
 #if ENABLE(APPLE_PAY)
 
-#include "ExceptionCode.h"
-#include "PaymentRequest.h"
+#include "ApplePaySessionPaymentRequest.h"
 #include <unicode/ucurr.h>
 #include <unicode/uloc.h>
 
@@ -37,13 +36,13 @@ namespace WebCore {
 
 static ExceptionOr<void> validateCountryCode(const String&);
 static ExceptionOr<void> validateCurrencyCode(const String&);
-static ExceptionOr<void> validateMerchantCapabilities(const PaymentRequest::MerchantCapabilities&);
+static ExceptionOr<void> validateMerchantCapabilities(const ApplePaySessionPaymentRequest::MerchantCapabilities&);
 static ExceptionOr<void> validateSupportedNetworks(const Vector<String>&);
-static ExceptionOr<void> validateShippingMethods(const Vector<PaymentRequest::ShippingMethod>&);
-static ExceptionOr<void> validateShippingMethod(const PaymentRequest::ShippingMethod&);
+static ExceptionOr<void> validateShippingMethods(const Vector<ApplePaySessionPaymentRequest::ShippingMethod>&);
+static ExceptionOr<void> validateShippingMethod(const ApplePaySessionPaymentRequest::ShippingMethod&);
 
 
-ExceptionOr<void> PaymentRequestValidator::validate(const PaymentRequest& paymentRequest)
+ExceptionOr<void> PaymentRequestValidator::validate(const ApplePaySessionPaymentRequest& paymentRequest)
 {
     auto validatedCountryCode = validateCountryCode(paymentRequest.countryCode());
     if (validatedCountryCode.hasException())
@@ -69,10 +68,16 @@ ExceptionOr<void> PaymentRequestValidator::validate(const PaymentRequest& paymen
     if (validatedShippingMethods.hasException())
         return validatedShippingMethods.releaseException();
 
+    for (auto& countryCode : paymentRequest.supportedCountries()) {
+        auto validatedCountryCode = validateCountryCode(countryCode);
+        if (validatedCountryCode.hasException())
+            return validatedCountryCode.releaseException();
+    }
+
     return { };
 }
 
-ExceptionOr<void> PaymentRequestValidator::validateTotal(const PaymentRequest::LineItem& total)
+ExceptionOr<void> PaymentRequestValidator::validateTotal(const ApplePaySessionPaymentRequest::LineItem& total)
 {
     if (!total.label)
         return Exception { TypeError, "Missing total label." };
@@ -119,7 +124,7 @@ static ExceptionOr<void> validateCurrencyCode(const String& currencyCode)
     return Exception { TypeError, makeString("\"" + currencyCode, "\" is not a valid currency code.") };
 }
 
-static ExceptionOr<void> validateMerchantCapabilities(const PaymentRequest::MerchantCapabilities& merchantCapabilities)
+static ExceptionOr<void> validateMerchantCapabilities(const ApplePaySessionPaymentRequest::MerchantCapabilities& merchantCapabilities)
 {
     if (!merchantCapabilities.supports3DS && !merchantCapabilities.supportsEMV && !merchantCapabilities.supportsCredit && !merchantCapabilities.supportsDebit)
         return Exception { TypeError, "Missing merchant capabilities." };
@@ -135,7 +140,7 @@ static ExceptionOr<void> validateSupportedNetworks(const Vector<String>& support
     return { };
 }
 
-static ExceptionOr<void> validateShippingMethod(const PaymentRequest::ShippingMethod& shippingMethod)
+static ExceptionOr<void> validateShippingMethod(const ApplePaySessionPaymentRequest::ShippingMethod& shippingMethod)
 {
     if (shippingMethod.amount < 0)
         return Exception { TypeError, "Shipping method amount must be greater than or equal to zero." };
@@ -143,7 +148,7 @@ static ExceptionOr<void> validateShippingMethod(const PaymentRequest::ShippingMe
     return { };
 }
 
-static ExceptionOr<void> validateShippingMethods(const Vector<PaymentRequest::ShippingMethod>& shippingMethods)
+static ExceptionOr<void> validateShippingMethods(const Vector<ApplePaySessionPaymentRequest::ShippingMethod>& shippingMethods)
 {
     for (const auto& shippingMethod : shippingMethods) {
         auto validatedShippingMethod = validateShippingMethod(shippingMethod);

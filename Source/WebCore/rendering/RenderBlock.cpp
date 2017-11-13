@@ -56,8 +56,6 @@
 #include "RenderLayer.h"
 #include "RenderListMarker.h"
 #include "RenderMenuList.h"
-#include "RenderNamedFlowFragment.h"
-#include "RenderNamedFlowThread.h"
 #include "RenderRegion.h"
 #include "RenderSVGResourceClipper.h"
 #include "RenderTableCell.h"
@@ -1060,9 +1058,6 @@ void RenderBlock::layout()
     StackStats::LayoutCheckPoint layoutCheckPoint;
     OverflowEventDispatcher dispatcher(this);
 
-    // Update our first letter info now.
-    updateFirstLetter();
-
     // Table cells call layoutBlock directly, so don't add any logic here.  Put code into
     // layoutBlock().
     layoutBlock(false);
@@ -1540,11 +1535,6 @@ void RenderBlock::markForPaginationRelayoutIfNeeded()
 
 void RenderBlock::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    RenderNamedFlowFragment* namedFlowFragment = currentRenderNamedFlowFragment();
-    // Check our region range to make sure we need to be painting in this region.
-    if (namedFlowFragment && !namedFlowFragment->flowThread()->objectShouldFragmentInFlowRegion(this, namedFlowFragment))
-        return;
-
     LayoutPoint adjustedPaintOffset = paintOffset + location();
     PaintPhase phase = paintInfo.phase;
 
@@ -1552,7 +1542,7 @@ void RenderBlock::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
     // FIXME: Could eliminate the isDocumentElementRenderer() check if we fix background painting so that the RenderView
     // paints the root's background.
     if (!isDocumentElementRenderer()) {
-        LayoutRect overflowBox = overflowRectForPaintRejection(namedFlowFragment);
+        LayoutRect overflowBox = overflowRectForPaintRejection();
         flipForWritingMode(overflowBox);
         overflowBox.moveBy(adjustedPaintOffset);
         if (!overflowBox.intersects(paintInfo.rect)
@@ -1684,27 +1674,8 @@ void RenderBlock::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffs
 
     // 1. paint background, borders etc
     if ((paintPhase == PaintPhaseBlockBackground || paintPhase == PaintPhaseChildBlockBackground) && style().visibility() == VISIBLE) {
-        if (hasVisibleBoxDecorations()) {
-            bool didClipToRegion = false;
-            
-            RenderNamedFlowFragment* namedFlowFragment = currentRenderNamedFlowFragment();
-            if (namedFlowFragment && is<RenderNamedFlowThread>(paintInfo.paintContainer)) {
-                // If this box goes beyond the current region, then make sure not to overflow the region.
-                // This (overflowing region X altough also fragmented to region X+1) could happen when one of this box's children
-                // overflows region X and is an unsplittable element (like an image).
-                // The same applies for a box overflowing the top of region X when that box is also fragmented in region X-1.
-
-                paintInfo.context().save();
-                didClipToRegion = true;
-
-                paintInfo.context().clip(downcast<RenderNamedFlowThread>(*paintInfo.paintContainer).decorationsClipRectForBoxInNamedFlowFragment(*this, *namedFlowFragment));
-            }
-
+        if (hasVisibleBoxDecorations())
             paintBoxDecorations(paintInfo, paintOffset);
-            
-            if (didClipToRegion)
-                paintInfo.context().restore();
-        }
     }
     
     // Paint legends just above the border before we scroll or clip.
@@ -2015,13 +1986,6 @@ GapRects RenderBlock::selectionGaps(RenderBlock& rootBlock, const LayoutPoint& r
         lastLogicalLeft = logicalLeftSelectionOffset(rootBlock, logicalHeight(), cache);
         lastLogicalRight = logicalRightSelectionOffset(rootBlock, logicalHeight(), cache);
         return result;
-    }
-    
-    RenderNamedFlowFragment* namedFlowFragment = currentRenderNamedFlowFragment();
-    if (paintInfo && namedFlowFragment && is<RenderFlowThread>(*paintInfo->paintContainer)) {
-        // Make sure the current object is actually flowed into the region being painted.
-        if (!downcast<RenderFlowThread>(*paintInfo->paintContainer).objectShouldFragmentInFlowRegion(this, namedFlowFragment))
-            return result;
     }
 
     if (childrenInline())
@@ -2446,12 +2410,6 @@ LayoutUnit RenderBlock::adjustLogicalRightOffsetForLine(LayoutUnit offsetFromFlo
     return right;
 }
 
-bool RenderBlock::avoidsFloats() const
-{
-    // Floats can't intrude into our box if we have a non-auto column count or width.
-    return RenderBox::avoidsFloats() || style().hasFlowFrom();
-}
-
 bool RenderBlock::isPointInOverflowControl(HitTestResult& result, const LayoutPoint& locationInContainer, const LayoutPoint& accumulatedOffset)
 {
     if (!scrollsOverflow())
@@ -2475,13 +2433,6 @@ bool RenderBlock::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
     LayoutPoint adjustedLocation(accumulatedOffset + location());
     LayoutSize localOffset = toLayoutSize(adjustedLocation);
 
-    RenderFlowThread* flowThread = flowThreadContainingBlock();
-    RenderNamedFlowFragment* namedFlowFragment = flowThread ? downcast<RenderNamedFlowFragment>(flowThread->currentRegion()) : nullptr;
-    // If we are now searching inside a region, make sure this element
-    // is being fragmented into this region.
-    if (namedFlowFragment && !flowThread->objectShouldFragmentInFlowRegion(this, namedFlowFragment))
-        return false;
-
     if (!isRenderView()) {
         // Check if we need to do anything at all.
         LayoutRect overflowBox = visualOverflowRect();
@@ -2494,7 +2445,7 @@ bool RenderBlock::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
     if ((hitTestAction == HitTestBlockBackground || hitTestAction == HitTestChildBlockBackground) && isPointInOverflowControl(result, locationInContainer.point(), adjustedLocation)) {
         updateHitTestResult(result, locationInContainer.point() - localOffset);
         // FIXME: isPointInOverflowControl() doesn't handle rect-based tests yet.
-        if (!result.addNodeToRectBasedTestResult(nodeForHitTest(), request, locationInContainer))
+        if (result.addNodeToListBasedTestResult(nodeForHitTest(), request, locationInContainer) == HitTestProgress::Stop)
            return true;
     }
 
@@ -2547,7 +2498,7 @@ bool RenderBlock::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
     // If we have clipping, then we can't have any spillout.
     bool useOverflowClip = hasOverflowClip() && !hasSelfPaintingLayer();
     bool useClip = (hasControlClip() || useOverflowClip);
-    bool checkChildren = !useClip || (hasControlClip() ? locationInContainer.intersects(controlClipRect(adjustedLocation)) : locationInContainer.intersects(overflowClipRect(adjustedLocation, namedFlowFragment, IncludeOverlayScrollbarSize)));
+    bool checkChildren = !useClip || (hasControlClip() ? locationInContainer.intersects(controlClipRect(adjustedLocation)) : locationInContainer.intersects(overflowClipRect(adjustedLocation, nullptr, IncludeOverlayScrollbarSize)));
     if (checkChildren) {
         // Hit test descendants first.
         LayoutSize scrolledOffset(localOffset - toLayoutSize(scrollPosition()));
@@ -2574,7 +2525,7 @@ bool RenderBlock::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
         LayoutRect boundsRect(adjustedLocation, size());
         if (visibleToHitTesting() && locationInContainer.intersects(boundsRect)) {
             updateHitTestResult(result, flipForWritingMode(locationInContainer.point() - localOffset));
-            if (!result.addNodeToRectBasedTestResult(nodeForHitTest(), request, locationInContainer, boundsRect))
+            if (result.addNodeToListBasedTestResult(nodeForHitTest(), request, locationInContainer, boundsRect) == HitTestProgress::Stop)
                 return true;
         }
     }
@@ -2651,7 +2602,7 @@ VisiblePosition RenderBlock::positionForPointWithInlineChildren(const LayoutPoin
 
 static inline bool isChildHitTestCandidate(const RenderBox& box)
 {
-    return box.height() && box.style().visibility() == VISIBLE && !box.isFloatingOrOutOfFlowPositioned() && !box.isInFlowRenderFlowThread();
+    return box.height() && box.style().visibility() == VISIBLE && !box.isOutOfFlowPositioned() && !box.isInFlowRenderFlowThread();
 }
 
 // Valid candidates in a FlowThread must be rendered by the region.
@@ -2708,6 +2659,8 @@ VisiblePosition RenderBlock::positionForPoint(const LayoutPoint& point, const Re
             if (!isChildHitTestCandidate(*childBox, region, pointInLogicalContents))
                 continue;
             LayoutUnit childLogicalBottom = logicalTopForChild(*childBox) + logicalHeightForChild(*childBox);
+            if (is<RenderBlockFlow>(childBox))
+                childLogicalBottom += downcast<RenderBlockFlow>(childBox)->lowestFloatLogicalBottom();
             // We hit child if our click is above the bottom of its padding box (like IE6/7 and FF3).
             if (isChildHitTestCandidate(*childBox, region, pointInLogicalContents) && (pointInLogicalContents.y() < childLogicalBottom
                 || (blocksAreFlipped && pointInLogicalContents.y() == childLogicalBottom)))
@@ -2742,10 +2695,6 @@ void RenderBlock::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, Lay
 void RenderBlock::computePreferredLogicalWidths()
 {
     ASSERT(preferredLogicalWidthsDirty());
-
-    // FIXME: Do not even try to reshuffle first letter renderers when we are not in layout
-    // until after webkit.org/b/163848 is fixed.
-    updateFirstLetter(view().frameView().isInRenderTreeLayout() ? RenderTreeMutationIsAllowed::Yes : RenderTreeMutationIsAllowed::No);
 
     m_minPreferredLogicalWidth = 0;
     m_maxPreferredLogicalWidth = 0;
@@ -2941,10 +2890,6 @@ bool RenderBlock::hasLineIfEmpty() const
 
 LayoutUnit RenderBlock::lineHeight(bool firstLine, LineDirectionMode direction, LinePositionMode linePositionMode) const
 {
-    // Anonymous inline blocks don't include margins or any real line height.
-    if (isAnonymousInlineBlock() && linePositionMode == PositionOnContainingLine)
-        return direction == HorizontalLine ? height() : width();
-    
     // Inline blocks are replaced elements. Otherwise, just pass off to
     // the base class.  If we're being queried as though we're the root line
     // box, then the fact that we're an inline-block is irrelevant, and we behave
@@ -2968,9 +2913,6 @@ int RenderBlock::baselinePosition(FontBaseline baselineType, bool firstLine, Lin
     // box, then the fact that we're an inline-block is irrelevant, and we behave
     // just like a block.
     if (isReplaced() && linePositionMode == PositionOnContainingLine) {
-        if (isAnonymousInlineBlock())
-            return direction == HorizontalLine ? height() : width();
-        
         // For "leaf" theme objects, let the theme decide what the baseline position is.
         // FIXME: Might be better to have a custom CSS property instead, so that if the theme
         // is turned off, checkboxes/radios will still have decent baselines.
@@ -3092,70 +3034,6 @@ RenderBlock* RenderBlock::firstLineBlock() const
     return firstLineBlock;
 }
 
-static RenderStyle styleForFirstLetter(const RenderElement& firstLetterBlock, const RenderObject& firstLetterContainer)
-{
-    auto* containerFirstLetterStyle = firstLetterBlock.getCachedPseudoStyle(FIRST_LETTER, &firstLetterContainer.firstLineStyle());
-    // FIXME: There appears to be some path where we have a first letter renderer without first letter style.
-    ASSERT(containerFirstLetterStyle);
-    auto firstLetterStyle = RenderStyle::clone(containerFirstLetterStyle ? *containerFirstLetterStyle : firstLetterContainer.firstLineStyle());
-
-    // If we have an initial letter drop that is >= 1, then we need to force floating to be on.
-    if (firstLetterStyle.initialLetterDrop() >= 1 && !firstLetterStyle.isFloating())
-        firstLetterStyle.setFloating(firstLetterStyle.isLeftToRightDirection() ? LeftFloat : RightFloat);
-
-    // We have to compute the correct font-size for the first-letter if it has an initial letter height set.
-    auto* paragraph = firstLetterContainer.isRenderBlockFlow() ? &firstLetterContainer : firstLetterContainer.containingBlock();
-    if (firstLetterStyle.initialLetterHeight() >= 1 && firstLetterStyle.fontMetrics().hasCapHeight() && paragraph->style().fontMetrics().hasCapHeight()) {
-        // FIXME: For ideographic baselines, we want to go from line edge to line edge. This is equivalent to (N-1)*line-height + the font height.
-        // We don't yet support ideographic baselines.
-        // For an N-line first-letter and for alphabetic baselines, the cap-height of the first letter needs to equal (N-1)*line-height of paragraph lines + cap-height of the paragraph
-        // Mathematically we can't rely on font-size, since font().height() doesn't necessarily match. For reliability, the best approach is simply to
-        // compare the final measured cap-heights of the two fonts in order to get to the closest possible value.
-        firstLetterStyle.setLineBoxContain(LineBoxContainInitialLetter);
-        int lineHeight = paragraph->style().computedLineHeight();
-        
-        // Set the font to be one line too big and then ratchet back to get to a precise fit. We can't just set the desired font size based off font height metrics
-        // because many fonts bake ascent into the font metrics. Therefore we have to look at actual measured cap height values in order to know when we have a good fit.
-        auto newFontDescription = firstLetterStyle.fontDescription();
-        float capRatio = firstLetterStyle.fontMetrics().floatCapHeight() / firstLetterStyle.fontSize();
-        float startingFontSize = ((firstLetterStyle.initialLetterHeight() - 1) * lineHeight + paragraph->style().fontMetrics().capHeight()) / capRatio;
-        newFontDescription.setSpecifiedSize(startingFontSize);
-        newFontDescription.setComputedSize(startingFontSize);
-        firstLetterStyle.setFontDescription(newFontDescription);
-        firstLetterStyle.fontCascade().update(firstLetterStyle.fontCascade().fontSelector());
-        
-        int desiredCapHeight = (firstLetterStyle.initialLetterHeight() - 1) * lineHeight + paragraph->style().fontMetrics().capHeight();
-        int actualCapHeight = firstLetterStyle.fontMetrics().capHeight();
-        while (actualCapHeight > desiredCapHeight) {
-            auto newFontDescription = firstLetterStyle.fontDescription();
-            newFontDescription.setSpecifiedSize(newFontDescription.specifiedSize() - 1);
-            newFontDescription.setComputedSize(newFontDescription.computedSize() -1);
-            firstLetterStyle.setFontDescription(newFontDescription);
-            firstLetterStyle.fontCascade().update(firstLetterStyle.fontCascade().fontSelector());
-            actualCapHeight = firstLetterStyle.fontMetrics().capHeight();
-        }
-    }
-    
-    // Force inline display (except for floating first-letters).
-    firstLetterStyle.setDisplay(firstLetterStyle.isFloating() ? BLOCK : INLINE);
-    // CSS2 says first-letter can't be positioned.
-    firstLetterStyle.setPosition(StaticPosition);
-    return firstLetterStyle;
-}
-
-// CSS 2.1 http://www.w3.org/TR/CSS21/selector.html#first-letter
-// "Punctuation (i.e, characters defined in Unicode [UNICODE] in the "open" (Ps), "close" (Pe),
-// "initial" (Pi). "final" (Pf) and "other" (Po) punctuation classes), that precedes or follows the first letter should be included"
-static inline bool isPunctuationForFirstLetter(UChar c)
-{
-    return U_GET_GC_MASK(c) & (U_GC_PS_MASK | U_GC_PE_MASK | U_GC_PI_MASK | U_GC_PF_MASK | U_GC_PO_MASK);
-}
-
-static inline bool shouldSkipForFirstLetter(UChar c)
-{
-    return isSpaceOrNewline(c) || c == noBreakSpace || isPunctuationForFirstLetter(c);
-}
-
 static inline RenderBlock* findFirstLetterBlock(RenderBlock* start)
 {
     RenderBlock* firstLetterBlock = start;
@@ -3176,117 +3054,6 @@ static inline RenderBlock* findFirstLetterBlock(RenderBlock* start)
     return nullptr;
 }
 
-void RenderBlock::updateFirstLetterStyle(RenderElement* firstLetterBlock, RenderObject* currentChild)
-{
-    RenderElement* firstLetter = currentChild->parent();
-    RenderElement* firstLetterContainer = firstLetter->parent();
-    auto pseudoStyle = styleForFirstLetter(*firstLetterBlock, *firstLetterContainer);
-    ASSERT(firstLetter->isFloating() || firstLetter->isInline());
-
-    if (Style::determineChange(firstLetter->style(), pseudoStyle) == Style::Detach) {
-        // The first-letter renderer needs to be replaced. Create a new renderer of the right type.
-        RenderBoxModelObject* newFirstLetter;
-        if (pseudoStyle.display() == INLINE)
-            newFirstLetter = new RenderInline(document(), WTFMove(pseudoStyle));
-        else
-            newFirstLetter = new RenderBlockFlow(document(), WTFMove(pseudoStyle));
-        newFirstLetter->initializeStyle();
-
-        // Move the first letter into the new renderer.
-        LayoutStateDisabler layoutStateDisabler(view());
-        while (RenderObject* child = firstLetter->firstChild()) {
-            if (is<RenderText>(*child))
-                downcast<RenderText>(*child).removeAndDestroyTextBoxes();
-            firstLetter->removeChild(*child);
-            newFirstLetter->addChild(child, nullptr);
-        }
-
-        RenderObject* nextSibling = firstLetter->nextSibling();
-        if (RenderTextFragment* remainingText = downcast<RenderBoxModelObject>(*firstLetter).firstLetterRemainingText()) {
-            ASSERT(remainingText->isAnonymous() || remainingText->textNode()->renderer() == remainingText);
-            // Replace the old renderer with the new one.
-            remainingText->setFirstLetter(*newFirstLetter);
-            newFirstLetter->setFirstLetterRemainingText(remainingText);
-        }
-        // To prevent removal of single anonymous block in RenderBlock::removeChild and causing
-        // |nextSibling| to go stale, we remove the old first letter using removeChildNode first.
-        firstLetterContainer->removeChildInternal(*firstLetter, NotifyChildren);
-        firstLetter->destroy();
-        firstLetter = newFirstLetter;
-        firstLetterContainer->addChild(firstLetter, nextSibling);
-    } else
-        firstLetter->setStyle(WTFMove(pseudoStyle));
-}
-
-void RenderBlock::createFirstLetterRenderer(RenderElement* firstLetterBlock, RenderText* currentTextChild)
-{
-    RenderElement* firstLetterContainer = currentTextChild->parent();
-    auto pseudoStyle = styleForFirstLetter(*firstLetterBlock, *firstLetterContainer);
-    RenderBoxModelObject* firstLetter = nullptr;
-    if (pseudoStyle.display() == INLINE)
-        firstLetter = new RenderInline(document(), WTFMove(pseudoStyle));
-    else
-        firstLetter = new RenderBlockFlow(document(), WTFMove(pseudoStyle));
-    firstLetter->initializeStyle();
-    firstLetterContainer->addChild(firstLetter, currentTextChild);
-
-    // The original string is going to be either a generated content string or a DOM node's
-    // string.  We want the original string before it got transformed in case first-letter has
-    // no text-transform or a different text-transform applied to it.
-    String oldText = currentTextChild->originalText();
-    ASSERT(!oldText.isNull());
-
-    if (!oldText.isEmpty()) {
-        unsigned length = 0;
-
-        // Account for leading spaces and punctuation.
-        while (length < oldText.length() && shouldSkipForFirstLetter(oldText[length]))
-            length++;
-
-        // Account for first grapheme cluster.
-        length += numCharactersInGraphemeClusters(StringView(oldText).substring(length), 1);
-        
-        // Keep looking for whitespace and allowed punctuation, but avoid
-        // accumulating just whitespace into the :first-letter.
-        for (unsigned scanLength = length; scanLength < oldText.length(); ++scanLength) {
-            UChar c = oldText[scanLength];
-            
-            if (!shouldSkipForFirstLetter(c))
-                break;
-
-            if (isPunctuationForFirstLetter(c))
-                length = scanLength + 1;
-         }
-         
-        // Construct a text fragment for the text after the first letter.
-        // This text fragment might be empty.
-        RenderTextFragment* remainingText;
-        if (currentTextChild->textNode())
-            remainingText = new RenderTextFragment(*currentTextChild->textNode(), oldText, length, oldText.length() - length);
-        else
-            remainingText = new RenderTextFragment(document(), oldText, length, oldText.length() - length);
-
-        if (remainingText->textNode())
-            remainingText->textNode()->setRenderer(remainingText);
-
-        firstLetterContainer->addChild(remainingText, currentTextChild);
-        firstLetterContainer->removeChild(*currentTextChild);
-        remainingText->setFirstLetter(*firstLetter);
-        firstLetter->setFirstLetterRemainingText(remainingText);
-        
-        // construct text fragment for the first letter
-        RenderTextFragment* letter;
-        if (remainingText->textNode())
-            letter = new RenderTextFragment(*remainingText->textNode(), oldText, 0, length);
-        else
-            letter = new RenderTextFragment(document(), oldText, 0, length);
-
-        firstLetter->addChild(letter);
-
-        currentTextChild->destroy();
-    }
-}
-    
 void RenderBlock::getFirstLetter(RenderObject*& firstLetter, RenderElement*& firstLetterContainer, RenderObject* skipObject)
 {
     firstLetter = nullptr;
@@ -3340,36 +3107,6 @@ void RenderBlock::getFirstLetter(RenderObject*& firstLetter, RenderElement*& fir
     
     if (!firstLetter)
         firstLetterContainer = nullptr;
-}
-
-void RenderBlock::updateFirstLetter(RenderTreeMutationIsAllowed mutationAllowedOrNot)
-{
-    RenderObject* firstLetterObj;
-    RenderElement* firstLetterContainer;
-    // FIXME: The first letter might be composed of a variety of code units, and therefore might
-    // be contained within multiple RenderElements.
-    getFirstLetter(firstLetterObj, firstLetterContainer);
-
-    if (!firstLetterObj || !firstLetterContainer)
-        return;
-
-    // If the child already has style, then it has already been created, so we just want
-    // to update it.
-    if (firstLetterObj->parent()->style().styleType() == FIRST_LETTER) {
-        updateFirstLetterStyle(firstLetterContainer, firstLetterObj);
-        return;
-    }
-
-    if (!is<RenderText>(*firstLetterObj))
-        return;
-
-    if (mutationAllowedOrNot != RenderTreeMutationIsAllowed::Yes)
-        return;
-    // Our layout state is not valid for the repaints we are going to trigger by
-    // adding and removing children of firstLetterContainer.
-    LayoutStateDisabler layoutStateDisabler(view());
-
-    createFirstLetterRenderer(firstLetterContainer, downcast<RenderText>(firstLetterObj));
 }
 
 RenderFlowThread* RenderBlock::cachedFlowThreadContainingBlock() const
@@ -3648,8 +3385,6 @@ RenderRegion* RenderBlock::regionAtBlockOffset(LayoutUnit blockOffset) const
 
 static bool canComputeRegionRangeForBox(const RenderBlock& parentBlock, const RenderBox& childBox, const RenderFlowThread* flowThreadContainingBlock)
 {
-    ASSERT(!childBox.isRenderNamedFlowThread());
-
     if (!flowThreadContainingBlock)
         return false;
 
@@ -3667,11 +3402,9 @@ bool RenderBlock::childBoxIsUnsplittableForFragmentation(const RenderBox& child)
     RenderFlowThread* flowThread = flowThreadContainingBlock();
     bool checkColumnBreaks = flowThread && flowThread->shouldCheckColumnBreaks();
     bool checkPageBreaks = !checkColumnBreaks && view().layoutState()->m_pageLogicalHeight;
-    bool checkRegionBreaks = flowThread && flowThread->isRenderNamedFlowThread();
     return child.isUnsplittableForPagination() || child.style().breakInside() == AvoidBreakInside
         || (checkColumnBreaks && child.style().breakInside() == AvoidColumnBreakInside)
-        || (checkPageBreaks && child.style().breakInside() == AvoidPageBreakInside)
-        || (checkRegionBreaks && child.style().breakInside() == AvoidRegionBreakInside);
+        || (checkPageBreaks && child.style().breakInside() == AvoidPageBreakInside);
 }
 
 void RenderBlock::computeRegionRangeForBoxChild(const RenderBox& box) const
@@ -3820,8 +3553,6 @@ const char* RenderBlock::renderName() const
         return "RenderBlock (positioned)";
     if (isAnonymousBlock())
         return "RenderBlock (anonymous)";
-    if (isAnonymousInlineBlock())
-        return "RenderBlock (anonymous inline-block)";
     // FIXME: Temporary hack while the new generated content system is being implemented.
     if (isPseudoElement())
         return "RenderBlock (generated)";

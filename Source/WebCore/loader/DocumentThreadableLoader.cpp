@@ -52,6 +52,7 @@
 #include "RuntimeEnabledFeatures.h"
 #include "SchemeRegistry.h"
 #include "SecurityOrigin.h"
+#include "SharedBuffer.h"
 #include "SubresourceIntegrity.h"
 #include "SubresourceLoader.h"
 #include "ThreadableLoaderClient.h"
@@ -110,7 +111,7 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document& document, Threadabl
 
     ASSERT_WITH_SECURITY_IMPLICATION(isAllowedByContentSecurityPolicy(request.url(), ContentSecurityPolicy::RedirectResponseReceived::No));
 
-    m_options.allowCredentials = (m_options.credentials == FetchOptions::Credentials::Include || (m_options.credentials == FetchOptions::Credentials::SameOrigin && m_sameOriginRequest)) ? AllowStoredCredentials : DoNotAllowStoredCredentials;
+    m_options.storedCredentialsPolicy = (m_options.credentials == FetchOptions::Credentials::Include || (m_options.credentials == FetchOptions::Credentials::SameOrigin && m_sameOriginRequest)) ? StoredCredentialsPolicy::Use : StoredCredentialsPolicy::DoNotUse;
 
     ASSERT(!request.httpHeaderFields().contains(HTTPHeaderName::Origin));
 
@@ -148,7 +149,7 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(ResourceRequest&& re
         makeSimpleCrossOriginAccessRequest(WTFMove(request));
     else {
         m_simpleRequest = false;
-        if (CrossOriginPreflightResultCache::singleton().canSkipPreflight(securityOrigin().toString(), request.url(), m_options.allowCredentials, request.httpMethod(), request.httpHeaderFields()))
+        if (CrossOriginPreflightResultCache::singleton().canSkipPreflight(securityOrigin().toString(), request.url(), m_options.storedCredentialsPolicy, request.httpMethod(), request.httpHeaderFields()))
             preflightSuccess(WTFMove(request));
         else
             makeCrossOriginAccessRequestWithPreflight(WTFMove(request));
@@ -166,7 +167,7 @@ void DocumentThreadableLoader::makeSimpleCrossOriginAccessRequest(ResourceReques
         return;
     }
 
-    updateRequestForAccessControl(request, securityOrigin(), m_options.allowCredentials);
+    updateRequestForAccessControl(request, securityOrigin(), m_options.storedCredentialsPolicy);
     loadRequest(WTFMove(request), DoSecurityCheck);
 }
 
@@ -228,6 +229,7 @@ void DocumentThreadableLoader::redirectReceived(CachedResource& resource, Resour
     ASSERT_UNUSED(resource, &resource == m_resource);
 
     Ref<DocumentThreadableLoader> protectedThis(*this);
+    --m_options.maxRedirectCount;
 
     // FIXME: We restrict this check to Fetch API for the moment, as this might disrupt WorkerScriptLoader.
     // Reassess this check based on https://github.com/whatwg/fetch/issues/393 discussions.
@@ -252,20 +254,20 @@ void DocumentThreadableLoader::redirectReceived(CachedResource& resource, Resour
     m_sameOriginRequest = false;
 
     ASSERT(m_resource);
-    ASSERT(m_resource->loader());
-    ASSERT(m_options.mode == FetchOptions::Mode::Cors);
     ASSERT(m_originalHeaders);
 
-    // Loader might have modified the origin to a unique one, let's reuse it for subsequent loads.
-    m_origin = m_resource->loader()->origin();
+    // Use a unique for subsequent loads if needed.
+    // https://fetch.spec.whatwg.org/#concept-http-redirect-fetch (Step 10).
+    ASSERT(m_options.mode == FetchOptions::Mode::Cors);
+    if (!securityOrigin().canRequest(redirectResponse.url()) && !protocolHostAndPortAreEqual(redirectResponse.url(), request.url()))
+        m_origin = SecurityOrigin::createUnique();
 
     // Except in case where preflight is needed, loading should be able to continue on its own.
     // But we also handle credentials here if it is restricted to SameOrigin.
     if (m_options.credentials != FetchOptions::Credentials::SameOrigin && m_simpleRequest && isSimpleCrossOriginAccessRequest(request.httpMethod(), *m_originalHeaders))
         return;
 
-    m_options.allowCredentials = DoNotAllowStoredCredentials;
-    m_options.maxRedirectCount -= m_resource->loader()->redirectCount();
+    m_options.storedCredentialsPolicy = StoredCredentialsPolicy::DoNotUse;
 
     clearResource();
 
@@ -288,10 +290,10 @@ void DocumentThreadableLoader::dataSent(CachedResource& resource, unsigned long 
 void DocumentThreadableLoader::responseReceived(CachedResource& resource, const ResourceResponse& response)
 {
     ASSERT_UNUSED(resource, &resource == m_resource);
-    didReceiveResponse(m_resource->identifier(), response, m_resource->responseTainting());
+    didReceiveResponse(m_resource->identifier(), response);
 }
 
-void DocumentThreadableLoader::didReceiveResponse(unsigned long identifier, const ResourceResponse& response, ResourceResponse::Tainting tainting)
+void DocumentThreadableLoader::didReceiveResponse(unsigned long identifier, const ResourceResponse& response)
 {
     ASSERT(m_client);
     ASSERT(response.type() != ResourceResponse::Type::Error);
@@ -307,8 +309,8 @@ void DocumentThreadableLoader::didReceiveResponse(unsigned long identifier, cons
     }
 
     if (response.type() == ResourceResponse::Type::Default) {
-        m_client->didReceiveResponse(identifier, ResourceResponse::filterResponse(response, tainting));
-        if (tainting == ResourceResponse::Tainting::Opaque) {
+        m_client->didReceiveResponse(identifier, ResourceResponseBase::filter(response));
+        if (response.tainting() == ResourceResponse::Tainting::Opaque) {
             clearResource();
             if (m_client)
                 m_client->didFinishLoading(identifier);
@@ -339,21 +341,16 @@ void DocumentThreadableLoader::finishedTimingForWorkerLoad(CachedResource& resou
 {
     ASSERT(m_client);
     ASSERT_UNUSED(resource, &resource == m_resource);
-    UNUSED_PARAM(resourceTiming);
 
-#if ENABLE(WEB_TIMING)
     finishedTimingForWorkerLoad(resourceTiming);
-#endif
 }
 
-#if ENABLE(WEB_TIMING)
 void DocumentThreadableLoader::finishedTimingForWorkerLoad(const ResourceTiming& resourceTiming)
 {
     ASSERT(m_options.initiatorContext == InitiatorContext::Worker);
 
     m_client->didFinishTiming(resourceTiming);
 }
-#endif
 
 void DocumentThreadableLoader::notifyFinished(CachedResource& resource)
 {
@@ -383,9 +380,8 @@ void DocumentThreadableLoader::didFinishLoading(unsigned long identifier)
             m_client->didReceiveData(m_resource->resourceBuffer()->data(), m_resource->resourceBuffer()->size());
         } else {
             ASSERT(response.type() == ResourceResponse::Type::Default);
-            
-            auto tainting = m_resource->responseTainting();
-            m_client->didReceiveResponse(identifier, ResourceResponse::filterResponse(response, tainting));
+
+            m_client->didReceiveResponse(identifier, ResourceResponseBase::filter(response));
             m_client->didReceiveData(m_resource->resourceBuffer()->data(), m_resource->resourceBuffer()->size());
         }
     }
@@ -402,7 +398,7 @@ void DocumentThreadableLoader::didFail(unsigned long, const ResourceError& error
 void DocumentThreadableLoader::preflightSuccess(ResourceRequest&& request)
 {
     ResourceRequest actualRequest(WTFMove(request));
-    updateRequestForAccessControl(actualRequest, securityOrigin(), m_options.allowCredentials);
+    updateRequestForAccessControl(actualRequest, securityOrigin(), m_options.storedCredentialsPolicy);
 
     m_preflightChecker = std::nullopt;
 
@@ -441,7 +437,7 @@ void DocumentThreadableLoader::loadRequest(ResourceRequest&& request, SecurityCh
         if (!m_options.integrity.isEmpty())
             options.dataBufferingPolicy = BufferData;
 
-        request.setAllowCookies(m_options.allowCredentials == AllowStoredCredentials);
+        request.setAllowCookies(m_options.storedCredentialsPolicy == StoredCredentialsPolicy::Use);
         CachedResourceRequest newRequest(WTFMove(request), options);
         if (RuntimeEnabledFeatures::sharedFeatures().resourceTimingEnabled())
             newRequest.setInitiator(m_options.initiator);
@@ -453,25 +449,20 @@ void DocumentThreadableLoader::loadRequest(ResourceRequest&& request, SecurityCh
             resource->removeClient(*this);
         }
 
-        // We create an URL here as the request will be moved in requestRawResource
-        URL requestUrl = newRequest.resourceRequest().url();
-        m_resource = m_document.cachedResourceLoader().requestRawResource(WTFMove(newRequest));
+        auto cachedResource = m_document.cachedResourceLoader().requestRawResource(WTFMove(newRequest));
+        m_resource = cachedResource.valueOr(nullptr);
         if (m_resource)
             m_resource->addClient(*this);
-        else {
-            // FIXME: Since we receive a synchronous error, this is probably due to some AccessControl checks. We should try to retrieve the actual error.
-            logErrorAndFail(ResourceError(String(), 0, requestUrl, String(), ResourceError::Type::AccessControl));
-        }
+        else
+            logErrorAndFail(cachedResource.error());
         return;
     }
 
     // If credentials mode is 'Omit', we should disable cookie sending.
     ASSERT(m_options.credentials != FetchOptions::Credentials::Omit);
 
-#if ENABLE(WEB_TIMING)
     LoadTiming loadTiming;
     loadTiming.markStartTimeAndFetchStart();
-#endif
 
     // FIXME: ThreadableLoaderOptions.sniffContent is not supported for synchronous requests.
     RefPtr<SharedBuffer> data;
@@ -482,18 +473,16 @@ void DocumentThreadableLoader::loadRequest(ResourceRequest&& request, SecurityCh
         auto& frameLoader = m_document.frame()->loader();
         if (!frameLoader.mixedContentChecker().canRunInsecureContent(m_document.securityOrigin(), requestURL))
             return;
-        identifier = frameLoader.loadResourceSynchronously(request, m_options.allowCredentials, m_options.clientCredentialPolicy, error, response, data);
+        identifier = frameLoader.loadResourceSynchronously(request, m_options.storedCredentialsPolicy, m_options.clientCredentialPolicy, error, response, data);
     }
 
-#if ENABLE(WEB_TIMING)
     loadTiming.setResponseEnd(MonotonicTime::now());
-#endif
 
     if (!error.isNull() && response.httpStatusCode() <= 0) {
         if (requestURL.isLocalFile()) {
             // We don't want XMLHttpRequest to raise an exception for file:// resources, see <rdar://problem/4962298>.
             // FIXME: XMLHttpRequest quirks should be in XMLHttpRequest code, not in DocumentThreadableLoader.cpp.
-            didReceiveResponse(identifier, response, ResourceResponse::Tainting::Basic);
+            didReceiveResponse(identifier, response);
             didFinishLoading(identifier);
             return;
         }
@@ -516,26 +505,24 @@ void DocumentThreadableLoader::loadRequest(ResourceRequest&& request, SecurityCh
         }
     }
 
-    ResourceResponse::Tainting tainting = ResourceResponse::Tainting::Basic;
     if (!m_sameOriginRequest) {
         if (m_options.mode == FetchOptions::Mode::NoCors)
-            tainting = ResourceResponse::Tainting::Opaque;
+            response.setTainting(ResourceResponse::Tainting::Opaque);
         else {
             ASSERT(m_options.mode == FetchOptions::Mode::Cors);
-            tainting = ResourceResponse::Tainting::Cors;
+            response.setTainting(ResourceResponse::Tainting::Cors);
             String accessControlErrorDescription;
-            if (!passesAccessControlCheck(response, m_options.allowCredentials, securityOrigin(), accessControlErrorDescription)) {
+            if (!passesAccessControlCheck(response, m_options.storedCredentialsPolicy, securityOrigin(), accessControlErrorDescription)) {
                 logErrorAndFail(ResourceError(errorDomainWebKitInternal, 0, response.url(), accessControlErrorDescription, ResourceError::Type::AccessControl));
                 return;
             }
         }
     }
-    didReceiveResponse(identifier, response, tainting);
+    didReceiveResponse(identifier, response);
 
     if (data)
         didReceiveData(identifier, data->data(), data->size());
 
-#if ENABLE(WEB_TIMING)
     if (RuntimeEnabledFeatures::sharedFeatures().resourceTimingEnabled()) {
         auto resourceTiming = ResourceTiming::fromSynchronousLoad(requestURL, m_options.initiator, loadTiming, response.deprecatedNetworkLoadMetrics(), response, securityOrigin());
         if (options().initiatorContext == InitiatorContext::Worker)
@@ -543,9 +530,8 @@ void DocumentThreadableLoader::loadRequest(ResourceRequest&& request, SecurityCh
         else {
             if (document().domWindow() && document().domWindow()->performance())
                 document().domWindow()->performance()->addResourceTiming(WTFMove(resourceTiming));
-        }        
+        }
     }
-#endif
 
     didFinishLoading(identifier);
 }

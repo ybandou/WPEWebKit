@@ -100,7 +100,7 @@ public:
     bool containsCompatibleContent(DraggingPurpose = DraggingPurpose::ForEditing) const;
     String asURL(FilenameConversionPolicy = ConvertFilenames, String* title = nullptr) const;
     String asPlainText() const;
-    void asFilenames(Vector<String>&) const;
+    Vector<String> asFilenames() const;
     Color asColor() const;
     bool canSmartReplace() const;
     bool containsColor() const;
@@ -113,9 +113,6 @@ public:
     const String& pasteboardName() const { return m_pasteboardName; }
     bool containsURLTypeIdentifier() const;
     bool containsPromise() const;
-#endif
-#if ENABLE(DATA_INTERACTION)
-    void updatePreferredTypeIdentifiers(const Vector<String>& supportedTypes) const;
 #endif
 
 #if PLATFORM(GTK)

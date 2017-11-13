@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011, 2013-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,7 +33,7 @@
 #include "DFGInlineCacheWrapperInlines.h"
 #include "DFGJITCode.h"
 #include "DFGJITFinalizer.h"
-#include "DFGOSRExitCompiler.h"
+#include "DFGOSRExit.h"
 #include "DFGOperations.h"
 #include "DFGRegisterBank.h"
 #include "DFGSlowPathGenerator.h"
@@ -44,6 +44,7 @@
 #include "LinkBuffer.h"
 #include "MaxFrameExtentForSlowPathCall.h"
 #include "StructureStubInfo.h"
+#include "ThunkGenerators.h"
 #include "VM.h"
 
 namespace JSC { namespace DFG {
@@ -55,7 +56,7 @@ JITCompiler::JITCompiler(Graph& dfg)
     , m_blockHeads(dfg.numBlocks())
     , m_pcToCodeOriginMapBuilder(dfg.m_vm)
 {
-    if (shouldDumpDisassembly() || m_graph.m_vm.m_perBytecodeProfiler)
+    if (UNLIKELY(shouldDumpDisassembly() || m_graph.m_vm.m_perBytecodeProfiler))
         m_disassembler = std::make_unique<Disassembler>(dfg);
 #if ENABLE(FTL_JIT)
     m_jitCode->tierUpInLoopHierarchy = WTFMove(m_graph.m_plan.tierUpInLoopHierarchy);
@@ -71,7 +72,7 @@ JITCompiler::~JITCompiler()
 void JITCompiler::linkOSRExits()
 {
     ASSERT(m_jitCode->osrExit.size() == m_exitCompilationInfo.size());
-    if (m_graph.compilation()) {
+    if (UNLIKELY(m_graph.compilation())) {
         for (unsigned i = 0; i < m_jitCode->osrExit.size(); ++i) {
             OSRExitCompilationInfo& info = m_exitCompilationInfo[i];
             Vector<Label> labels;
@@ -316,7 +317,7 @@ void JITCompiler::link(LinkBuffer& linkBuffer)
         }
     }
     
-    if (m_graph.compilation()) {
+    if (UNLIKELY(m_graph.compilation())) {
         ASSERT(m_exitSiteLabels.size() == m_jitCode->osrExit.size());
         for (unsigned i = 0; i < m_exitSiteLabels.size(); ++i) {
             Vector<Label>& labels = m_exitSiteLabels[i];
@@ -353,15 +354,28 @@ void JITCompiler::link(LinkBuffer& linkBuffer)
         m_codeBlock->setPCToCodeOriginMap(std::make_unique<PCToCodeOriginMap>(WTFMove(m_pcToCodeOriginMapBuilder), linkBuffer));
 }
 
+static void emitStackOverflowCheck(JITCompiler& jit, MacroAssembler::JumpList& stackOverflow)
+{
+    int frameTopOffset = virtualRegisterForLocal(jit.graph().requiredRegisterCountForExecutionAndExit() - 1).offset() * sizeof(Register);
+    unsigned maxFrameSize = -frameTopOffset;
+
+    jit.addPtr(MacroAssembler::TrustedImm32(frameTopOffset), GPRInfo::callFrameRegister, GPRInfo::regT1);
+    if (UNLIKELY(maxFrameSize > Options::reservedZoneSize()))
+        stackOverflow.append(jit.branchPtr(MacroAssembler::Above, GPRInfo::regT1, GPRInfo::callFrameRegister));
+    stackOverflow.append(jit.branchPtr(MacroAssembler::Above, MacroAssembler::AbsoluteAddress(jit.vm()->addressOfSoftStackLimit()), GPRInfo::regT1));
+}
+
 void JITCompiler::compile()
 {
+    makeCatchOSREntryBuffer();
+
     setStartOfCode();
     compileEntry();
     m_speculative = std::make_unique<SpeculativeJIT>(*this);
 
     // Plant a check that sufficient space is available in the JSStack.
-    addPtr(TrustedImm32(virtualRegisterForLocal(m_graph.requiredRegisterCountForExecutionAndExit() - 1).offset() * sizeof(Register)), GPRInfo::callFrameRegister, GPRInfo::regT1);
-    Jump stackOverflow = branchPtr(Above, AbsoluteAddress(vm()->addressOfSoftStackLimit()), GPRInfo::regT1);
+    JumpList stackOverflow;
+    emitStackOverflowCheck(*this, stackOverflow);
 
     addPtr(TrustedImm32(m_graph.stackPointerOffset() * sizeof(Register)), GPRInfo::callFrameRegister, stackPointerRegister);
     checkStackPointerAlignment();
@@ -414,6 +428,8 @@ void JITCompiler::compile()
 
 void JITCompiler::compileFunction()
 {
+    makeCatchOSREntryBuffer();
+
     setStartOfCode();
     compileEntry();
 
@@ -423,8 +439,8 @@ void JITCompiler::compileFunction()
     // so enter after this.
     Label fromArityCheck(this);
     // Plant a check that sufficient space is available in the JSStack.
-    addPtr(TrustedImm32(virtualRegisterForLocal(m_graph.requiredRegisterCountForExecutionAndExit() - 1).offset() * sizeof(Register)), GPRInfo::callFrameRegister, GPRInfo::regT1);
-    Jump stackOverflow = branchPtr(Above, AbsoluteAddress(vm()->addressOfSoftStackLimit()), GPRInfo::regT1);
+    JumpList stackOverflow;
+    emitStackOverflowCheck(*this, stackOverflow);
 
     // Move the stack pointer down to accommodate locals
     addPtr(TrustedImm32(m_graph.stackPointerOffset() * sizeof(Register)), GPRInfo::callFrameRegister, stackPointerRegister);
@@ -516,7 +532,7 @@ void JITCompiler::disassemble(LinkBuffer& linkBuffer)
         linkBuffer.didAlreadyDisassemble();
     }
     
-    if (m_graph.m_plan.compilation)
+    if (UNLIKELY(m_graph.m_plan.compilation))
         m_disassembler->reportToProfiler(m_graph.m_plan.compilation.get(), linkBuffer);
 }
 
@@ -539,14 +555,23 @@ void* JITCompiler::addressOfDoubleConstant(Node* node)
 }
 #endif
 
+void JITCompiler::noticeCatchEntrypoint(BasicBlock& basicBlock, JITCompiler::Label blockHead, LinkBuffer& linkBuffer, Vector<FlushFormat>&& argumentFormats)
+{
+    RELEASE_ASSERT(basicBlock.isCatchEntrypoint);
+    RELEASE_ASSERT(basicBlock.intersectionOfCFAHasVisited); // An entrypoint is reachable by definition.
+    m_jitCode->common.appendCatchEntrypoint(basicBlock.bytecodeBegin, linkBuffer.locationOf(blockHead).executableAddress(), WTFMove(argumentFormats));
+}
+
 void JITCompiler::noticeOSREntry(BasicBlock& basicBlock, JITCompiler::Label blockHead, LinkBuffer& linkBuffer)
 {
+    RELEASE_ASSERT(!basicBlock.isCatchEntrypoint);
+
     // OSR entry is not allowed into blocks deemed unreachable by control flow analysis.
     if (!basicBlock.intersectionOfCFAHasVisited)
         return;
-        
+
     OSREntryData* entry = m_jitCode->appendOSREntryData(basicBlock.bytecodeBegin, linkBuffer.offsetOf(blockHead));
-    
+
     entry->m_expectedValues = basicBlock.intersectionOfPastValuesAtHead;
         
     // Fix the expected values: in our protocol, a dead variable will have an expected
@@ -656,6 +681,14 @@ void JITCompiler::setEndOfCode()
     if (LIKELY(!m_disassembler))
         return;
     m_disassembler->setEndOfCode(labelIgnoringWatchpoints());
+}
+
+void JITCompiler::makeCatchOSREntryBuffer()
+{
+    if (m_graph.m_maxLocalsForCatchOSREntry) {
+        uint32_t numberOfLiveLocals = std::max(*m_graph.m_maxLocalsForCatchOSREntry, 1u); // Make sure we always allocate a non-null catchOSREntryBuffer.
+        m_jitCode->common.catchOSREntryBuffer = vm()->scratchBufferForSize(sizeof(JSValue) * numberOfLiveLocals);
+    }
 }
 
 } } // namespace JSC::DFG

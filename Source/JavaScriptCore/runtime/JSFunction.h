@@ -27,7 +27,6 @@
 #include "InternalFunction.h"
 #include "JSCallee.h"
 #include "JSScope.h"
-#include "Watchpoint.h"
 
 namespace JSC {
 
@@ -75,11 +74,8 @@ public:
     
     static JSFunction* createWithInvalidatedReallocationWatchpoint(VM&, FunctionExecutable*, JSScope*);
 
-    static JSFunction* create(VM&, FunctionExecutable*, JSScope*);
+    JS_EXPORT_PRIVATE static JSFunction* create(VM&, FunctionExecutable*, JSScope*);
     static JSFunction* create(VM&, FunctionExecutable*, JSScope*, Structure*);
-
-    JS_EXPORT_PRIVATE static JSFunction* createBuiltinFunction(VM&, FunctionExecutable*, JSGlobalObject*);
-    static JSFunction* createBuiltinFunction(VM&, FunctionExecutable*, JSGlobalObject*, const String& name);
 
     JS_EXPORT_PRIVATE String name(VM&);
     JS_EXPORT_PRIVATE String displayName(VM&);
@@ -157,7 +153,7 @@ protected:
     JSFunction(VM&, FunctionExecutable*, JSScope*, Structure*);
 
     void finishCreation(VM&, NativeExecutable*, int length, const String& name);
-    using Base::finishCreation;
+    void finishCreation(VM&);
 
     FunctionRareData* allocateRareData(VM&);
     FunctionRareData* allocateAndInitializeRareData(ExecState*, size_t inlineCapacity);
@@ -191,7 +187,9 @@ private:
 
     enum class LazyPropertyType { NotLazyProperty, IsLazyProperty };
     LazyPropertyType reifyLazyPropertyIfNeeded(VM&, ExecState*, PropertyName);
-    LazyPropertyType reifyBoundNameIfNeeded(VM&, ExecState*, PropertyName);
+    LazyPropertyType reifyLazyPropertyForHostOrBuiltinIfNeeded(VM&, ExecState*, PropertyName);
+    LazyPropertyType reifyLazyLengthIfNeeded(VM&, ExecState*, PropertyName);
+    LazyPropertyType reifyLazyBoundNameIfNeeded(VM&, ExecState*, PropertyName);
 
     friend class LLIntOffsetsExtractor;
 

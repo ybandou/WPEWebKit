@@ -35,16 +35,18 @@
 #include "EvalCodeBlock.h"
 #include "Exception.h"
 #include "ExceptionFuzz.h"
+#include "FrameTracers.h"
 #include "FunctionCodeBlock.h"
 #include "FunctionWhitelist.h"
 #include "GetterSetter.h"
 #include "HostCallReturnValue.h"
-#include "Interpreter.h"
+#include "InterpreterInlines.h"
 #include "IteratorOperations.h"
 #include "JIT.h"
 #include "JITExceptions.h"
 #include "JITWorklist.h"
 #include "JSAsyncFunction.h"
+#include "JSAsyncGeneratorFunction.h"
 #include "JSCInlines.h"
 #include "JSCJSValue.h"
 #include "JSGeneratorFunction.h"
@@ -192,7 +194,7 @@ extern "C" SlowPathReturnType llint_trace_operand(ExecState* exec, Instruction* 
             exec->codeBlock(),
             exec,
             static_cast<intptr_t>(pc - exec->codeBlock()->instructions().begin()),
-            exec->vm().interpreter->getOpcodeID(pc[0].u.opcode),
+            Interpreter::getOpcodeID(pc[0].u.opcode),
             fromWhere,
             operand,
             pc[operand].u.operand);
@@ -215,7 +217,7 @@ extern "C" SlowPathReturnType llint_trace_value(ExecState* exec, Instruction* pc
         exec->codeBlock(),
         exec,
         static_cast<intptr_t>(pc - exec->codeBlock()->instructions().begin()),
-        exec->vm().interpreter->getOpcodeID(pc[0].u.opcode),
+        Interpreter::getOpcodeID(pc[0].u.opcode),
         fromWhere,
         operand,
         pc[operand].u.operand,
@@ -269,16 +271,17 @@ LLINT_SLOW_PATH_DECL(trace_arityCheck_for_construct)
 
 LLINT_SLOW_PATH_DECL(trace)
 {
+    OpcodeID opcodeID = Interpreter::getOpcodeID(pc[0].u.opcode);
     dataLogF("%p / %p: executing bc#%zu, %s, pc = %p\n",
             exec->codeBlock(),
             exec,
             static_cast<intptr_t>(pc - exec->codeBlock()->instructions().begin()),
-            opcodeNames[exec->vm().interpreter->getOpcodeID(pc[0].u.opcode)], pc);
-    if (exec->vm().interpreter->getOpcodeID(pc[0].u.opcode) == op_enter) {
+            opcodeNames[opcodeID], pc);
+    if (opcodeID == op_enter) {
         dataLogF("Frame will eventually return to %p\n", exec->returnPC().value());
         *bitwise_cast<volatile char*>(exec->returnPC().value());
     }
-    if (exec->vm().interpreter->getOpcodeID(pc[0].u.opcode) == op_ret) {
+    if (opcodeID == op_ret) {
         dataLogF("Will be returning to %p\n", exec->returnPC().value());
         dataLogF("The new cfr will be %p\n", exec->callerFrame());
     }
@@ -291,7 +294,7 @@ LLINT_SLOW_PATH_DECL(special_trace)
             exec->codeBlock(),
             exec,
             static_cast<intptr_t>(pc - exec->codeBlock()->instructions().begin()),
-            exec->vm().interpreter->getOpcodeID(pc[0].u.opcode),
+            Interpreter::getOpcodeID(pc[0].u.opcode),
             exec->returnPC().value());
     LLINT_END_IMPL();
 }
@@ -316,8 +319,7 @@ inline bool shouldJIT(ExecState* exec, CodeBlock* codeBlock)
         || !ensureGlobalJITWhitelist().contains(codeBlock))
         return false;
 
-    // You can modify this to turn off JITting without rebuilding the world.
-    return exec->vm().canUseJIT();
+    return exec->vm().canUseJIT() && Options::useBaselineJIT();
 }
 
 // Returns true if we should try to OSR.
@@ -509,9 +511,12 @@ LLINT_SLOW_PATH_DECL(stack_check)
     // Hence, if we get here, then we know a stack overflow is imminent. So, just
     // throw the StackOverflowError unconditionally.
 #if !ENABLE(JIT)
-    ASSERT(!vm.interpreter->cloopStack().containsAddress(exec->topOfFrame()));
-    if (LIKELY(vm.ensureStackCapacityFor(exec->topOfFrame())))
-        LLINT_RETURN_TWO(pc, 0);
+    Register* topOfFrame = exec->topOfFrame();
+    if (LIKELY(topOfFrame < reinterpret_cast<Register*>(exec))) {
+        ASSERT(!vm.interpreter->cloopStack().containsAddress(topOfFrame));
+        if (LIKELY(vm.ensureStackCapacityFor(topOfFrame)))
+            LLINT_RETURN_TWO(pc, 0);
+    }
 #endif
 
     ErrorHandlingScope errorScope(vm);
@@ -673,7 +678,8 @@ LLINT_SLOW_PATH_DECL(slow_path_get_by_id)
             // Prevent the prototype cache from ever happening.
             pc[7].u.operand = 0;
         
-            if (structure->propertyAccessesAreCacheable()) {
+            if (structure->propertyAccessesAreCacheable()
+                && !structure->needImpurePropertyWatchpoint()) {
                 vm.heap.writeBarrier(codeBlock);
                 
                 ConcurrentJSLocker locker(codeBlock->m_lock);
@@ -689,7 +695,7 @@ LLINT_SLOW_PATH_DECL(slow_path_get_by_id)
         }
     } else if (!LLINT_ALWAYS_ACCESS_SLOW
         && isJSArray(baseValue)
-        && ident == exec->propertyNames().length) {
+        && ident == vm.propertyNames->length) {
         pc[0].u.opcode = LLInt::getOpcode(op_get_array_length);
         ArrayProfile* arrayProfile = codeBlock->getOrAddArrayProfile(pc - codeBlock->instructions().begin());
         arrayProfile->observeStructure(baseValue.asCell()->structure());
@@ -790,7 +796,7 @@ LLINT_SLOW_PATH_DECL(slow_path_del_by_id)
     CodeBlock* codeBlock = exec->codeBlock();
     JSObject* baseObject = LLINT_OP_C(2).jsValue().toObject(exec);
     LLINT_CHECK_EXCEPTION();
-    bool couldDelete = baseObject->methodTable()->deleteProperty(baseObject, exec, codeBlock->identifier(pc[3].u.operand));
+    bool couldDelete = baseObject->methodTable(vm)->deleteProperty(baseObject, exec, codeBlock->identifier(pc[3].u.operand));
     LLINT_CHECK_EXCEPTION();
     if (!couldDelete && codeBlock->isStrictMode())
         LLINT_THROW(createTypeError(exec, UnableToDeletePropertyError));
@@ -813,8 +819,10 @@ static ALWAYS_INLINE JSValue getByVal(VM& vm, ExecState* exec, JSValue baseValue
     
     if (subscript.isUInt32()) {
         uint32_t i = subscript.asUInt32();
-        if (isJSString(baseValue) && asString(baseValue)->canGetIndex(i))
+        if (isJSString(baseValue) && asString(baseValue)->canGetIndex(i)) {
+            scope.release();
             return asString(baseValue)->getIndex(exec, i);
+        }
         scope.release();
         return baseValue.get(exec, i);
     }
@@ -849,7 +857,7 @@ LLINT_SLOW_PATH_DECL(slow_path_put_by_val)
             if (object->canSetIndexQuickly(i))
                 object->setIndexQuickly(vm, i, value);
             else
-                object->methodTable()->putByIndex(object, exec, i, value, isStrictMode);
+                object->methodTable(vm)->putByIndex(object, exec, i, value, isStrictMode);
             LLINT_END();
         }
         baseValue.putByIndex(exec, i, value, isStrictMode);
@@ -898,7 +906,7 @@ LLINT_SLOW_PATH_DECL(slow_path_put_by_val_direct)
         baseObject->putDirectIndex(exec, index.value(), value, 0, isStrictMode ? PutDirectIndexShouldThrow : PutDirectIndexShouldNotThrow);
     else {
         PutPropertySlot slot(baseObject, isStrictMode);
-        baseObject->putDirect(exec->vm(), property, value, slot);
+        baseObject->putDirect(vm, property, value, slot);
     }
     LLINT_END();
 }
@@ -916,12 +924,12 @@ LLINT_SLOW_PATH_DECL(slow_path_del_by_val)
     
     uint32_t i;
     if (subscript.getUInt32(i))
-        couldDelete = baseObject->methodTable()->deletePropertyByIndex(baseObject, exec, i);
+        couldDelete = baseObject->methodTable(vm)->deletePropertyByIndex(baseObject, exec, i);
     else {
         LLINT_CHECK_EXCEPTION();
         auto property = subscript.toPropertyKey(exec);
         LLINT_CHECK_EXCEPTION();
-        couldDelete = baseObject->methodTable()->deleteProperty(baseObject, exec, property);
+        couldDelete = baseObject->methodTable(vm)->deleteProperty(baseObject, exec, property);
     }
     
     if (!couldDelete && exec->codeBlock()->isStrictMode())
@@ -1170,6 +1178,17 @@ LLINT_SLOW_PATH_DECL(slow_path_new_async_func)
     LLINT_RETURN(JSAsyncFunction::create(vm, codeBlock->functionDecl(pc[3].u.operand), scope));
 }
 
+LLINT_SLOW_PATH_DECL(slow_path_new_async_generator_func)
+{
+    LLINT_BEGIN();
+    CodeBlock* codeBlock = exec->codeBlock();
+    JSScope* scope = exec->uncheckedR(pc[2].u.operand).Register::scope();
+#if LLINT_SLOW_PATH_TRACING
+    dataLogF("Creating async generator function!\n");
+#endif
+    LLINT_RETURN(JSAsyncGeneratorFunction::create(vm, codeBlock->functionDecl(pc[3].u.operand), scope));
+}
+    
 LLINT_SLOW_PATH_DECL(slow_path_new_func_exp)
 {
     LLINT_BEGIN();
@@ -1201,6 +1220,17 @@ LLINT_SLOW_PATH_DECL(slow_path_new_async_func_exp)
     FunctionExecutable* executable = codeBlock->functionExpr(pc[3].u.operand);
     
     LLINT_RETURN(JSAsyncFunction::create(vm, executable, scope));
+}
+    
+LLINT_SLOW_PATH_DECL(slow_path_new_async_generator_func_exp)
+{
+    LLINT_BEGIN();
+        
+    CodeBlock* codeBlock = exec->codeBlock();
+    JSScope* scope = exec->uncheckedR(pc[2].u.operand).Register::scope();
+    FunctionExecutable* executable = codeBlock->functionExpr(pc[3].u.operand);
+        
+    LLINT_RETURN(JSAsyncGeneratorFunction::create(vm, executable, scope));
 }
 
 LLINT_SLOW_PATH_DECL(slow_path_set_function_name)
@@ -1303,7 +1333,7 @@ inline SlowPathReturnType setUpCall(ExecState* execCallee, Instruction* pc, Code
 
         CodeBlock** codeBlockSlot = execCallee->addressOfCodeBlock();
         JSObject* error = functionExecutable->prepareForExecution<FunctionExecutable>(vm, callee, scope, kind, *codeBlockSlot);
-        ASSERT(throwScope.exception() == error);
+        EXCEPTION_ASSERT(throwScope.exception() == error);
         if (UNLIKELY(error))
             LLINT_CALL_THROW(exec, error);
         codeBlock = *codeBlockSlot;
@@ -1589,7 +1619,7 @@ LLINT_SLOW_PATH_DECL(slow_path_put_to_scope)
         LLINT_THROW(createUndefinedVariableError(exec, ident));
 
     PutPropertySlot slot(scope, codeBlock->isStrictMode(), PutPropertySlot::UnknownContext, isInitialization(getPutInfo.initializationMode()));
-    scope->methodTable()->put(scope, exec, ident, value, slot);
+    scope->methodTable(vm)->put(scope, exec, ident, value, slot);
     
     CommonSlowPaths::tryCachePutToScopeGlobal(exec, codeBlock, pc, scope, getPutInfo, slot, ident);
 
@@ -1633,6 +1663,20 @@ LLINT_SLOW_PATH_DECL(slow_path_log_shadow_chicken_tail)
     LLINT_END();
 }
 
+LLINT_SLOW_PATH_DECL(slow_path_profile_catch)
+{
+    LLINT_BEGIN();
+
+    exec->codeBlock()->ensureCatchLivenessIsComputedForBytecodeOffset(exec->bytecodeOffset());
+
+    ValueProfileAndOperandBuffer* buffer = static_cast<ValueProfileAndOperandBuffer*>(pc[3].u.pointer);
+    buffer->forEach([&] (ValueProfileAndOperand& profile) {
+        profile.m_profile.m_buckets[0] = JSValue::encode(exec->uncheckedR(profile.m_operand).jsValue());
+    });
+
+    LLINT_END();
+}
+
 extern "C" SlowPathReturnType llint_throw_stack_overflow_error(VM* vm, ProtoCallFrame* protoFrame)
 {
     ExecState* exec = vm->topCallFrame;
@@ -1667,14 +1711,14 @@ extern "C" NO_RETURN_DUE_TO_CRASH void llint_crash()
 
 LLINT_SLOW_PATH_DECL(count_opcode)
 {
-    OpcodeID opcodeID = exec->vm().interpreter->getOpcodeID(pc[0].u.opcode);
+    OpcodeID opcodeID = Interpreter::getOpcodeID(pc[0].u.opcode);
     Data::opcodeStats(opcodeID).count++;
     LLINT_END_IMPL();
 }
 
 LLINT_SLOW_PATH_DECL(count_opcode_slow_path)
 {
-    OpcodeID opcodeID = exec->vm().interpreter->getOpcodeID(pc[0].u.opcode);
+    OpcodeID opcodeID = Interpreter::getOpcodeID(pc[0].u.opcode);
     Data::opcodeStats(opcodeID).slowPathCount++;
     LLINT_END_IMPL();
 }

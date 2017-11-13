@@ -45,6 +45,8 @@
     <link rel="stylesheet" href="Views/CallFrameIcons.css">
     <link rel="stylesheet" href="Views/CallFrameTreeElement.css">
     <link rel="stylesheet" href="Views/CallFrameView.css">
+    <link rel="stylesheet" href="Views/CanvasContentView.css">
+    <link rel="stylesheet" href="Views/CanvasDetailsSidebarPanel.css">
     <link rel="stylesheet" href="Views/ChartDetailsSectionRow.css">
     <link rel="stylesheet" href="Views/CircleChart.css">
     <link rel="stylesheet" href="Views/ClusterContentView.css">
@@ -55,11 +57,11 @@
     <link rel="stylesheet" href="Views/ColorWheel.css">
     <link rel="stylesheet" href="Views/CompletionSuggestionsView.css">
     <link rel="stylesheet" href="Views/ComputedStyleDetailsPanel.css">
+    <link rel="stylesheet" href="Views/ConsoleDrawer.css">
     <link rel="stylesheet" href="Views/ConsoleMessageView.css">
     <link rel="stylesheet" href="Views/ConsolePrompt.css">
     <link rel="stylesheet" href="Views/ContentBrowser.css">
     <link rel="stylesheet" href="Views/ContentBrowserTabContentView.css">
-    <link rel="stylesheet" href="Views/ContentFlowIcon.css">
     <link rel="stylesheet" href="Views/ContentView.css">
     <link rel="stylesheet" href="Views/ContentViewContainer.css">
     <link rel="stylesheet" href="Views/ControlToolbarItem.css">
@@ -107,9 +109,11 @@
     <link rel="stylesheet" href="Views/InlineSwatch.css">
     <link rel="stylesheet" href="Views/InputPopover.css">
     <link rel="stylesheet" href="Views/IssueTreeElement.css">
+    <link rel="stylesheet" href="Views/LayerDetailsSidebarPanel.css">
     <link rel="stylesheet" href="Views/LayerTreeDetailsSidebarPanel.css">
     <link rel="stylesheet" href="Views/LayoutTimelineOverviewGraph.css">
     <link rel="stylesheet" href="Views/LayoutTimelineView.css">
+    <link rel="stylesheet" href="Views/LegacyNetworkSidebarPanel.css">
     <link rel="stylesheet" href="Views/LogContentView.css">
     <link rel="stylesheet" href="Views/LogIcon.css">
     <link rel="stylesheet" href="Views/MemoryCategoryView.css">
@@ -119,7 +123,8 @@
     <link rel="stylesheet" href="Views/NavigationBar.css">
     <link rel="stylesheet" href="Views/NavigationSidebarPanel.css">
     <link rel="stylesheet" href="Views/NetworkGridContentView.css">
-    <link rel="stylesheet" href="Views/NetworkSidebarPanel.css">
+    <link rel="stylesheet" href="Views/NetworkTabContentView.css">
+    <link rel="stylesheet" href="Views/NetworkTableContentView.css">
     <link rel="stylesheet" href="Views/NetworkTimelineOverviewGraph.css">
     <link rel="stylesheet" href="Views/NetworkTimelineView.css">
     <link rel="stylesheet" href="Views/NewTabContentView.css">
@@ -137,10 +142,15 @@
     <link rel="stylesheet" href="Views/ProfileView.css">
     <link rel="stylesheet" href="Views/QuickConsole.css">
     <link rel="stylesheet" href="Views/RadioButtonNavigationItem.css">
+    <link rel="stylesheet" href="Views/RecordingActionTreeElement.css">
+    <link rel="stylesheet" href="Views/RecordingContentView.css">
+    <link rel="stylesheet" href="Views/RecordingStateDetailsSidebarPanel.css">
+    <link rel="stylesheet" href="Views/RecordingTraceDetailsSidebarPanel.css">
+    <link rel="stylesheet" href="Views/RecordingNavigationSidebarPanel.css">
     <link rel="stylesheet" href="Views/RenderingFrameTimelineOverviewGraph.css">
     <link rel="stylesheet" href="Views/RenderingFrameTimelineView.css">
-    <link rel="stylesheet" href="Views/ReplayDashboardView.css">
     <link rel="stylesheet" href="Views/Resizer.css">
+    <link rel="stylesheet" href="Views/ResourceDetailsSidebarPanel.css">
     <link rel="stylesheet" href="Views/ResourceIcons.css">
     <link rel="stylesheet" href="Views/ResourceSidebarPanel.css">
     <link rel="stylesheet" href="Views/ResourceTimelineDataGridNode.css">
@@ -152,15 +162,21 @@
     <link rel="stylesheet" href="Views/ScriptContentView.css">
     <link rel="stylesheet" href="Views/ScriptDetailsTimelineView.css">
     <link rel="stylesheet" href="Views/ScriptTimelineOverviewGraph.css">
+    <link rel="stylesheet" href="Views/ScrubberNavigationItem.css">
     <link rel="stylesheet" href="Views/SearchBar.css">
     <link rel="stylesheet" href="Views/SearchIcons.css">
     <link rel="stylesheet" href="Views/SearchSidebarPanel.css">
     <link rel="stylesheet" href="Views/SettingsTabContentView.css">
+    <link rel="stylesheet" href="Views/ShaderProgramContentView.css">
+    <link rel="stylesheet" href="Views/ShaderProgramTreeElement.css">
     <link rel="stylesheet" href="Views/Sidebar.css">
     <link rel="stylesheet" href="Views/SidebarPanel.css">
     <link rel="stylesheet" href="Views/Slider.css">
     <link rel="stylesheet" href="Views/SoftContextMenu.css">
     <link rel="stylesheet" href="Views/SourceCodeTextEditor.css">
+    <link rel="stylesheet" href="Views/SpreadsheetCSSStyleDeclarationEditor.css">
+    <link rel="stylesheet" href="Views/SpreadsheetCSSStyleDeclarationSection.css">
+    <link rel="stylesheet" href="Views/SpreadsheetRulesStyleDetailsPanel.css">
     <link rel="stylesheet" href="Views/SpringEditor.css">
     <link rel="stylesheet" href="Views/StackTraceView.css">
     <link rel="stylesheet" href="Views/StorageSidebarPanel.css">
@@ -168,6 +184,7 @@
     <link rel="stylesheet" href="Views/SyntaxHighlightingDefaultTheme.css">
     <link rel="stylesheet" href="Views/TabBar.css">
     <link rel="stylesheet" href="Views/TabBrowser.css">
+    <link rel="stylesheet" href="Views/Table.css">
     <link rel="stylesheet" href="Views/TextContentView.css">
     <link rel="stylesheet" href="Views/TextEditor.css">
     <link rel="stylesheet" href="Views/TextNavigationItem.css">
@@ -214,11 +231,13 @@
     <link rel="stylesheet" href="Controllers/CodeMirrorTokenTrackingController.css">
 
     <link rel="stylesheet" href="Debug/UncaughtExceptionReporter.css">
+    <link rel="stylesheet" href="Debug/DebugContentView.css">
 
     <script src="Debug/UncaughtExceptionReporter.js"></script>
 
     <script src="External/CodeMirror/codemirror.js"></script>
 
+    <script src="External/CodeMirror/clike.js"></script>
     <script src="External/CodeMirror/clojure.js"></script>
     <script src="External/CodeMirror/closebrackets.js"></script>
     <script src="External/CodeMirror/coffeescript.js"></script>
@@ -240,8 +259,10 @@
 
     <script src="External/Esprima/esprima.js"></script>
 
+    <script src="External/three.js/three.js"></script>
+    <script src="External/three.js/OrbitControls.js"></script>
+
     <script src="Base/WebInspector.js"></script>
-    <script src="Base/InspectorFrontendHostStub.js"></script>
     <script src="Base/Platform.js"></script>
     <script src="Base/LinkedList.js"></script>
     <script src="Base/ListMultimap.js"></script>
@@ -250,6 +271,7 @@
     <script src="Base/DOMUtilities.js"></script>
     <script src="Base/EventListener.js"></script>
     <script src="Base/EventListenerSet.js"></script>
+    <script src="Base/FileUtilities.js"></script>
     <script src="Base/ImageUtilities.js"></script>
     <script src="Base/LoadLocalizedStrings.js"></script>
     <script src="Base/MIMETypeUtilities.js"></script>
@@ -275,6 +297,7 @@
 
     <script src="Protocol/ApplicationCacheObserver.js"></script>
     <script src="Protocol/CSSObserver.js"></script>
+    <script src="Protocol/CanvasObserver.js"></script>
     <script src="Protocol/ConsoleObserver.js"></script>
     <script src="Protocol/DOMObserver.js"></script>
     <script src="Protocol/DOMStorageObserver.js"></script>
@@ -286,7 +309,6 @@
     <script src="Protocol/MemoryObserver.js"></script>
     <script src="Protocol/NetworkObserver.js"></script>
     <script src="Protocol/PageObserver.js"></script>
-    <script src="Protocol/ReplayObserver.js"></script>
     <script src="Protocol/RuntimeObserver.js"></script>
     <script src="Protocol/ScriptProfilerObserver.js"></script>
     <script src="Protocol/TimelineObserver.js"></script>
@@ -318,12 +340,12 @@
     <script src="Models/CSSStyleDeclaration.js"></script>
     <script src="Models/CSSStyleSheet.js"></script>
     <script src="Models/CallFrame.js"></script>
+    <script src="Models/Canvas.js"></script>
     <script src="Models/Collection.js"></script>
     <script src="Models/CollectionEntry.js"></script>
     <script src="Models/CollectionEntryPreview.js"></script>
     <script src="Models/Color.js"></script>
     <script src="Models/ConsoleCommandResultMessage.js"></script>
-    <script src="Models/ContentFlow.js"></script>
     <script src="Models/CookieStorageObject.js"></script>
     <script src="Models/DOMBreakpoint.js"></script>
     <script src="Models/DOMNode.js"></script>
@@ -351,6 +373,7 @@
     <script src="Models/IndexedDatabaseObjectStoreIndex.js"></script>
     <script src="Models/IssueMessage.js"></script>
     <script src="Models/KeyboardShortcut.js"></script>
+    <script src="Models/Layer.js"></script>
     <script src="Models/LayoutInstrument.js"></script>
     <script src="Models/LayoutTimelineRecord.js"></script>
     <script src="Models/LazySourceCodeLocation.js"></script>
@@ -375,10 +398,11 @@
     <script src="Models/PropertyDescriptor.js"></script>
     <script src="Models/PropertyPath.js"></script>
     <script src="Models/PropertyPreview.js"></script>
+    <script src="Models/Recording.js"></script>
+    <script src="Models/RecordingAction.js"></script>
+    <script src="Models/RecordingFrame.js"></script>
+    <script src="Models/RecordingInitialStateAction.js"></script>
     <script src="Models/RenderingFrameTimelineRecord.js"></script>
-    <script src="Models/ReplayDashboard.js"></script>
-    <script src="Models/ReplaySession.js"></script>
-    <script src="Models/ReplaySessionSegment.js"></script>
     <script src="Models/Resource.js"></script>
     <script src="Models/ResourceCollection.js"></script>
     <script src="Models/ResourceQueryMatch.js"></script>
@@ -391,6 +415,7 @@
     <script src="Models/ScriptInstrument.js"></script>
     <script src="Models/ScriptSyntaxTree.js"></script>
     <script src="Models/ScriptTimelineRecord.js"></script>
+    <script src="Models/ShaderProgram.js"></script>
     <script src="Models/SourceCodePosition.js"></script>
     <script src="Models/SourceCodeRevision.js"></script>
     <script src="Models/SourceCodeSearchMatchObject.js"></script>
@@ -421,6 +446,7 @@
 
     <script src="Views/ConsoleCommandView.js"></script>
     <script src="Views/ConsoleMessageView.js"></script>
+    <script src="Views/ContentBrowser.js"></script>
     <script src="Views/ContentView.js"></script>
     <script src="Views/DataGrid.js"></script>
     <script src="Views/DataGridNode.js"></script>
@@ -434,6 +460,8 @@
     <script src="Views/TabBar.js"></script>
     <script src="Views/TabBarItem.js"></script>
     <script src="Views/TabBrowser.js"></script>
+    <script src="Views/Table.js"></script>
+    <script src="Views/TableColumn.js"></script>
     <script src="Views/TextEditor.js"></script>
     <script src="Views/TimelineOverviewGraph.js"></script>
     <script src="Views/TimelineView.js"></script>
@@ -449,6 +477,7 @@
     <script src="Views/DetailsSidebarPanel.js"></script>
     <script src="Views/GeneralTabBarItem.js"></script>
     <script src="Views/GeneralTreeElement.js"></script>
+    <script src="Views/GroupNavigationItem.js"></script>
     <script src="Views/NavigationSidebarPanel.js"></script>
     <script src="Views/PinnedTabBarItem.js"></script>
     <script src="Views/ResourceContentView.js"></script>
@@ -460,6 +489,7 @@
     <script src="Views/DOMDetailsSidebarPanel.js"></script>
     <script src="Views/FolderTreeElement.js"></script>
     <script src="Views/FolderizedTreeElement.js"></script>
+    <script src="Views/LegacyNetworkTabContentView.js"></script>
     <script src="Views/NetworkTabContentView.js"></script>
     <script src="Views/NewTabContentView.js"></script>
     <script src="Views/ObjectTreeBaseTreeElement.js"></script>
@@ -473,6 +503,8 @@
     <script src="Views/ConsoleTabContentView.js"></script>
     <script src="Views/DebuggerTabContentView.js"></script>
     <script src="Views/ElementsTabContentView.js"></script>
+    <script src="Views/LayersTabContentView.js"></script>
+    <script src="Views/RecordingTabContentView.js"></script>
     <script src="Views/ResourceTreeElement.js"></script>
     <script src="Views/ResourcesTabContentView.js"></script>
     <script src="Views/SearchTabContentView.js"></script>
@@ -490,8 +522,6 @@
     <script src="Views/SettingsGroup.js"></script>
     <script src="Views/SettingsView.js"></script>
 
-    <script src="Views/GeneralSettingsView.js"></script>
-
     <script src="Views/ActivateButtonNavigationItem.js"></script>
     <script src="Views/ActivateButtonToolbarItem.js"></script>
     <script src="Views/ApplicationCacheDetailsSidebarPanel.js"></script>
@@ -506,8 +536,12 @@
     <script src="Views/CSSStyleDeclarationSection.js"></script>
     <script src="Views/CSSStyleDeclarationTextEditor.js"></script>
     <script src="Views/CSSStyleDetailsSidebarPanel.js"></script>
+    <script src="Views/CSSStyleSheetTreeElement.js"></script>
     <script src="Views/CallFrameTreeElement.js"></script>
     <script src="Views/CallFrameView.js"></script>
+    <script src="Views/CanvasContentView.js"></script>
+    <script src="Views/CanvasDetailsSidebarPanel.js"></script>
+    <script src="Views/CanvasTreeElement.js"></script>
     <script src="Views/ChartDetailsSectionRow.js"></script>
     <script src="Views/CircleChart.js"></script>
     <script src="Views/ClusterContentView.js"></script>
@@ -521,12 +555,10 @@
     <script src="Views/ColorWheel.js"></script>
     <script src="Views/CompletionSuggestionsView.js"></script>
     <script src="Views/ComputedStyleDetailsPanel.js"></script>
+    <script src="Views/ConsoleDrawer.js"></script>
     <script src="Views/ConsoleGroup.js"></script>
     <script src="Views/ConsolePrompt.js"></script>
     <script src="Views/ConsoleSession.js"></script>
-    <script src="Views/ContentBrowser.js"></script>
-    <script src="Views/ContentFlowDOMTreeContentView.js"></script>
-    <script src="Views/ContentFlowTreeElement.js"></script>
     <script src="Views/ContentViewContainer.js"></script>
     <script src="Views/ContextMenu.js"></script>
     <script src="Views/ContextMenuUtilities.js"></script>
@@ -555,6 +587,7 @@
     <script src="Views/DebuggerSidebarPanel.js"></script>
     <script src="Views/DefaultDashboardView.js"></script>
     <script src="Views/DividerNavigationItem.js"></script>
+    <script src="Views/EditableDataGridNode.js"></script>
     <script src="Views/EditingSupport.js"></script>
     <script src="Views/ErrorObjectView.js"></script>
     <script src="Views/EventListenerSectionGroup.js"></script>
@@ -598,22 +631,24 @@
     <script src="Views/InlineSwatch.js"></script>
     <script src="Views/InputPopover.js"></script>
     <script src="Views/IssueTreeElement.js"></script>
+    <script src="Views/LayerDetailsSidebarPanel.js"></script>
     <script src="Views/LayerTreeDataGridNode.js"></script>
     <script src="Views/LayerTreeDetailsSidebarPanel.js"></script>
+    <script src="Views/Layers3DContentView.js"></script>
     <script src="Views/LayoutTimelineDataGrid.js"></script>
     <script src="Views/LayoutTimelineDataGridNode.js"></script>
     <script src="Views/LayoutTimelineOverviewGraph.js"></script>
     <script src="Views/LayoutTimelineView.js"></script>
+    <script src="Views/LegacyNetworkSidebarPanel.js"></script>
     <script src="Views/LineChart.js"></script>
     <script src="Views/LogContentView.js"></script>
-    <script src="Views/LogTreeElement.js"></script>
     <script src="Views/MemoryCategoryView.js"></script>
     <script src="Views/MemoryTimelineOverviewGraph.js"></script>
     <script src="Views/MemoryTimelineView.js"></script>
     <script src="Views/MultipleScopeBarItem.js"></script>
     <script src="Views/NavigationBar.js"></script>
     <script src="Views/NetworkGridContentView.js"></script>
-    <script src="Views/NetworkSidebarPanel.js"></script>
+    <script src="Views/NetworkTableContentView.js"></script>
     <script src="Views/NetworkTimelineOverviewGraph.js"></script>
     <script src="Views/NetworkTimelineView.js"></script>
     <script src="Views/ObjectPreviewView.js"></script>
@@ -637,10 +672,14 @@
     <script src="Views/QuickConsole.js"></script>
     <script src="Views/QuickConsoleNavigationBar.js"></script>
     <script src="Views/RadioButtonNavigationItem.js"></script>
+    <script src="Views/RecordingActionTreeElement.js"></script>
+    <script src="Views/RecordingContentView.js"></script>
+    <script src="Views/RecordingNavigationSidebarPanel.js"></script>
+    <script src="Views/RecordingStateDetailsSidebarPanel.js"></script>
+    <script src="Views/RecordingTraceDetailsSidebarPanel.js"></script>
     <script src="Views/RenderingFrameTimelineDataGridNode.js"></script>
     <script src="Views/RenderingFrameTimelineOverviewGraph.js"></script>
     <script src="Views/RenderingFrameTimelineView.js"></script>
-    <script src="Views/ReplayDashboardView.js"></script>
     <script src="Views/Resizer.js"></script>
     <script src="Views/ResourceClusterContentView.js"></script>
     <script src="Views/ResourceDetailsSidebarPanel.js"></script>
@@ -660,9 +699,12 @@
     <script src="Views/ScriptTimelineDataGridNode.js"></script>
     <script src="Views/ScriptTimelineOverviewGraph.js"></script>
     <script src="Views/ScriptTreeElement.js"></script>
+    <script src="Views/ScrubberNavigationItem.js"></script>
     <script src="Views/SearchBar.js"></script>
     <script src="Views/SearchResultTreeElement.js"></script>
     <script src="Views/SearchSidebarPanel.js"></script>
+    <script src="Views/ShaderProgramContentView.js"></script>
+    <script src="Views/ShaderProgramTreeElement.js"></script>
     <script src="Views/Sidebar.js"></script>
     <script src="Views/Slider.js"></script>
     <script src="Views/SoftContextMenu.js"></script>
@@ -671,6 +713,11 @@
     <script src="Views/SourceCodeTimelineTreeElement.js"></script>
     <script src="Views/SourceMapResourceTreeElement.js"></script>
     <script src="Views/SpanningDataGridNode.js"></script>
+
+    <script src="Views/SpreadsheetCSSStyleDeclarationEditor.js"></script>
+    <script src="Views/SpreadsheetCSSStyleDeclarationSection.js"></script>
+    <script src="Views/SpreadsheetRulesStyleDetailsPanel.js"></script>
+
     <script src="Views/SpringEditor.js"></script>
     <script src="Views/SVGImageResourceClusterContentView.js"></script>
     <script src="Views/StackTraceView.js"></script>
@@ -735,6 +782,7 @@
     <script src="Controllers/BreakpointLogMessageLexer.js"></script>
     <script src="Controllers/BreakpointPopoverController.js"></script>
     <script src="Controllers/CSSStyleManager.js"></script>
+    <script src="Controllers/CanvasManager.js"></script>
     <script src="Controllers/CodeMirrorColorEditingController.js"></script>
     <script src="Controllers/CodeMirrorCompletionController.js"></script>
     <script src="Controllers/CodeMirrorBezierEditingController.js"></script>
@@ -760,7 +808,6 @@
     <script src="Controllers/LogManager.js"></script>
     <script src="Controllers/MemoryManager.js"></script>
     <script src="Controllers/ProbeManager.js"></script>
-    <script src="Controllers/ReplayManager.js"></script>
     <script src="Controllers/ResourceQueryController.js"></script>
     <script src="Controllers/RuntimeManager.js"></script>
     <script src="Controllers/SourceMapManager.js"></script>
@@ -775,13 +822,17 @@
     <script src="Workers/Formatter/FormatterContentBuilder.js"></script>
 
     <script src="Base/Main.js"></script>
+    <script src="Controllers/AppControllerBase.js"></script>
+    <script src="Controllers/AppController.js"></script>
 
     <script src="Debug/Bootstrap.js"></script>
     <script src="Debug/CapturingProtocolTracer.js"></script>
     <script src="Debug/ProtocolTrace.js"></script>
+    <script src="Debug/DebugContentView.js"></script>
 
     <script>
-        WebInspector.loaded();
+        WI.sharedApp = new WI.AppController;
+        WI.sharedApp.initialize();
     </script>
 </head>
 <body>
@@ -792,7 +843,7 @@
     <div id="navigation-sidebar"></div>
     <div id="content">
         <div id="tab-browser"></div>
-        <div id="split-content-browser" class="hidden"></div>
+        <div id="console-drawer" class="hidden"></div>
         <div id="quick-console"></div>
     </div>
     <div id="details-sidebar"></div>

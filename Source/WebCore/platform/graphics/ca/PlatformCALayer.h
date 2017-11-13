@@ -188,7 +188,6 @@ public:
 
     virtual void setBackingStoreAttached(bool) = 0;
     virtual bool backingStoreAttached() const = 0;
-    virtual bool backingContributesToMemoryEstimate() const { return true; }
 
     virtual void setMinificationFilter(FilterType) = 0;
     virtual void setMagnificationFilter(FilterType) = 0;
@@ -277,7 +276,7 @@ public:
         
     // Functions allows us to share implementation across WebTiledLayer and WebLayer
     static RepaintRectList collectRectsToPaint(CGContextRef, PlatformCALayer*);
-    static void drawLayerContents(CGContextRef, PlatformCALayer*, RepaintRectList& dirtyRects);
+    static void drawLayerContents(CGContextRef, PlatformCALayer*, RepaintRectList& dirtyRects, GraphicsLayerPaintBehavior);
     static void drawRepaintIndicator(CGContextRef, PlatformCALayer*, int repaintCount, CGColorRef customBackgroundColor);
     static CGRect frameForLayer(const PlatformLayer*);
 
@@ -294,8 +293,8 @@ protected:
     PlatformCALayerClient* m_owner;
 };
 
-WEBCORE_EXPORT TextStream& operator<<(TextStream&, PlatformCALayer::LayerType);
-WEBCORE_EXPORT TextStream& operator<<(TextStream&, PlatformCALayer::FilterType);
+WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, PlatformCALayer::LayerType);
+WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, PlatformCALayer::FilterType);
 
 } // namespace WebCore
 

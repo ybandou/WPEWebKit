@@ -28,28 +28,28 @@
 
 #import "AuthenticationChallenge.h"
 #import "AuthenticationMac.h"
-#import "CFNetworkSPI.h"
+#import "CachedResourceLoader.h"
 #import "CookieStorage.h"
 #import "CredentialStorage.h"
-#import "CachedResourceLoader.h"
 #import "FormDataStreamMac.h"
 #import "Frame.h"
 #import "FrameLoader.h"
 #import "HTTPHeaderNames.h"
 #import "Logging.h"
 #import "MIMETypeRegistry.h"
-#import "NSURLConnectionSPI.h"
 #import "NetworkStorageSession.h"
 #import "NetworkingContext.h"
 #import "ResourceError.h"
 #import "ResourceResponse.h"
 #import "SharedBuffer.h"
 #import "SubresourceLoader.h"
+#import "SynchronousLoaderClient.h"
 #import "WebCoreResourceHandleAsDelegate.h"
 #import "WebCoreResourceHandleAsOperationQueueDelegate.h"
-#import "SynchronousLoaderClient.h"
 #import "WebCoreSystemInterface.h"
 #import "WebCoreURLResponse.h"
+#import <pal/spi/cf/CFNetworkSPI.h>
+#import <pal/spi/cocoa/NSURLConnectionSPI.h>
 #import <wtf/BlockObjCExceptions.h>
 #import <wtf/Ref.h>
 #import <wtf/SchedulePair.h>
@@ -67,13 +67,8 @@ CFDictionaryRef _CFURLConnectionCopyTimingData(CFURLConnectionRef);
 #endif // USE(CFURLCONNECTION)
 
 #if PLATFORM(IOS)
-#import "CFNetworkSPI.h"
 #import "RuntimeApplicationChecks.h"
 #import "WebCoreThreadRun.h"
-
-@interface NSURLRequest ()
-- (CFURLRequestRef) _CFURLRequest;
-@end
 #endif
 
 using namespace WebCore;
@@ -135,7 +130,7 @@ void ResourceHandle::createNSURLConnection(id delegate, bool shouldUseCredential
 void ResourceHandle::createNSURLConnection(id delegate, bool shouldUseCredentialStorage, bool shouldContentSniff, SchedulingBehavior schedulingBehavior, NSDictionary *connectionProperties)
 #endif
 {
-#if ENABLE(WEB_TIMING) && !HAVE(TIMINGDATAOPTIONS)
+#if !HAVE(TIMINGDATAOPTIONS)
     setCollectsTimingData();
 #endif
 
@@ -182,7 +177,7 @@ void ResourceHandle::createNSURLConnection(id delegate, bool shouldUseCredential
 #endif
 
     if (d->m_storageSession)
-        nsRequest = [wkCopyRequestWithStorageSession(d->m_storageSession.get(), nsRequest) autorelease];
+        nsRequest = [copyRequestWithStorageSession(d->m_storageSession.get(), nsRequest) autorelease];
 
     ASSERT([NSURLConnection instancesRespondToSelector:@selector(_initWithRequest:delegate:usesCache:maxContentLength:startImmediately:connectionProperties:)]);
 
@@ -394,14 +389,14 @@ CFStringRef ResourceHandle::synchronousLoadRunLoopMode()
     return CFSTR("WebCoreSynchronousLoaderRunLoopMode");
 }
 
-void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext* context, const ResourceRequest& request, StoredCredentials storedCredentials, ResourceError& error, ResourceResponse& response, Vector<char>& data)
+void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext* context, const ResourceRequest& request, StoredCredentialsPolicy storedCredentialsPolicy, ResourceError& error, ResourceResponse& response, Vector<char>& data)
 {
-    LOG(Network, "ResourceHandle::platformLoadResourceSynchronously:%@ allowStoredCredentials:%u", request.nsURLRequest(DoNotUpdateHTTPBody), storedCredentials);
+    LOG(Network, "ResourceHandle::platformLoadResourceSynchronously:%@ storedCredentialsPolicy:%u", request.nsURLRequest(DoNotUpdateHTTPBody), static_cast<unsigned>(storedCredentialsPolicy));
 
     ASSERT(!request.isEmpty());
     
     SynchronousLoaderClient client;
-    client.setAllowStoredCredentials(storedCredentials == AllowStoredCredentials);
+    client.setAllowStoredCredentials(storedCredentialsPolicy == StoredCredentialsPolicy::Use);
 
     RefPtr<ResourceHandle> handle = adoptRef(new ResourceHandle(context, request, &client, false /*defersLoading*/, true /*shouldContentSniff*/));
 
@@ -412,7 +407,7 @@ void ResourceHandle::platformLoadResourceSynchronously(NetworkingContext* contex
         return;
     }
 
-    bool shouldUseCredentialStorage = storedCredentials == AllowStoredCredentials;
+    bool shouldUseCredentialStorage = storedCredentialsPolicy == StoredCredentialsPolicy::Use;
 #if !PLATFORM(IOS)
     handle->createNSURLConnection(
         handle->makeDelegate(shouldUseCredentialStorage),
@@ -729,28 +724,23 @@ void ResourceHandle::continueWillCacheResponse(NSCachedURLResponse *response)
 
     [(id)delegate() continueWillCacheResponse:response];
 }
-    
+
 #endif // !USE(CFURLCONNECTION)
-    
-#if ENABLE(WEB_TIMING)
 
 #if USE(CFURLCONNECTION)
-    
+
 void ResourceHandle::getConnectionTimingData(CFURLConnectionRef connection, NetworkLoadMetrics& timing)
 {
     copyTimingData((__bridge NSDictionary*)adoptCF(_CFURLConnectionCopyTimingData(connection)).get(), timing);
 }
-    
+
 #else
-    
+
 void ResourceHandle::getConnectionTimingData(NSURLConnection *connection, NetworkLoadMetrics& timing)
 {
     copyTimingData([connection _timingData], timing);
 }
-    
+
 #endif
-    
-#endif // ENABLE(WEB_TIMING)
 
 } // namespace WebCore
-

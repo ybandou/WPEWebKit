@@ -1,6 +1,7 @@
 <?php
 
 require_once('../include/json-header.php');
+require_once('../include/manifest-generator.php');
 require_once('../include/repository-group-finder.php');
 
 function main($post_data)
@@ -78,6 +79,14 @@ function main($post_data)
     }
 
     $db->commit_transaction();
+
+    $generator = new ManifestGenerator($db);
+    if (!$generator->generate())
+        exit_with_error('FailedToGenerateManifest');
+
+    if (!$generator->store())
+        exit_with_error('FailedToStoreManifest');
+
     exit_with_success();
 }
 
@@ -133,6 +142,6 @@ function validate_repository_groups($db, &$repository_groups)
     }
 }
 
-main($HTTP_RAW_POST_DATA);
+main(file_get_contents('php://input'));
 
 ?>

@@ -29,11 +29,11 @@
 #include "HTMLSelectElement.h"
 
 #include "AXObjectCache.h"
+#include "DOMFormData.h"
 #include "ElementTraversal.h"
 #include "EventHandler.h"
 #include "EventNames.h"
 #include "FormController.h"
-#include "FormDataList.h"
 #include "Frame.h"
 #include "GenericCachedHTMLCollection.h"
 #include "HTMLFormElement.h"
@@ -392,7 +392,7 @@ void HTMLSelectElement::setMultiple(bool multiple)
 {
     bool oldMultiple = this->multiple();
     int oldSelectedIndex = selectedIndex();
-    setAttributeWithoutSynchronization(multipleAttr, multiple ? emptyAtom : nullAtom);
+    setAttributeWithoutSynchronization(multipleAttr, multiple ? emptyAtom() : nullAtom());
 
     // Restore selectedIndex after changing the multiple flag to preserve
     // selection as single-line and multi-line has different defaults.
@@ -1031,7 +1031,7 @@ void HTMLSelectElement::parseMultipleAttribute(const AtomicString& value)
         invalidateStyleAndRenderersForSubtree();
 }
 
-bool HTMLSelectElement::appendFormData(FormDataList& list, bool)
+bool HTMLSelectElement::appendFormData(DOMFormData& formData, bool)
 {
     const AtomicString& name = this->name();
     if (name.isEmpty())
@@ -1040,7 +1040,7 @@ bool HTMLSelectElement::appendFormData(FormDataList& list, bool)
     bool successful = false;
     for (auto& element : listItems()) {
         if (is<HTMLOptionElement>(*element) && downcast<HTMLOptionElement>(*element).selected() && !downcast<HTMLOptionElement>(*element).isDisabledFormControl()) {
-            list.appendData(name, downcast<HTMLOptionElement>(*element).value());
+            formData.append(name, downcast<HTMLOptionElement>(*element).value());
             successful = true;
         }
     }

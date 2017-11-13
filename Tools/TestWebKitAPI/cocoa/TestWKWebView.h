@@ -30,6 +30,10 @@
 
 @class _WKProcessPoolConfiguration;
 
+#if PLATFORM(IOS)
+@class _WKActivatedElementInfo;
+#endif
+
 @interface TestMessageHandler : NSObject <WKScriptMessageHandler>
 - (void)addMessage:(NSString *)message withHandler:(dispatch_block_t)handler;
 @end
@@ -39,15 +43,18 @@
 - (void)clearMessageHandlers:(NSArray *)messageNames;
 - (void)performAfterReceivingMessage:(NSString *)message action:(dispatch_block_t)action;
 - (void)loadTestPageNamed:(NSString *)pageName;
+- (void)synchronouslyLoadHTMLString:(NSString *)html;
 - (void)synchronouslyLoadTestPageNamed:(NSString *)pageName;
 - (NSString *)stringByEvaluatingJavaScript:(NSString *)script;
 - (void)waitForMessage:(NSString *)message;
 - (void)performAfterLoading:(dispatch_block_t)actions;
+- (void)waitForNextPresentationUpdate;
 @end
 
 #if PLATFORM(IOS)
 @interface TestWKWebView (IOSOnly)
 @property (nonatomic, readonly) RetainPtr<NSArray> selectionRectsAfterPresentationUpdate;
+- (_WKActivatedElementInfo *)activatedElementAtPosition:(CGPoint)position;
 @end
 #endif
 
@@ -56,8 +63,10 @@
 // Simulates clicking with a pressure-sensitive device, if possible.
 - (void)mouseDownAtPoint:(NSPoint)point simulatePressure:(BOOL)simulatePressure;
 - (void)mouseUpAtPoint:(NSPoint)point;
+- (void)mouseMoveToPoint:(NSPoint)point withFlags:(NSEventModifierFlags)flags;
 - (void)sendClicksAtPoint:(NSPoint)point numberOfClicks:(NSUInteger)numberOfClicks;
 - (void)typeCharacter:(char)character;
+- (NSWindow *)hostWindow;
 @end
 #endif
 

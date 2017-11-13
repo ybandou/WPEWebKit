@@ -29,10 +29,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 110000
+@class WebItemProviderRegistrationInfoList;
+#endif
+
 @protocol AbstractPasteboard <NSObject>
 @required
 
 @property (readonly, nonatomic) NSInteger numberOfItems;
+
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 110000
+@property (nonatomic, copy, nullable) NSArray<__kindof NSItemProvider *> *itemProviders;
+#endif
 
 - (NSArray<NSString *> *)pasteboardTypes;
 - (NSArray *)dataForPasteboardType:(NSString *)pasteboardType inItemSet:(NSIndexSet *)itemSet;
@@ -40,12 +48,15 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSInteger)changeCount;
 
 @optional
-- (void)setItemsUsingRegistrationInfoLists:(NSArray *)itemLists;
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 110000
+- (void)stageRegistrationList:(nullable WebItemProviderRegistrationInfoList *)info;
+- (nullable WebItemProviderRegistrationInfoList *)takeRegistrationList;
+#endif
 - (void)setItems:(NSArray<NSDictionary *> *)items;
 - (NSArray<NSString *> *)pasteboardTypesByFidelityForItemAtIndex:(NSUInteger)index;
 @property (readonly, nonatomic) NSInteger numberOfFiles;
-@property (readonly, nonatomic) NSArray<NSURL *> *fileURLsForDataInteraction;
-- (void)updatePreferredTypeIdentifiers:(NSArray<NSString *> *)types;
+@property (readonly, nonatomic) NSArray<NSURL *> *droppedFileURLs;
+- (void)updateSupportedTypeIdentifiers:(NSArray<NSString *> *)types;
 
 @end
 

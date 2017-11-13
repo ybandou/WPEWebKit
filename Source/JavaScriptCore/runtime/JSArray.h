@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "ArgList.h"
 #include "ArrayConventions.h"
 #include "ButterflyInlines.h"
 #include "JSCellInlines.h"
@@ -53,6 +54,7 @@ protected:
 
 public:
     static JSArray* tryCreate(VM&, Structure*, unsigned initialLength = 0);
+    static JSArray* tryCreate(VM&, Structure*, unsigned initialLength, unsigned vectorLengthHint);
     static JSArray* create(VM&, Structure*, unsigned initialLength = 0);
     static JSArray* createWithButterfly(VM&, GCDeferralContext*, Structure*, Butterfly*);
 
@@ -111,7 +113,8 @@ public:
 
     bool shiftCountForShift(ExecState* exec, unsigned startIndex, unsigned count)
     {
-        return shiftCountWithArrayStorage(exec->vm(), startIndex, count, ensureArrayStorage(exec->vm()));
+        VM& vm = exec->vm();
+        return shiftCountWithArrayStorage(vm, startIndex, count, ensureArrayStorage(vm));
     }
     bool shiftCountForSplice(ExecState* exec, unsigned& startIndex, unsigned count)
     {
@@ -213,8 +216,9 @@ inline Butterfly* tryCreateArrayButterfly(VM& vm, JSCell* intendedOwner, unsigne
 Butterfly* createArrayButterflyInDictionaryIndexingMode(
     VM&, JSCell* intendedOwner, unsigned initialLength);
 
-inline JSArray* JSArray::tryCreate(VM& vm, Structure* structure, unsigned initialLength)
+inline JSArray* JSArray::tryCreate(VM& vm, Structure* structure, unsigned initialLength, unsigned vectorLengthHint)
 {
+    ASSERT(vectorLengthHint >= initialLength);
     unsigned outOfLineStorage = structure->outOfLineCapacity();
 
     Butterfly* butterfly;
@@ -226,11 +230,11 @@ inline JSArray* JSArray::tryCreate(VM& vm, Structure* structure, unsigned initia
             || hasDouble(indexingType)
             || hasContiguous(indexingType));
 
-        if (UNLIKELY(initialLength > MAX_STORAGE_VECTOR_LENGTH))
+        if (UNLIKELY(vectorLengthHint > MAX_STORAGE_VECTOR_LENGTH))
             return nullptr;
 
-        unsigned vectorLength = Butterfly::optimalContiguousVectorLength(structure, initialLength);
-        void* temp = vm.auxiliarySpace.tryAllocate(nullptr, Butterfly::totalSize(0, outOfLineStorage, true, vectorLength * sizeof(EncodedJSValue)));
+        unsigned vectorLength = Butterfly::optimalContiguousVectorLength(structure, vectorLengthHint);
+        void* temp = vm.jsValueGigacageAuxiliarySpace.tryAllocate(nullptr, Butterfly::totalSize(0, outOfLineStorage, true, vectorLength * sizeof(EncodedJSValue)));
         if (!temp)
             return nullptr;
         butterfly = Butterfly::fromBase(temp, 0, outOfLineStorage);
@@ -238,7 +242,7 @@ inline JSArray* JSArray::tryCreate(VM& vm, Structure* structure, unsigned initia
         butterfly->setPublicLength(initialLength);
         if (hasDouble(indexingType))
             clearArray(butterfly->contiguousDouble().data(), vectorLength);
-        else
+        else if (LIKELY(!hasUndecided(indexingType)))
             clearArray(butterfly->contiguous().data(), vectorLength);
     } else {
         ASSERT(
@@ -252,6 +256,11 @@ inline JSArray* JSArray::tryCreate(VM& vm, Structure* structure, unsigned initia
     }
 
     return createWithButterfly(vm, nullptr, structure, butterfly);
+}
+
+inline JSArray* JSArray::tryCreate(VM& vm, Structure* structure, unsigned initialLength)
+{
+    return tryCreate(vm, structure, initialLength, initialLength);
 }
 
 inline JSArray* JSArray::create(VM& vm, Structure* structure, unsigned initialLength)

@@ -115,6 +115,8 @@ void CanvasCaptureMediaStreamTrack::Source::canvasResized(HTMLCanvasElement& can
 
     m_settings.setWidth(m_canvas->width());
     m_settings.setHeight(m_canvas->height());
+
+    settingsDidChange();
 }
 
 void CanvasCaptureMediaStreamTrack::Source::canvasChanged(HTMLCanvasElement& canvas, const FloatRect&)
@@ -159,6 +161,14 @@ void CanvasCaptureMediaStreamTrack::Source::captureCanvas()
         return;
 
     videoSampleAvailable(*sample);
+}
+
+RefPtr<MediaStreamTrack> CanvasCaptureMediaStreamTrack::clone()
+{
+    if (!scriptExecutionContext())
+        return nullptr;
+
+    return CanvasCaptureMediaStreamTrack::create(*scriptExecutionContext(), m_canvas.copyRef(), m_source->frameRequestRate());
 }
 
 }

@@ -30,7 +30,6 @@
 #include "CursorList.h"
 #include "ElementChildIterator.h"
 #include "EventHandler.h"
-#include "FlowThreadController.h"
 #include "FocusController.h"
 #include "Frame.h"
 #include "FrameSelection.h"
@@ -48,6 +47,7 @@
 #include "RenderDeprecatedFlexibleBox.h"
 #include "RenderDescendantIterator.h"
 #include "RenderFlexibleBox.h"
+#include "RenderFlowThread.h"
 #include "RenderImage.h"
 #include "RenderImageResourceStyleImage.h"
 #include "RenderInline.h"
@@ -59,7 +59,6 @@
 #if !ASSERT_DISABLED
 #include "RenderListMarker.h"
 #endif
-#include "RenderNamedFlowThread.h"
 #include "RenderRegion.h"
 #include "RenderTableCaption.h"
 #include "RenderTableCell.h"
@@ -73,6 +72,7 @@
 #include "ShadowRoot.h"
 #include "StylePendingResources.h"
 #include "StyleResolver.h"
+#include "TextAutoSizing.h"
 #include <wtf/MathExtras.h>
 #include <wtf/StackStats.h>
 
@@ -100,12 +100,10 @@ inline RenderElement::RenderElement(ContainerNode& elementOrDocument, RenderStyl
     , m_baseTypeFlags(baseTypeFlags)
     , m_ancestorLineBoxDirty(false)
     , m_hasInitializedStyle(false)
-    , m_hasInitialAnimatedStyle(false)
     , m_renderInlineAlwaysCreatesLineBoxes(false)
     , m_renderBoxNeedsLazyRepaint(false)
     , m_hasPausedImageAnimations(false)
     , m_hasCounterNodeMap(false)
-    , m_isCSSAnimating(false)
     , m_hasContinuation(false)
     , m_hasValidCachedFirstLineStyle(false)
     , m_renderBlockHasMarginBeforeQuirk(false)
@@ -510,6 +508,8 @@ void RenderElement::destroyLeftoverChildren()
 
 void RenderElement::insertChildInternal(RenderObject* newChild, RenderObject* beforeChild, NotifyChildrenType notifyChildren)
 {
+    RELEASE_ASSERT_WITH_MESSAGE(!view().layoutState(), "Layout must not mutate render tree");
+
     ASSERT(canHaveChildren() || canHaveGeneratedChildren());
     ASSERT(!newChild->parent());
     ASSERT(!isRenderBlockFlow() || (!newChild->isTableSection() && !newChild->isTableRow() && !newChild->isTableCell()));
@@ -567,6 +567,8 @@ void RenderElement::insertChildInternal(RenderObject* newChild, RenderObject* be
 
 void RenderElement::removeChildInternal(RenderObject& oldChild, NotifyChildrenType notifyChildren)
 {
+    RELEASE_ASSERT_WITH_MESSAGE(!view().layoutState(), "Layout must not mutate render tree");
+
     ASSERT(canHaveChildren() || canHaveGeneratedChildren());
     ASSERT(oldChild.parent() == this);
 
@@ -1103,8 +1105,6 @@ void RenderElement::willBeDestroyed()
     if (m_style.hasFixedBackgroundImage() && !settings().fixedBackgroundsPaintRelativeToDocument())
         view().frameView().removeSlowRepaintObject(this);
 
-    animation().cancelAnimations(*this);
-
     destroyLeftoverChildren();
 
     unregisterForVisibleInViewportCallback();
@@ -1113,15 +1113,6 @@ void RenderElement::willBeDestroyed()
         RenderCounter::destroyCounterNodes(*this);
 
     RenderObject::willBeDestroyed();
-
-#if !ASSERT_DISABLED
-    if (!renderTreeBeingDestroyed() && view().hasRenderNamedFlowThreads()) {
-        // After remove, the object and the associated information should not be in any flow thread.
-        for (auto& flowThread : *view().flowThreadController().renderNamedFlowThreadList()) {
-            ASSERT(!flowThread->hasChildInfo(this));
-        }
-    }
-#endif
 
     clearLayoutRootIfNeeded();
 
@@ -1184,26 +1175,7 @@ void RenderElement::setNeedsSimplifiedNormalFlowLayout()
 
 RenderElement* RenderElement::hoverAncestor() const
 {
-    // When searching for the hover ancestor and encountering a named flow thread,
-    // the search will continue with the DOM ancestor of the top-most element
-    // in the named flow thread.
-    // See https://bugs.webkit.org/show_bug.cgi?id=111749
-    RenderElement* hoverAncestor = parent();
-
-    // Skip anonymous blocks directly flowed into flow threads as it would
-    // prevent us from continuing the search on the DOM tree when reaching the named flow thread.
-    if (hoverAncestor && hoverAncestor->isAnonymousBlock() && hoverAncestor->parent() && hoverAncestor->parent()->isRenderNamedFlowThread())
-        hoverAncestor = hoverAncestor->parent();
-
-    if (hoverAncestor && hoverAncestor->isRenderNamedFlowThread()) {
-        hoverAncestor = nullptr;
-        if (Element* element = this->element()) {
-            if (auto parent = element->parentNode())
-                hoverAncestor = parent->renderer();
-        }
-    }
-
-    return hoverAncestor;
+    return parent();
 }
 
 static inline void paintPhase(RenderElement& element, PaintPhase phase, PaintInfo& paintInfo, const LayoutPoint& childPoint)
@@ -2185,7 +2157,9 @@ bool RenderElement::hasSelfPaintingLayer() const
 
 bool RenderElement::checkForRepaintDuringLayout() const
 {
-    return !document().view()->needsFullRepaint() && everHadLayout() && !hasSelfPaintingLayer();
+    if (document().view()->needsFullRepaint() || !everHadLayout() || hasSelfPaintingLayer())
+        return false;
+    return !settings().repaintOutsideLayoutEnabled();
 }
 
 RespectImageOrientationEnum RenderElement::shouldRespectImageOrientation() const
@@ -2313,7 +2287,7 @@ void RenderElement::adjustComputedFontSizesOnBlocks(float size, float visibleWid
     }
 
     // Remove style from auto-sizing table that are no longer valid.
-    document->updateAutoSizedNodes();
+    document->textAutoSizing().updateRenderTree();
 }
 
 void RenderElement::resetTextAutosizing()
@@ -2324,7 +2298,7 @@ void RenderElement::resetTextAutosizing()
 
     LOG(TextAutosizing, "RenderElement::resetTextAutosizing()");
 
-    document->clearAutoSizedNodes();
+    document->textAutoSizing().reset();
 
     Vector<int> depthStack;
     int currentDepth = 0;

@@ -28,11 +28,11 @@
 
 #if USE(QUICK_LOOK)
 
-#import "FileSystemIOS.h"
-#import "NSFileManagerSPI.h"
+#import "FileSystem.h"
 #import "PreviewConverter.h"
 #import "ResourceRequest.h"
 #import "SchemeRegistry.h"
+#import <pal/spi/cocoa/NSFileManagerSPI.h>
 #import <wtf/Lock.h>
 #import <wtf/NeverDestroyed.h>
 
@@ -42,8 +42,8 @@ namespace WebCore {
 
 NSSet *QLPreviewGetSupportedMIMETypesSet()
 {
-    static NeverDestroyed<RetainPtr<NSSet>> set = QLPreviewGetSupportedMIMETypes();
-    return set.get().get();
+    static NSSet *set = [QLPreviewGetSupportedMIMETypes() retain];
+    return set;
 }
 
 static Lock& qlPreviewConverterDictionaryMutex()
@@ -100,18 +100,10 @@ RetainPtr<NSURLRequest> registerQLPreviewConverterIfNeeded(NSURL *url, NSString 
     return nil;
 }
 
-static Vector<char> createQLPreviewProtocol()
-{
-    Vector<char> previewProtocol;
-    const char* qlPreviewScheme = [QLPreviewScheme UTF8String];
-    previewProtocol.append(qlPreviewScheme, strlen(qlPreviewScheme) + 1);
-    return previewProtocol;
-}
-
 const char* QLPreviewProtocol()
 {
-    static NeverDestroyed<Vector<char>> previewProtocol(createQLPreviewProtocol());
-    return previewProtocol.get().data();
+    static const char* const previewProtocol = fastStrDup([QLPreviewScheme UTF8String]);
+    return previewProtocol;
 }
 
 bool isQuickLookPreviewURL(const URL& url)

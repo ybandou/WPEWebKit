@@ -45,6 +45,7 @@
 #include "VTTCue.h"
 #include "VTTRegionList.h"
 #include <wtf/MathExtras.h>
+#include <wtf/NeverDestroyed.h>
 
 namespace WebCore {
 
@@ -213,6 +214,35 @@ bool TextTrackCue::doesExtendCue(const TextTrackCue& cue) const
         return false;
     
     return true;
+}
+
+String TextTrackCue::toString() const
+{
+    StringBuilder builder;
+
+    builder.appendLiteral("start = ");
+    builder.append(m_startTime.toString());
+
+    builder.appendLiteral(", end = ");
+    builder.append(m_endTime.toString());
+
+    const char* type = "Generic";
+    switch (cueType()) {
+    case TextTrackCue::Generic:
+        type = "Generic";
+        break;
+    case TextTrackCue::WebVTT:
+        type = "WebVTT";
+        break;
+    case TextTrackCue::Data:
+        type = "Data";
+        break;
+    }
+
+    builder.appendLiteral(", type = ");
+    builder.append(type);
+
+    return builder.toString();
 }
 
 } // namespace WebCore

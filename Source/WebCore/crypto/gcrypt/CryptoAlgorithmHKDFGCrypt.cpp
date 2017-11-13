@@ -32,10 +32,7 @@
 
 #include "CryptoAlgorithmHkdfParams.h"
 #include "CryptoKeyRaw.h"
-#include "ExceptionCode.h"
-#include "ScriptExecutionContext.h"
-#include <pal/crypto/gcrypt/Handle.h>
-#include <pal/crypto/gcrypt/Utilities.h>
+#include "GCryptUtilities.h"
 
 namespace WebCore {
 
@@ -43,31 +40,13 @@ namespace WebCore {
 // We should switch to the libgcrypt-provided implementation once it's available.
 // https://bugs.webkit.org/show_bug.cgi?id=171536
 
-static std::optional<int> macAlgorithmForHashFunction(CryptoAlgorithmIdentifier identifier)
-{
-    switch (identifier) {
-    case CryptoAlgorithmIdentifier::SHA_1:
-        return GCRY_MAC_HMAC_SHA1;
-    case CryptoAlgorithmIdentifier::SHA_224:
-        return GCRY_MAC_HMAC_SHA224;
-    case CryptoAlgorithmIdentifier::SHA_256:
-        return GCRY_MAC_HMAC_SHA256;
-    case CryptoAlgorithmIdentifier::SHA_384:
-        return GCRY_MAC_HMAC_SHA384;
-    case CryptoAlgorithmIdentifier::SHA_512:
-        return GCRY_MAC_HMAC_SHA512;
-    default:
-        return std::nullopt;
-    }
-}
-
 static std::optional<Vector<uint8_t>> gcryptDeriveBits(const Vector<uint8_t>& key, const Vector<uint8_t>& salt, const Vector<uint8_t>& info, size_t lengthInBytes, CryptoAlgorithmIdentifier identifier)
 {
     // libgcrypt doesn't provide HKDF support, so we have to implement
     // the functionality ourselves as specified in RFC5869.
     // https://www.ietf.org/rfc/rfc5869.txt
 
-    auto macAlgorithm = macAlgorithmForHashFunction(identifier);
+    auto macAlgorithm = hmacAlgorithm(identifier);
     if (!macAlgorithm)
         return std::nullopt;
 
@@ -173,32 +152,12 @@ static std::optional<Vector<uint8_t>> gcryptDeriveBits(const Vector<uint8_t>& ke
     return output;
 }
 
-void CryptoAlgorithmHKDF::platformDeriveBits(std::unique_ptr<CryptoAlgorithmParameters>&& parameters, Ref<CryptoKey>&& baseKey, size_t length, VectorCallback&& callback, ExceptionCallback&& exceptionCallback, ScriptExecutionContext& context, WorkQueue& workQueue)
+ExceptionOr<Vector<uint8_t>> CryptoAlgorithmHKDF::platformDeriveBits(CryptoAlgorithmHkdfParams& parameters, const CryptoKeyRaw& key, size_t length)
 {
-    context.ref();
-    workQueue.dispatch(
-        [parameters = WTFMove(parameters), baseKey = WTFMove(baseKey), length, callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback), &context]() mutable {
-            auto& hkdfParameters = downcast<CryptoAlgorithmHkdfParams>(*parameters);
-            auto& rawKey = downcast<CryptoKeyRaw>(baseKey.get());
-
-            auto output = gcryptDeriveBits(rawKey.key(), hkdfParameters.saltVector(), hkdfParameters.infoVector(), length / 8, hkdfParameters.hashIdentifier);
-            if (!output) {
-                // We should only dereference callbacks after being back to the Document/Worker threads.
-                context.postTask(
-                    [callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) {
-                        exceptionCallback(OperationError);
-                        context.deref();
-                    });
-                return;
-            }
-
-            // We should only dereference callbacks after being back to the Document/Worker threads.
-            context.postTask(
-                [output = WTFMove(*output), callback = WTFMove(callback), exceptionCallback = WTFMove(exceptionCallback)](ScriptExecutionContext& context) {
-                    callback(output);
-                    context.deref();
-                });
-        });
+    auto output = gcryptDeriveBits(key.key(), parameters.saltVector(), parameters.infoVector(), length / 8, parameters.hashIdentifier);
+    if (!output)
+        return Exception { OperationError };
+    return WTFMove(*output);
 }
 
 } // namespace WebCore

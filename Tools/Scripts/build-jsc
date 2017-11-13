@@ -115,6 +115,10 @@ if (isAppleWinWebKit()) {
     $ftlJIT = 0;
 }
 
+if (isJSCOnly() && isWindows()) {
+    (system("python Tools/Scripts/update-webkit-wincairo-libs.py") == 0) or die;
+}
+
 checkRequiredSystemConfig();
 setConfiguration();
 chdirWebKit();

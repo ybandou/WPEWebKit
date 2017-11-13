@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008, 2016 Apple Inc. All Rights Reserved.
+ * Copyright (C) 2008-2017 Apple Inc. All Rights Reserved.
  * Copyright (C) 2013 Patrick Gansterer <paroga@paroga.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,6 @@
 #ifndef WTF_StdLibExtras_h
 #define WTF_StdLibExtras_h
 
-#include <chrono>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -203,6 +202,12 @@ template<size_t divisor> inline constexpr size_t roundUpToMultipleOf(size_t x)
 {
     static_assert(divisor && !(divisor & (divisor - 1)), "divisor must be a power of two!");
     return roundUpToMultipleOfImpl(divisor, x);
+}
+
+template<size_t divisor, typename T> inline T* roundUpToMultipleOf(T* x)
+{
+    static_assert(sizeof(T*) == sizeof(size_t), "");
+    return reinterpret_cast<T*>(roundUpToMultipleOf<divisor>(reinterpret_cast<size_t>(x)));
 }
 
 enum BinarySearchMode {
@@ -542,10 +547,5 @@ using WTF::mergeDeduplicatedSorted;
 using WTF::roundUpToMultipleOf;
 using WTF::safeCast;
 using WTF::tryBinarySearch;
-
-#if !COMPILER(CLANG) || __cplusplus >= 201400L
-// We normally don't want to bring in entire std namespaces, but literals are an exception.
-using namespace std::literals::chrono_literals;
-#endif
 
 #endif // WTF_StdLibExtras_h

@@ -30,8 +30,10 @@
 #include "MediaControls.h"
 
 #include "EventNames.h"
+#include "MouseEvent.h"
 #include "Page.h"
 #include "RenderElement.h"
+#include "RenderTheme.h"
 #include "Settings.h"
 
 namespace WebCore {
@@ -408,6 +410,12 @@ void MediaControls::textTrackPreferencesChanged()
     closedCaptionTracksChanged();
     if (m_textDisplayContainer)
         m_textDisplayContainer->updateSizes(true);
+}
+
+void MediaControls::clearTextDisplayContainer()
+{
+    if (m_textDisplayContainer)
+        m_textDisplayContainer->removeChildren();
 }
 
 #endif

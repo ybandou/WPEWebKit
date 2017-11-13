@@ -66,14 +66,15 @@
 #include "MouseEventWithHitTestResults.h"
 #include "Page.h"
 #include "PageOverlayController.h"
+#include "Pasteboard.h"
 #include "PlatformEvent.h"
 #include "PlatformKeyboardEvent.h"
 #include "PlatformWheelEvent.h"
 #include "PluginDocument.h"
+#include "Range.h"
 #include "RenderFrameSet.h"
 #include "RenderLayer.h"
 #include "RenderListBox.h"
-#include "RenderNamedFlowThread.h"
 #include "RenderTextControlSingleLine.h"
 #include "RenderView.h"
 #include "RenderWidget.h"
@@ -134,7 +135,7 @@ const int ImageDragHysteresis = 5;
 const int TextDragHysteresis = 3;
 const int GeneralDragHysteresis = 3;
 #if PLATFORM(COCOA)
-const double EventHandler::TextDragDelay = 0.15;
+const Seconds EventHandler::TextDragDelay { 150_ms };
 #endif
 #endif // ENABLE(DRAG_SUPPORT)
 
@@ -327,8 +328,6 @@ static inline bool handleWheelEventInAppropriateEnclosingBox(Node* startNode, Wh
             return true;
 
         currentEnclosingBox = currentEnclosingBox->containingBlock();
-        if (currentEnclosingBox && currentEnclosingBox->isRenderNamedFlowThread())
-            currentEnclosingBox = RenderNamedFlowThread::fragmentFromRenderBoxAsRenderBlock(currentEnclosingBox, roundedIntPoint(wheelEvent.absoluteLocation()), initialEnclosingBox);
         if (!currentEnclosingBox || currentEnclosingBox->isRenderView())
             return false;
     }
@@ -1121,6 +1120,8 @@ DragSourceAction EventHandler::updateDragSourceActionsAllowed() const
 
 HitTestResult EventHandler::hitTestResultAtPoint(const LayoutPoint& point, HitTestRequest::HitTestRequestType hitType, const LayoutSize& padding) const
 {
+    ASSERT((hitType & HitTestRequest::CollectMultipleElements) || padding.isEmpty());
+
     Ref<Frame> protectedFrame(m_frame);
 
     // We always send hitTestResultAtPoint to the main frame if we have one,
@@ -1999,6 +2000,12 @@ static Node* targetNodeForClickEvent(Node* mousePressNode, Node* mouseReleaseNod
     if (mousePressNode == mouseReleaseNode)
         return mouseReleaseNode;
 
+    // If mousePressNode and mouseReleaseNode differ, we should fire the event at their common ancestor if there is one.
+    if (&mousePressNode->document() == &mouseReleaseNode->document()) {
+        if (auto* commonAncestor = Range::commonAncestorContainer(mousePressNode, mouseReleaseNode))
+            return commonAncestor;
+    }
+
     Element* mouseReleaseShadowHost = mouseReleaseNode->shadowHost();
     if (mouseReleaseShadowHost && mouseReleaseShadowHost == mousePressNode->shadowHost()) {
         // We want to dispatch the click to the shadow tree host element to give listeners the illusion that the
@@ -2183,7 +2190,7 @@ bool EventHandler::dispatchDragEvent(const AtomicString& eventType, Element& dra
 
     view->disableLayerFlushThrottlingTemporarilyForInteraction();
     Ref<MouseEvent> me = MouseEvent::create(eventType,
-        true, true, event.timestamp(), m_frame.document()->defaultView(),
+        true, true, event.timestamp().approximateMonotonicTime(), m_frame.document()->defaultView(),
         0, event.globalPosition().x(), event.globalPosition().y(), event.position().x(), event.position().y(),
 #if ENABLE(POINTER_LOCK)
         event.movementDelta().x(), event.movementDelta().y(),
@@ -2932,7 +2939,7 @@ bool EventHandler::sendContextMenuEventForKey()
     PlatformEvent::Type eventType = PlatformEvent::MousePressed;
 #endif
 
-    PlatformMouseEvent platformMouseEvent(position, globalPosition, RightButton, eventType, 1, false, false, false, false, WTF::currentTime(), ForceAtClick, NoTap);
+    PlatformMouseEvent platformMouseEvent(position, globalPosition, RightButton, eventType, 1, false, false, false, false, WallTime::now(), ForceAtClick, NoTap);
 
     return sendContextMenuEvent(platformMouseEvent);
 }
@@ -3014,7 +3021,7 @@ void EventHandler::fakeMouseMoveEventTimerFired()
     bool altKey;
     bool metaKey;
     PlatformKeyboardEvent::getCurrentModifierState(shiftKey, ctrlKey, altKey, metaKey);
-    PlatformMouseEvent fakeMouseMoveEvent(m_lastKnownMousePosition, m_lastKnownMouseGlobalPosition, NoButton, PlatformEvent::MouseMoved, 0, shiftKey, ctrlKey, altKey, metaKey, currentTime(), 0, NoTap);
+    PlatformMouseEvent fakeMouseMoveEvent(m_lastKnownMousePosition, m_lastKnownMouseGlobalPosition, NoButton, PlatformEvent::MouseMoved, 0, shiftKey, ctrlKey, altKey, metaKey, WallTime::now(), 0, NoTap);
     mouseMoved(fakeMouseMoveEvent);
 }
 #endif // !ENABLE(IOS_TOUCH_EVENTS)
@@ -3163,7 +3170,11 @@ bool EventHandler::internalKeyEvent(const PlatformKeyboardEvent& initialKeyEvent
     if (!element)
         return false;
 
-    UserGestureIndicator gestureIndicator(ProcessingUserGesture, m_frame.document());
+    UserGestureType gestureType = UserGestureType::Other;
+    if (initialKeyEvent.windowsVirtualKeyCode() == VK_ESCAPE)
+        gestureType = UserGestureType::EscapeKey;
+
+    UserGestureIndicator gestureIndicator(ProcessingUserGesture, m_frame.document(), gestureType);
     UserTypingGestureIndicator typingGestureIndicator(m_frame);
 
     if (FrameView* view = m_frame.view())
@@ -3448,35 +3459,26 @@ void EventHandler::invalidateDataTransfer()
 {
     if (!dragState().dataTransfer)
         return;
-    dragState().dataTransfer->setAccessPolicy(DataTransferAccessPolicy::Numb);
+    dragState().dataTransfer->makeInvalidForSecurity();
     dragState().dataTransfer = nullptr;
 }
 
-static void repaintContentsOfRange(RefPtr<Range> range)
+static void removeDraggedContentDocumentMarkersFromAllFramesInPage(Page& page)
 {
-    if (!range)
-        return;
-
-    auto* container = range->commonAncestorContainer();
-    if (!container)
-        return;
-
-    // This ensures that all nodes enclosed in this Range are repainted.
-    if (auto rendererToRepaint = container->renderer()) {
-        if (auto* containingRenderer = rendererToRepaint->container())
-            rendererToRepaint = containingRenderer;
-        rendererToRepaint->repaint();
+    for (Frame* frame = &page.mainFrame(); frame; frame = frame->tree().traverseNext()) {
+        if (auto* document = frame->document())
+            document->markers().removeMarkers(DocumentMarker::DraggedContent);
     }
+
+    if (auto* mainFrameRenderer = page.mainFrame().contentRenderer())
+        mainFrameRenderer->repaintRootContents();
 }
 
 void EventHandler::dragCancelled()
 {
 #if ENABLE(DATA_INTERACTION)
-    if (auto range = dragState().draggedContentRange) {
-        range->ownerDocument().markers().removeMarkers(DocumentMarker::DraggedContent);
-        repaintContentsOfRange(range);
-    }
-    dragState().draggedContentRange = nullptr;
+    if (auto* page = m_frame.page())
+        removeDraggedContentDocumentMarkersFromAllFramesInPage(*page);
 #endif
 }
 
@@ -3491,22 +3493,24 @@ void EventHandler::didStartDrag()
     if (!renderer)
         return;
 
+    RefPtr<Range> draggedContentRange;
     if (dragState().type & DragSourceActionSelection)
-        dragState().draggedContentRange = m_frame.selection().selection().toNormalizedRange();
+        draggedContentRange = m_frame.selection().selection().toNormalizedRange();
     else {
         Position startPosition(dragSource.get(), Position::PositionIsBeforeAnchor);
         Position endPosition(dragSource.get(), Position::PositionIsAfterAnchor);
-        dragState().draggedContentRange = Range::create(dragSource->document(), startPosition, endPosition);
+        draggedContentRange = Range::create(dragSource->document(), startPosition, endPosition);
     }
 
-    if (auto range = dragState().draggedContentRange) {
-        range->ownerDocument().markers().addDraggedContentMarker(range.get());
-        repaintContentsOfRange(range);
+    if (draggedContentRange) {
+        draggedContentRange->ownerDocument().markers().addDraggedContentMarker(draggedContentRange.get());
+        if (auto* renderer = m_frame.contentRenderer())
+            renderer->repaintRootContents();
     }
 #endif
 }
 
-void EventHandler::dragSourceEndedAt(const PlatformMouseEvent& event, DragOperation operation)
+void EventHandler::dragSourceEndedAt(const PlatformMouseEvent& event, DragOperation operation, MayExtendDragSession mayExtendDragSession)
 {
     // Send a hit test request so that RenderLayer gets a chance to update the :hover and :active pseudoclasses.
     HitTestRequest request(HitTestRequest::Release | HitTestRequest::DisallowUserAgentShadowContent);
@@ -3519,9 +3523,9 @@ void EventHandler::dragSourceEndedAt(const PlatformMouseEvent& event, DragOperat
     }
     invalidateDataTransfer();
 
-    if (auto range = dragState().draggedContentRange) {
-        range->ownerDocument().markers().removeMarkers(DocumentMarker::DraggedContent);
-        repaintContentsOfRange(range);
+    if (mayExtendDragSession == MayExtendDragSession::No) {
+        if (auto* page = m_frame.page())
+            removeDraggedContentDocumentMarkersFromAllFramesInPage(*page);
     }
 
     dragState().source = nullptr;
@@ -3541,6 +3545,23 @@ void EventHandler::updateDragStateAfterEditDragIfNeeded(Element& rootEditableEle
 bool EventHandler::dispatchDragSrcEvent(const AtomicString& eventType, const PlatformMouseEvent& event)
 {
     return !dispatchDragEvent(eventType, *dragState().source, event, dragState().dataTransfer.get());
+}
+
+bool EventHandler::dispatchDragStartEvent(HasNonDefaultPasteboardData& hasNonDefaultPasteboardData)
+{
+#if PLATFORM(COCOA)
+    auto changeCountBeforeDragStart = dragState().dataTransfer->pasteboard().changeCount();
+#endif
+
+    bool mayStartDrag = dispatchDragSrcEvent(eventNames().dragstartEvent, m_mouseDown);
+
+#if PLATFORM(COCOA)
+    hasNonDefaultPasteboardData = changeCountBeforeDragStart != dragState().dataTransfer->pasteboard().changeCount() ? HasNonDefaultPasteboardData::Yes : HasNonDefaultPasteboardData::No;
+#else
+    hasNonDefaultPasteboardData = dragState().dataTransfer->pasteboard().hasData() ? HasNonDefaultPasteboardData::Yes : HasNonDefaultPasteboardData::No;
+#endif
+
+    return mayStartDrag && !m_frame.selection().selection().isInPasswordField();
 }
     
 static bool ExactlyOneBitSet(DragSourceAction n)
@@ -3647,6 +3668,7 @@ bool EventHandler::handleDrag(const MouseEventWithHitTestResults& event, CheckDr
     invalidateDataTransfer();
 
     dragState().dataTransfer = createDraggingDataTransfer();
+    HasNonDefaultPasteboardData hasNonDefaultPasteboardData = HasNonDefaultPasteboardData::No;
     
     if (dragState().shouldDispatchEvents) {
         // Check to see if the is a DOM based drag. If it is, get the DOM specified drag image and offset.
@@ -3666,14 +3688,11 @@ bool EventHandler::handleDrag(const MouseEventWithHitTestResults& event, CheckDr
                 return true;
             }
         } 
-        
-        m_mouseDownMayStartDrag = dispatchDragSrcEvent(eventNames().dragstartEvent, m_mouseDown)
-            && !m_frame.selection().selection().isInPasswordField();
-        
-        // Invalidate dataTransfer here against anymore pasteboard writing for security. The drag
-        // image can still be changed as we drag, but not the pasteboard data.
-        dragState().dataTransfer->setAccessPolicy(DataTransferAccessPolicy::ImageWritable);
-        
+
+        m_mouseDownMayStartDrag = dispatchDragStartEvent(hasNonDefaultPasteboardData);
+
+        dragState().dataTransfer->makeInvalidForSecurity();
+
         if (m_mouseDownMayStartDrag) {
             // Gather values from DHTML element, if it set any.
             srcOp = dragState().dataTransfer->sourceOperation();
@@ -3687,7 +3706,7 @@ bool EventHandler::handleDrag(const MouseEventWithHitTestResults& event, CheckDr
     
     if (m_mouseDownMayStartDrag) {
         Page* page = m_frame.page();
-        m_didStartDrag = page && page->dragController().startDrag(m_frame, dragState(), srcOp, event.event(), m_mouseDownPos);
+        m_didStartDrag = page && page->dragController().startDrag(m_frame, dragState(), srcOp, event.event(), m_mouseDownPos, hasNonDefaultPasteboardData);
         // In WebKit2 we could re-enter this code and start another drag.
         // On OS X this causes problems with the ownership of the pasteboard and the promised types.
         if (m_didStartDrag) {
@@ -3944,7 +3963,7 @@ static const AtomicString& eventNameForTouchPointState(PlatformTouchPoint::State
         // TouchStationary state is not converted to touch events, so fall through to assert.
     default:
         ASSERT_NOT_REACHED();
-        return emptyAtom;
+        return emptyAtom();
     }
 }
 

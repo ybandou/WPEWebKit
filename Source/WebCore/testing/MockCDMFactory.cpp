@@ -38,9 +38,8 @@ namespace WebCore {
 
 MockCDMFactory::MockCDMFactory()
     : m_supportedSessionTypes({ MediaKeySessionType::Temporary, MediaKeySessionType::PersistentUsageRecord, MediaKeySessionType::PersistentLicense })
-    , m_weakPtrFactory(this)
 {
-    CDM::registerCDMFactory(*this);
+    CDMFactory::registerFactory(*this);
 }
 
 MockCDMFactory::~MockCDMFactory()
@@ -51,7 +50,7 @@ MockCDMFactory::~MockCDMFactory()
 void MockCDMFactory::unregister()
 {
     if (m_registered) {
-        CDM::unregisterCDMFactory(*this);
+        CDMFactory::unregisterFactory(*this);
         m_registered = false;
     }
 }
@@ -96,14 +95,13 @@ void MockCDMFactory::setSupportedDataTypes(Vector<String>&& types)
         m_supportedDataTypes.append(type);
 }
 
-std::unique_ptr<CDMPrivate> MockCDMFactory::createCDM(CDM&, const String&)
+std::unique_ptr<CDMPrivate> MockCDMFactory::createCDM(const String&)
 {
-    return std::make_unique<MockCDM>(m_weakPtrFactory.createWeakPtr());
+    return std::make_unique<MockCDM>(m_weakPtrFactory.createWeakPtr(*this));
 }
 
 MockCDM::MockCDM(WeakPtr<MockCDMFactory> factory)
     : m_factory(WTFMove(factory))
-    , m_weakPtrFactory(this)
 {
 }
 
@@ -167,7 +165,7 @@ RefPtr<CDMInstance> MockCDM::createInstance()
 {
     if (m_factory && !m_factory->canCreateInstances())
         return nullptr;
-    return adoptRef(new MockCDMInstance(m_weakPtrFactory.createWeakPtr()));
+    return adoptRef(new MockCDMInstance(m_weakPtrFactory.createWeakPtr(*this)));
 }
 
 void MockCDM::loadAndInitialize()
@@ -220,11 +218,6 @@ MockCDMInstance::MockCDMInstance(WeakPtr<MockCDM> cdm)
 {
 }
 
-CDMInstance::ImplementationType MockCDMInstance::implementationType() const
-{
-    return ImplementationType::Mock;
-}
-
 CDMInstance::SuccessValue MockCDMInstance::initializeWithConfiguration(const MediaKeySystemConfiguration& configuration)
 {
     if (!m_cdm || !m_cdm->supportsConfiguration(configuration))
@@ -274,7 +267,7 @@ void MockCDMInstance::requestLicense(LicenseType licenseType, const AtomicString
 {
     MockCDMFactory* factory = m_cdm ? m_cdm->factory() : nullptr;
     if (!factory) {
-        callback(SharedBuffer::create(), emptyAtom, false, SuccessValue::Failed);
+        callback(SharedBuffer::create(), emptyAtom(), false, SuccessValue::Failed);
         return;
     }
 
@@ -382,8 +375,11 @@ void MockCDMInstance::storeRecordOfKeyUsage(const String&)
     // FIXME: This should be implemented along with the support for persistent-usage-record sessions.
 }
 
-void MockCDMInstance::gatherAvailableKeys(AvailableKeysCallback)
+const String& MockCDMInstance::keySystem() const
 {
+    static const String s_keySystem("org.webkit.mock");
+
+    return s_keySystem;
 }
 
 }

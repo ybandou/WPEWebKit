@@ -35,6 +35,7 @@
 #include "InputTypeNames.h"
 #include "LinkLoader.h"
 #include "LinkRelAttribute.h"
+#include "Logging.h"
 #include "MediaList.h"
 #include "MediaQueryEvaluator.h"
 #include "RenderView.h"
@@ -149,6 +150,10 @@ public:
         auto type = resourceType();
         if (!type)
             return nullptr;
+
+        if (!LinkLoader::isSupportedType(type.value(), m_typeAttribute))
+            return nullptr;
+
         auto request = std::make_unique<PreloadRequest>(initiatorFor(m_tagId), m_urlToLoad, predictedBaseURL, type.value(), m_mediaAttribute, m_moduleScript);
         request->setCrossOriginMode(m_crossOriginMode);
         request->setNonce(m_nonceAttribute);
@@ -211,6 +216,7 @@ private:
                 m_mediaAttribute = attributeValue;
                 auto mediaSet = MediaQuerySet::create(attributeValue);
                 auto* documentElement = document.documentElement();
+                LOG(MediaQueries, "HTMLPreloadScanner %p processAttribute evaluating media queries", this);
                 m_mediaMatched = MediaQueryEvaluator { document.printing() ? "print" : "screen", document, documentElement ? documentElement->computedStyle() : nullptr }.evaluate(mediaSet.get());
             }
             break;
@@ -239,6 +245,8 @@ private:
                 m_nonceAttribute = attributeValue;
             else if (match(attributeName, asAttr))
                 m_asAttribute = attributeValue;
+            else if (match(attributeName, typeAttr))
+                m_typeAttribute = attributeValue;
             break;
         case TagId::Input:
             if (match(attributeName, srcAttr))
@@ -341,6 +349,7 @@ private:
     String m_nonceAttribute;
     String m_metaContent;
     String m_asAttribute;
+    String m_typeAttribute;
     bool m_metaIsViewport;
     bool m_inputIsImage;
     float m_deviceScaleFactor;

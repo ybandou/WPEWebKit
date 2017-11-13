@@ -33,11 +33,13 @@
 #include "RenderCombineText.h"
 #include "RenderCounter.h"
 #include "RenderInline.h"
+#include "RenderLayer.h"
 #include "RenderLineBreak.h"
 #include "RenderListMarker.h"
 #include "RenderRubyRun.h"
 #include "RenderSVGInlineText.h"
 #include "TrailingObjects.h"
+#include <wtf/Function.h>
 #include <wtf/Optional.h>
 #include <wtf/text/StringView.h>
 #include <wtf/unicode/CharacterNames.h>
@@ -91,7 +93,7 @@ private:
 
 class BreakingContext {
 public:
-    BreakingContext(LineBreaker& lineBreaker, InlineBidiResolver& resolver, LineInfo& inLineInfo, LineLayoutState& layoutState, LineWidth& lineWidth, RenderTextInfo& inRenderTextInfo, FloatingObject* inLastFloatFromPreviousLine, bool appliedStartWidth, RenderBlockFlow& block)
+    BreakingContext(LineBreaker& lineBreaker, InlineBidiResolver& resolver, LineInfo& inLineInfo, LineWidth& lineWidth, RenderTextInfo& inRenderTextInfo, FloatingObject* inLastFloatFromPreviousLine, bool appliedStartWidth, RenderBlockFlow& block)
         : m_lineBreaker(lineBreaker)
         , m_resolver(resolver)
         , m_current(resolver.position())
@@ -109,7 +111,6 @@ public:
         , m_renderTextInfo(inRenderTextInfo)
         , m_lastFloatFromPreviousLine(inLastFloatFromPreviousLine)
         , m_width(lineWidth)
-        , m_lineLayoutState(layoutState)
         , m_currWS(NORMAL)
         , m_lastWS(NORMAL)
         , m_preservesNewline(false)
@@ -191,7 +192,7 @@ private:
             this->append(initial);
         }
 
-        void push(std::function<void(InlineIterator& modifyMe)> updater)
+        void push(const WTF::Function<void(InlineIterator& modifyMe)>& updater)
         {
             ASSERT(!this->isEmpty());
             if (m_capacity != 1)
@@ -201,7 +202,7 @@ private:
                 this->resize(m_capacity);
         }
 
-        void update(std::function<void(InlineIterator& modifyMe)> updater)
+        void update(const WTF::Function<void(InlineIterator& modifyMe)>& updater)
         {
             ASSERT(!this->isEmpty());
             updater(this->at(0));
@@ -266,8 +267,6 @@ private:
     FloatingObject* m_lastFloatFromPreviousLine;
 
     LineWidth m_width;
-    
-    LineLayoutState& m_lineLayoutState;
 
     EWhiteSpace m_currWS;
     EWhiteSpace m_lastWS;
@@ -540,27 +539,17 @@ inline void BreakingContext::handleReplaced()
         m_width.updateAvailableWidth(replacedBox.logicalHeight());
 
     // Break on replaced elements if either has normal white-space.
-    if (((m_autoWrap || RenderStyle::autoWrap(m_lastWS)) && (!m_current.renderer()->isImage() || m_allowImagesToBreak)
-        && (!m_current.renderer()->isRubyRun() || downcast<RenderRubyRun>(m_current.renderer())->canBreakBefore(m_renderTextInfo.lineBreakIterator))) || replacedBox.isAnonymousInlineBlock()) {
+    if ((m_autoWrap || RenderStyle::autoWrap(m_lastWS)) && (!replacedBox.isImage() || m_allowImagesToBreak)
+        && (!is<RenderRubyRun>(replacedBox) || downcast<RenderRubyRun>(replacedBox).canBreakBefore(m_renderTextInfo.lineBreakIterator))) {
         if (auto* renderer = m_current.renderer())
             commitLineBreakAtCurrentWidth(*renderer);
         else
             commitLineBreakClear();
-        if (m_width.committedWidth() && replacedBox.isAnonymousInlineBlock()) {
-            // Always force a break before an anonymous inline block if there is content on the line
-            // already.
-            m_atEnd = true;
-            return;
-        }
     } else
         m_hangsAtEnd = false;
-    
-    if (replacedBox.isAnonymousInlineBlock())
-        m_block.layoutBlockChild(replacedBox, m_lineLayoutState.marginInfo(),
-            m_lineLayoutState.prevFloatBottomFromAnonymousInlineBlock(), m_lineLayoutState.maxFloatBottomFromAnonymousInlineBlock());
 
     if (m_ignoringSpaces)
-        m_lineWhitespaceCollapsingState.stopIgnoringSpaces(InlineIterator(0, m_current.renderer(), 0));
+        m_lineWhitespaceCollapsingState.stopIgnoringSpaces(InlineIterator(0, &replacedBox, 0));
 
     m_lineInfo.setEmpty(false, &m_block, &m_width);
     m_ignoringSpaces = false;
@@ -570,31 +559,26 @@ inline void BreakingContext::handleReplaced()
 
     // Optimize for a common case. If we can't find whitespace after the list
     // item, then this is all moot.
-    LayoutUnit replacedLogicalWidth = m_block.logicalWidthForChild(replacedBox) + m_block.marginStartForChild(replacedBox) + m_block.marginEndForChild(replacedBox) + inlineLogicalWidth(m_current.renderer());
-    if (is<RenderListMarker>(*m_current.renderer())) {
-        if (m_blockStyle.collapseWhiteSpace() && shouldSkipWhitespaceAfterStartObject(m_block, m_current.renderer(), m_lineWhitespaceCollapsingState)) {
+    LayoutUnit replacedLogicalWidth = m_block.logicalWidthForChild(replacedBox) + m_block.marginStartForChild(replacedBox) + m_block.marginEndForChild(replacedBox) + inlineLogicalWidth(&replacedBox);
+    if (is<RenderListMarker>(replacedBox)) {
+        if (m_blockStyle.collapseWhiteSpace() && shouldSkipWhitespaceAfterStartObject(m_block, &replacedBox, m_lineWhitespaceCollapsingState)) {
             // Like with inline flows, we start ignoring spaces to make sure that any
             // additional spaces we see will be discarded.
             m_currentCharacterIsSpace = true;
             m_currentCharacterIsWS = false;
             m_ignoringSpaces = true;
         }
-        if (downcast<RenderListMarker>(*m_current.renderer()).isInside())
+        if (downcast<RenderListMarker>(replacedBox).isInside())
             m_width.addUncommittedReplacedWidth(replacedLogicalWidth);
     } else
         m_width.addUncommittedReplacedWidth(replacedLogicalWidth);
-    if (is<RenderRubyRun>(*m_current.renderer())) {
-        m_width.applyOverhang(downcast<RenderRubyRun>(m_current.renderer()), m_lastObject, m_nextObject);
-        downcast<RenderRubyRun>(m_current.renderer())->updatePriorContextFromCachedBreakIterator(m_renderTextInfo.lineBreakIterator);
+    if (is<RenderRubyRun>(replacedBox)) {
+        m_width.applyOverhang(downcast<RenderRubyRun>(replacedBox), m_lastObject, m_nextObject);
+        downcast<RenderRubyRun>(replacedBox).updatePriorContextFromCachedBreakIterator(m_renderTextInfo.lineBreakIterator);
     } else {
         // Update prior line break context characters, using U+FFFD (OBJECT REPLACEMENT CHARACTER) for replaced element.
         m_renderTextInfo.lineBreakIterator.updatePriorContext(replacementCharacter);
-    }
-    
-    if (replacedBox.isAnonymousInlineBlock()) {
-        m_atEnd = true;
-        m_lineInfo.setPreviousLineBrokeCleanly(true);
-    }
+    }    
 }
 
 inline float firstPositiveWidth(const WordMeasurements& wordMeasurements)
@@ -771,7 +755,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
 
     if (renderText.style().hasTextCombine() && is<RenderCombineText>(*m_current.renderer())) {
         auto& combineRenderer = downcast<RenderCombineText>(*m_current.renderer());
-        combineRenderer.combineText();
+        combineRenderer.combineTextIfNeeded();
         // The length of the renderer's text may have changed. Increment stale iterator positions
         if (iteratorIsBeyondEndOfRenderCombineText(m_lineBreakHistory.current(), combineRenderer)) {
             ASSERT(iteratorIsBeyondEndOfRenderCombineText(m_resolver.position(), combineRenderer));

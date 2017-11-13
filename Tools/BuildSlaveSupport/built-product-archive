@@ -36,13 +36,16 @@ _configurationBuildDirectory = None
 _topLevelBuildDirectory = None
 _hostBuildDirectory = None
 
+PATH_TO_LAUNCHER = './Tools/BuildSlaveSupport/run-webkit-archive'
 
 def main():
     parser = optparse.OptionParser("usage: %prog [options] [action]")
     parser.add_option("--platform", dest="platform")
     parser.add_option("--debug", action="store_const", const="debug", dest="configuration")
     parser.add_option("--release", action="store_const", const="release", dest="configuration")
-
+    parser.add_option("--minify", action="store_true", dest="minify", default=False,
+                      help="Create a minified archive by removing files that are not necessary for running applications against the built product, at the cost of complicating debugging.")
+                      
     options, (action, ) = parser.parse_args()
     if not options.platform:
         parser.error("Platform is required")
@@ -64,7 +67,7 @@ def main():
         return 1
 
     if action == 'archive':
-        return archiveBuiltProduct(options.configuration, genericPlatform, options.platform)
+        return archiveBuiltProduct(options.configuration, genericPlatform, options.platform, options.minify)
     else:
         return extractBuiltProduct(options.configuration, genericPlatform)
 
@@ -134,9 +137,14 @@ def createZipManually(directoryToZip, archiveFile):
 
     archiveZip.close()
 
+def addLauncherToArchive(archiveFile):
+    command = ['/usr/bin/zip', '-j', archiveFile, PATH_TO_LAUNCHER]
+    return subprocess.call(command)
 
-def createZip(directoryToZip, configuration, embedParentDirectoryNameOnDarwin=False):
+def createZip(directoryToZip, configuration, embedParentDirectoryNameOnDarwin=False, minify=False):
     archiveDir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "WebKitBuild"))
+    if minify:
+        configuration = 'minified-' + configuration
     archiveFile = os.path.join(archiveDir, configuration + ".zip")
 
     try:
@@ -150,7 +158,7 @@ def createZip(directoryToZip, configuration, embedParentDirectoryNameOnDarwin=Fa
         if embedParentDirectoryNameOnDarwin:
             command += ['--keepParent']
         command += [directoryToZip, archiveFile]
-        return subprocess.call(command)
+        return subprocess.call(command) or addLauncherToArchive(archiveFile)
     elif sys.platform == 'cygwin':
         return subprocess.call(["zip", "-r", archiveFile, "bin32"], cwd=directoryToZip)
     elif sys.platform == 'win32':
@@ -169,22 +177,40 @@ def dirContainsdwo(directory):
     return False
 
 
-def archiveBuiltProduct(configuration, platform, fullPlatform):
-    assert platform in ('mac', 'win', 'gtk', 'efl', 'ios', 'wpe')
+def minifyDirectory(platform, directory):
+    if platform == 'mac' or platform == 'ios':
+        dir_patterns = ('.dSYM', 'DerivedSources')
+        file_patterns = ('.a',)
+        for root, dirs, files in os.walk(directory):
+            if any(root.endswith(pattern) for pattern in dir_patterns):
+                print 'Removing: {}'.format(root)
+                shutil.rmtree(root)
+            for name in files:
+                if any(name.endswith(pattern) for pattern in file_patterns):
+                    print 'Removing: {}'.format(os.path.join(root, name))
+                    os.remove(os.path.join(root, name))
+
+
+def archiveBuiltProduct(configuration, platform, fullPlatform, minify=False):
+    assert platform in ('mac', 'win', 'gtk', 'ios', 'wpe')
 
     if platform == 'ios':
         combinedDirectory = os.path.join(_topLevelBuildDirectory, 'combined-mac-and-ios')
         removeDirectoryIfExists(combinedDirectory)
         os.makedirs(combinedDirectory)
-
+        if minify:
+            minifyDirectory(platform, _configurationBuildDirectory)
+            minifyDirectory(platform, _hostBuildDirectory)
         if subprocess.call(['/bin/cp', '-pR', _configurationBuildDirectory, combinedDirectory]):
             return 1
         if subprocess.call(['/bin/cp', '-pR', _hostBuildDirectory, combinedDirectory]):
             return 1
 
-        return createZip(combinedDirectory, configuration)
+        return createZip(combinedDirectory, configuration, minify=minify)
     elif platform == 'mac':
-        return createZip(_configurationBuildDirectory, configuration, embedParentDirectoryNameOnDarwin=True)
+        if minify:
+            minifyDirectory(platform, _configurationBuildDirectory)
+        return createZip(_configurationBuildDirectory, configuration, embedParentDirectoryNameOnDarwin=True, minify=minify)
     elif platform == 'win':
         # FIXME: We shouldn't hardcode the assumption of a 32-bit build. See <https://bugs.webkit.org/show_bug.cgi?id=149715>.
         binDirectory = os.path.join(_configurationBuildDirectory, 'bin32')
@@ -198,8 +224,8 @@ def archiveBuiltProduct(configuration, platform, fullPlatform):
 
         shutil.rmtree(thinDirectory)
 
-    elif platform == 'gtk' or platform == 'efl' or platform == 'wpe':
-        # On GTK+/EFL we don't need the intermediate step of creating a thinDirectory
+    elif platform == 'gtk' or platform == 'wpe':
+        # On GTK+/WPE we don't need the intermediate step of creating a thinDirectory
         # to be compressed in a ZIP file, because we can create the ZIP directly.
         # This is faster and requires less disk resources.
         neededDirectories = ['bin', 'lib']
@@ -232,7 +258,7 @@ def unzipArchive(directoryToExtractTo, configuration):
 
 
 def extractBuiltProduct(configuration, platform):
-    assert platform in ('mac', 'win', 'gtk', 'efl', 'ios', 'wpe')
+    assert platform in ('mac', 'win', 'gtk', 'ios', 'wpe')
 
     archiveFile = os.path.join(_topLevelBuildDirectory, configuration + '.zip')
 
@@ -241,7 +267,7 @@ def extractBuiltProduct(configuration, platform):
 
     if platform in ('mac', 'ios'):
         return unzipArchive(_topLevelBuildDirectory, configuration)
-    elif platform == 'win' or platform == 'gtk' or platform == 'efl' or platform == 'wpe':
+    elif platform == 'win' or platform == 'gtk' or platform == 'wpe':
         print 'Extracting', _configurationBuildDirectory
         return unzipArchive(_configurationBuildDirectory, configuration)
 

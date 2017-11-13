@@ -101,6 +101,19 @@ bool DragCaretController::isContentRichlyEditable() const
     return isRichlyEditablePosition(m_position.deepEquivalent());
 }
 
+IntRect DragCaretController::caretRectInRootViewCoordinates() const
+{
+    if (!hasCaret())
+        return { };
+
+    if (auto* document = m_position.deepEquivalent().document()) {
+        if (auto* documentView = document->view())
+            return documentView->contentsToRootView(m_position.absoluteCaretBounds());
+    }
+
+    return { };
+}
+
 static inline bool shouldAlwaysUseDirectionalSelection(Frame* frame)
 {
     return !frame || frame->editor().behavior().shouldConsiderSelectionAsDirectional();
@@ -111,6 +124,7 @@ FrameSelection::FrameSelection(Frame* frame)
     , m_xPosForVerticalArrowNavigation(NoXPosForVerticalArrowNavigation())
     , m_granularity(CharacterGranularity)
     , m_caretBlinkTimer(*this, &FrameSelection::caretBlinkTimerFired)
+    , m_appearanceUpdateTimer(*this, &FrameSelection::appearanceUpdateTimerFired)
     , m_caretInsidePositionFixed(false)
     , m_absCaretBoundsDirty(true)
     , m_caretPaint(true)
@@ -332,6 +346,7 @@ bool FrameSelection::setSelectionWithoutUpdatingAppearance(const VisibleSelectio
 
 void FrameSelection::setSelection(const VisibleSelection& selection, SetSelectionOptions options, AXTextStateChangeIntent intent, CursorAlignOnScroll align, TextGranularity granularity)
 {
+    RefPtr<Frame> protectedFrame(m_frame);
     if (!setSelectionWithoutUpdatingAppearance(selection, options, align, granularity))
         return;
 
@@ -352,6 +367,11 @@ void FrameSelection::setSelection(const VisibleSelection& selection, SetSelectio
         return;
 
     updateAndRevealSelection(intent);
+
+    if (options & IsUserTriggered) {
+        if (auto* client = m_frame->editor().client())
+            client->didEndUserTriggeredSelectionChanges();
+    }
 }
 
 static void updateSelectionByUpdatingLayoutOrStyle(Frame& frame)
@@ -391,9 +411,6 @@ void FrameSelection::updateAndRevealSelection(const AXTextStateChangeIntent& int
     }
 
     notifyAccessibilityForSelectionChange(intent);
-
-    if (auto* client = m_frame->editor().client())
-        client->didChangeSelectionAndUpdateLayout();
 }
 
 void FrameSelection::updateDataDetectorsForSelection()
@@ -1698,13 +1715,6 @@ void FrameSelection::paintCaret(GraphicsContext& context, const LayoutPoint& pai
         CaretBase::paintCaret(m_selection.start().deprecatedNode(), context, paintOffset, clipRect);
 }
 
-#if ENABLE(TEXT_CARET)
-static inline bool disappearsIntoBackground(const Color& foreground, const Color& background)
-{
-    return background.blend(foreground) == background;
-}
-#endif
-
 void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoint& paintOffset, const LayoutRect& clipRect) const
 {
 #if ENABLE(TEXT_CARET)
@@ -1721,22 +1731,21 @@ void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoi
 
     Color caretColor = Color::black;
     Element* element = is<Element>(*node) ? downcast<Element>(node) : node->parentElement();
-    Element* rootEditableElement = node->rootEditableElement();
-
     if (element && element->renderer()) {
-        bool setToRootEditableElement = false;
-        if (rootEditableElement && rootEditableElement->renderer()) {
-            const auto& rootEditableStyle = rootEditableElement->renderer()->style();
-            const auto& elementStyle = element->renderer()->style();
-            auto rootEditableBGColor = rootEditableStyle.visitedDependentColor(CSSPropertyBackgroundColor);
-            auto elementBGColor = elementStyle.visitedDependentColor(CSSPropertyBackgroundColor);
-            if (disappearsIntoBackground(elementBGColor, rootEditableBGColor)) {
-                caretColor = rootEditableStyle.visitedDependentColor(CSSPropertyColor);
-                setToRootEditableElement = true;
+        auto computeCaretColor = [] (const RenderStyle& elementStyle, const RenderStyle* rootEditableStyle) {
+            // CSS value "auto" is treated as an invalid color.
+            if (!elementStyle.caretColor().isValid() && rootEditableStyle) {
+                auto rootEditableBackgroundColor = rootEditableStyle->visitedDependentColor(CSSPropertyBackgroundColor);
+                auto elementBackgroundColor = elementStyle.visitedDependentColor(CSSPropertyBackgroundColor);
+                auto disappearsIntoBackground = rootEditableBackgroundColor.blend(elementBackgroundColor) == rootEditableBackgroundColor;
+                if (disappearsIntoBackground)
+                    return rootEditableStyle->visitedDependentColor(CSSPropertyCaretColor);
             }
-        }
-        if (!setToRootEditableElement)
-            caretColor = element->renderer()->style().visitedDependentColor(CSSPropertyColor);
+            return elementStyle.visitedDependentColor(CSSPropertyCaretColor);
+        };
+        auto* rootEditableElement = node->rootEditableElement();
+        auto* rootEditableStyle = rootEditableElement && rootEditableElement->renderer() ? &rootEditableElement->renderer()->style() : nullptr;
+        caretColor = computeCaretColor(element->renderer()->style(), rootEditableStyle);
     }
 
     context.fillRect(caret, caretColor);
@@ -1965,7 +1974,7 @@ bool FrameSelection::setSelectedRange(Range* range, EAffinity affinity, bool clo
             return false;
     }
 
-    setSelection(newSelection, ClearTypingStyle | (closeTyping ? CloseTyping : 0));
+    setSelection(newSelection, ClearTypingStyle | (closeTyping ? CloseTyping : 0) | (userTriggered == UserTriggered ? IsUserTriggered : 0));
     return true;
 }
 
@@ -2395,6 +2404,22 @@ void FrameSelection::setShouldShowBlockCursor(bool shouldShowBlockCursor)
 }
 
 void FrameSelection::updateAppearanceAfterLayout()
+{
+    m_appearanceUpdateTimer.stop();
+    updateAppearanceAfterLayoutOrStyleChange();
+}
+
+void FrameSelection::scheduleAppearanceUpdateAfterStyleChange()
+{
+    m_appearanceUpdateTimer.startOneShot(0_s);
+}
+
+void FrameSelection::appearanceUpdateTimerFired()
+{
+    updateAppearanceAfterLayoutOrStyleChange();
+}
+
+void FrameSelection::updateAppearanceAfterLayoutOrStyleChange()
 {
     if (auto* client = m_frame->editor().client())
         client->updateEditorStateAfterLayoutIfEditabilityChanged();

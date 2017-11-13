@@ -717,16 +717,18 @@ private:
         case GetGlobalLexicalVariable:
         case GetClosureVar:
         case GetFromArguments:
-        case LoadFromJSMapBucket:
+        case LoadKeyFromMapBucket:
+        case LoadValueFromMapBucket:
         case ToNumber:
         case GetArgument:
-        case CallDOMGetter: {
+        case CallDOMGetter:
+        case GetDynamicVar:
+        case WeakMapGet: {
             setPrediction(m_currentNode->getHeapPrediction());
             break;
         }
 
-        case ResolveScopeForHoistingFuncDeclInEval:
-        case GetDynamicVar: {
+        case ResolveScopeForHoistingFuncDeclInEval: {
             setPrediction(SpecBytecodeTop);
             break;
         }
@@ -742,6 +744,7 @@ private:
         case GetCallee:
         case NewFunction:
         case NewGeneratorFunction:
+        case NewAsyncGeneratorFunction:
         case NewAsyncFunction: {
             setPrediction(SpecFunction);
             break;
@@ -755,20 +758,22 @@ private:
         case MapHash:
             setPrediction(SpecInt32Only);
             break;
+
         case GetMapBucket:
+        case GetMapBucketHead:
+        case GetMapBucketNext:
             setPrediction(SpecCellOther);
             break;
-        case IsNonEmptyMapBucket:
-            setPrediction(SpecBoolean);
-            break;
 
-        case GetRestLength: {
+        case GetRestLength:
+        case ArrayIndexOf: {
             setPrediction(SpecInt32Only);
             break;
         }
 
         case GetTypedArrayByteOffset:
-        case GetArrayLength: {
+        case GetArrayLength:
+        case GetVectorLength: {
             setPrediction(SpecInt32Only);
             break;
         }
@@ -837,6 +842,7 @@ private:
             break;
         }
         case GetButterfly:
+        case GetButterflyWithoutCaging:
         case GetIndexedPropertyStorage:
         case AllocatePropertyStorage:
         case ReallocatePropertyStorage: {
@@ -856,6 +862,10 @@ private:
             setPrediction(SpecObjectOther);
             break;
         }
+
+        case GetGlobalThis:
+            setPrediction(SpecObject);
+            break;
 
         case ResolveScope: {
             setPrediction(SpecObjectOther);
@@ -892,6 +902,7 @@ private:
             break;
         }
             
+        case PushWithScope:
         case CreateActivation: {
             setPrediction(SpecObjectOther);
             break;
@@ -906,6 +917,7 @@ private:
         case CallStringConstructor:
         case ToString:
         case NumberToStringWithRadix:
+        case NumberToStringWithValidRadixConstant:
         case MakeRope:
         case StrCat: {
             setPrediction(SpecString);
@@ -984,6 +996,16 @@ private:
             break;
         }
 
+        case IdentityWithProfile: {
+            setPrediction(m_currentNode->getForcedPrediction());
+            break;
+        }
+
+        case ExtractCatchLocal: {
+            setPrediction(m_currentNode->catchLocalPrediction());
+            break;
+        }
+
         case GetLocal:
         case SetLocal:
         case UInt32ToNumber:
@@ -1040,6 +1062,7 @@ private:
         case PhantomNewObject:
         case PhantomNewFunction:
         case PhantomNewGeneratorFunction:
+        case PhantomNewAsyncGeneratorFunction:
         case PhantomNewAsyncFunction:
         case PhantomCreateActivation:
         case PhantomDirectArguments:
@@ -1051,6 +1074,7 @@ private:
         case GetMyArgumentByValOutOfBounds:
         case PutHint:
         case CheckStructureImmediate:
+        case CheckStructureOrEmpty:
         case MaterializeNewObject:
         case MaterializeCreateActivation:
         case PutStack:
@@ -1063,8 +1087,7 @@ private:
         case RecordRegExpCachedResult:
         case LazyJSConstant:
         case CallDOM: {
-            // This node should never be visible at this stage of compilation. It is
-            // inserted by fixup(), which follows this phase.
+            // This node should never be visible at this stage of compilation.
             DFG_CRASH(m_graph, m_currentNode, "Unexpected node during prediction propagation");
             break;
         }
@@ -1075,6 +1098,7 @@ private:
             RELEASE_ASSERT_NOT_REACHED();
             break;
             
+        case EntrySwitch:
         case Upsilon:
             // These don't get inserted until we go into SSA.
             RELEASE_ASSERT_NOT_REACHED();
@@ -1089,11 +1113,12 @@ private:
         case PutClosureVar:
         case PutToArguments:
         case Return:
+        case Throw:
+        case ThrowStaticError:
         case TailCall:
         case DirectTailCall:
         case TailCallVarargs:
         case TailCallForwardVarargs:
-        case Throw:
         case PutById:
         case PutByIdFlush:
         case PutByIdDirect:
@@ -1111,7 +1136,6 @@ private:
         case Switch:
         case ProfileType:
         case ProfileControlFlow:
-        case ThrowStaticError:
         case ForceOSRExit:
         case SetArgument:
         case SetFunctionName:
@@ -1138,6 +1162,7 @@ private:
         case ForwardVarargs:
         case PutDynamicVar:
         case NukeStructureAndSetButterfly:
+        case InitializeEntrypointArguments:
             break;
             
         // This gets ignored because it only pretends to produce a value.

@@ -21,10 +21,6 @@
 #include "config.h"
 #include "CSSParserSelector.h"
 
-#include "CSSCustomPropertyValue.h"
-#include "CSSParserIdioms.h"
-#include "CSSPrimitiveValue.h"
-#include "CSSFunctionValue.h"
 #include "CSSSelector.h"
 #include "CSSSelectorList.h"
 #include "SelectorPseudoTypeMap.h"
@@ -202,11 +198,6 @@ void CSSParserSelector::appendTagHistory(CSSParserSelectorCombinator relation, s
     case CSSParserSelectorCombinator::DescendantSpace:
         selectorRelation = CSSSelector::DescendantSpace;
         break;
-#if ENABLE(CSS_SELECTORS_LEVEL4)
-    case CSSParserSelectorCombinator::DescendantDoubleChild:
-        selectorRelation = CSSSelector::DescendantDoubleChild;
-        break;
-#endif
     case CSSParserSelectorCombinator::DirectAdjacent:
         selectorRelation = CSSSelector::DirectAdjacent;
         break;

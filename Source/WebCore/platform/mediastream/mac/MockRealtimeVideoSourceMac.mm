@@ -50,9 +50,9 @@ namespace WebCore {
 
 static const int videoSampleRate = 90000;
 
-CaptureSourceOrError MockRealtimeVideoSource::create(const String& name, const MediaConstraints* constraints)
+CaptureSourceOrError MockRealtimeVideoSource::create(const String& deviceID, const String& name, const MediaConstraints* constraints)
 {
-    auto source = adoptRef(*new MockRealtimeVideoSourceMac(name));
+    auto source = adoptRef(*new MockRealtimeVideoSourceMac(deviceID, name));
     // FIXME: We should report error messages
     if (constraints && source->applyConstraints(*constraints))
         return { };
@@ -60,8 +60,8 @@ CaptureSourceOrError MockRealtimeVideoSource::create(const String& name, const M
     return CaptureSourceOrError(WTFMove(source));
 }
 
-MockRealtimeVideoSourceMac::MockRealtimeVideoSourceMac(const String& name)
-    : MockRealtimeVideoSource(name)
+MockRealtimeVideoSourceMac::MockRealtimeVideoSourceMac(const String& deviceID, const String& name)
+    : MockRealtimeVideoSource(deviceID, name)
 {
 }
 
@@ -143,8 +143,9 @@ void MockRealtimeVideoSourceMac::updateSampleBuffer()
 
     auto pixelBuffer = pixelBufferFromCGImage(imageBuffer->copyImage()->nativeImage().get());
     auto sampleBuffer = CMSampleBufferFromPixelBuffer(pixelBuffer.get());
-    
-    videoSampleAvailable(MediaSampleAVFObjC::create(sampleBuffer.get()));
+
+    // We use m_deviceOrientation to emulate sensor orientation
+    videoSampleAvailable(MediaSampleAVFObjC::create(sampleBuffer.get(), m_deviceOrientation));
 }
 
 bool MockRealtimeVideoSourceMac::applySize(const IntSize& newSize)
@@ -174,6 +175,12 @@ void MockRealtimeVideoSourceMac::orientationChanged(int orientation)
     default:
         return;
     }
+}
+
+void MockRealtimeVideoSourceMac::monitorOrientation(OrientationNotifier& notifier)
+{
+    notifier.addObserver(*this);
+    orientationChanged(notifier.orientation());
 }
 
 } // namespace WebCore

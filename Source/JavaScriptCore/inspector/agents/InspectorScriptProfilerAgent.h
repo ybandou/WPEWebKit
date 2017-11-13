@@ -25,10 +25,10 @@
 
 #pragma once
 
+#include "Debugger.h"
 #include "InspectorBackendDispatchers.h"
 #include "InspectorFrontendDispatchers.h"
 #include "inspector/InspectorAgentBase.h"
-#include "inspector/ScriptDebugServer.h"
 #include <wtf/Noncopyable.h>
 
 namespace JSC {
@@ -61,12 +61,6 @@ public:
     void didEvaluateScript(double, JSC::ProfilingReason) override;
 
 private:
-    struct Event {
-        Event(double start, double end) : startTime(start), endTime(end) { }
-        double startTime { 0 };
-        double endTime { 0 };
-    };
-
     void addEvent(double startTime, double endTime, JSC::ProfilingReason);
     void trackingComplete();
     void stopSamplingWhenDisconnecting();

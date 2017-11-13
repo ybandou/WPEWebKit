@@ -102,6 +102,7 @@ public:
     void getUserMediaInfoForOrigin(WKFrameRef, WKStringRef originKey, bool&, WKRetainPtr<WKStringRef>&);
     WKStringRef getUserMediaSaltForOrigin(WKFrameRef, WKStringRef originKey);
     void setUserMediaPermission(bool);
+    void resetUserMediaPermission();
     void setUserMediaPersistentPermissionForOrigin(bool, WKStringRef userMediaDocumentOriginString, WKStringRef topLevelDocumentOriginString);
     void handleUserMediaPermissionRequest(WKFrameRef, WKSecurityOriginRef, WKSecurityOriginRef, WKUserMediaPermissionRequestRef);
     void handleCheckOfUserMediaPermissionForOrigin(WKFrameRef, WKSecurityOriginRef, WKSecurityOriginRef, const WKUserMediaPermissionCheckRef&);
@@ -139,6 +140,7 @@ public:
 
     void setShouldLogHistoryClientCallbacks(bool shouldLog) { m_shouldLogHistoryClientCallbacks = shouldLog; }
     void setShouldLogCanAuthenticateAgainstProtectionSpace(bool shouldLog) { m_shouldLogCanAuthenticateAgainstProtectionSpace = shouldLog; }
+    void setShouldLogDownloadCallbacks(bool shouldLog) { m_shouldLogDownloadCallbacks = shouldLog; }
 
     bool isCurrentInvocation(TestInvocation* invocation) const { return invocation == m_currentInvocation.get(); }
 
@@ -149,30 +151,41 @@ public:
 
     void setShouldDownloadUndisplayableMIMETypes(bool value) { m_shouldDownloadUndisplayableMIMETypes = value; }
 
+    void setStatisticsLastSeen(WKStringRef hostName, double seconds);
     void setStatisticsPrevalentResource(WKStringRef hostName, bool value);
     bool isStatisticsPrevalentResource(WKStringRef hostName);
     void setStatisticsHasHadUserInteraction(WKStringRef hostName, bool value);
     bool isStatisticsHasHadUserInteraction(WKStringRef hostName);
+    void setStatisticsGrandfathered(WKStringRef hostName, bool value);
+    bool isStatisticsGrandfathered(WKStringRef hostName);
     void setStatisticsSubframeUnderTopFrameOrigin(WKStringRef hostName, WKStringRef topFrameHostName);
     void setStatisticsSubresourceUnderTopFrameOrigin(WKStringRef hostName, WKStringRef topFrameHostName);
     void setStatisticsSubresourceUniqueRedirectTo(WKStringRef hostName, WKStringRef hostNameRedirectedTo);
     void setStatisticsTimeToLiveUserInteraction(double seconds);
     void setStatisticsTimeToLiveCookiePartitionFree(double seconds);
-    void statisticsFireDataModificationHandler();
-    void statisticsFireShouldPartitionCookiesHandler();
-    void statisticsFireShouldPartitionCookiesHandlerForOneDomain(WKStringRef hostName, bool value);
+    void statisticsProcessStatisticsAndDataRecords();
+    void statisticsUpdateCookiePartitioning();
+    void statisticsSetShouldPartitionCookiesForHost(WKStringRef hostName, bool value);
+    void statisticsSubmitTelemetry();
     void setStatisticsNotifyPagesWhenDataRecordsWereScanned(bool);
     void setStatisticsShouldClassifyResourcesBeforeDataRecordsRemoval(bool);
-    void setStatisticsMinimumTimeBetweeenDataRecordsRemoval(double);
+    void setStatisticsNotifyPagesWhenTelemetryWasCaptured(bool value);
+    void setStatisticsMinimumTimeBetweenDataRecordsRemoval(double);
+    void setStatisticsGrandfatheringTime(double seconds);
+    void setStatisticsMaxStatisticsEntries(unsigned);
+    void setStatisticsPruneEntriesDownTo(unsigned);
     void statisticsClearInMemoryAndPersistentStore();
     void statisticsClearInMemoryAndPersistentStoreModifiedSinceHours(unsigned);
+    void statisticsClearThroughWebsiteDataRemoval();
     void statisticsResetToConsistentState();
 
     WKArrayRef openPanelFileURLs() const { return m_openPanelFileURLs.get(); }
     void setOpenPanelFileURLs(WKArrayRef fileURLs) { m_openPanelFileURLs = fileURLs; }
 
     void terminateNetworkProcess();
-    
+
+    void removeAllSessionCredentials();
+
 private:
     WKRetainPtr<WKPageConfigurationRef> generatePageConfiguration(WKContextConfigurationRef);
     WKRetainPtr<WKContextConfigurationRef> generateContextConfiguration() const;
@@ -192,6 +205,7 @@ private:
     void platformResetPreferencesToConsistentValues();
     void platformResetStateToConsistentValues();
 #if PLATFORM(COCOA)
+    void cocoaPlatformInitialize();
     void cocoaResetStateToConsistentValues();
 #endif
     void platformConfigureViewForTest(const TestInvocation&);
@@ -252,6 +266,8 @@ private:
     void downloadDidFail(WKContextRef, WKDownloadRef, WKErrorRef);
     static void downloadDidCancel(WKContextRef, WKDownloadRef, const void*);
     void downloadDidCancel(WKContextRef, WKDownloadRef);
+    static void downloadDidReceiveServerRedirectToURL(WKContextRef, WKDownloadRef, WKURLRef, const void*);
+    void downloadDidReceiveServerRedirectToURL(WKContextRef, WKDownloadRef, WKURLRef);
     
     static void processDidCrash(WKPageRef, const void* clientInfo);
     void processDidCrash();
@@ -370,6 +386,7 @@ private:
     bool m_shouldUseRemoteLayerTree { false };
 
     bool m_shouldLogCanAuthenticateAgainstProtectionSpace { false };
+    bool m_shouldLogDownloadCallbacks { false };
     bool m_shouldLogHistoryClientCallbacks { false };
     bool m_shouldShowWebView { false };
     

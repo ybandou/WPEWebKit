@@ -39,7 +39,6 @@
 #include "CSSDefaultStyleSheets.cpp"
 #include "CSSFilterImageValue.cpp"
 #include "CSSFontFace.cpp"
-#include "CSSFontFaceLoadEvent.cpp"
 #include "CSSFontFaceRule.cpp"
 #include "CSSFontFaceSet.cpp"
 #include "CSSFontFaceSource.cpp"
@@ -79,6 +78,7 @@
 #include "CSSSelector.cpp"
 #include "CSSSelectorList.cpp"
 #include "CSSShadowValue.cpp"
+#include "CSSStyleDeclaration.cpp"
 #include "CSSStyleRule.cpp"
 #include "CSSStyleSheet.cpp"
 #include "CSSSupportsRule.cpp"
@@ -124,6 +124,5 @@
 #include "TransformFunctions.cpp"
 #include "ViewportStyleResolver.cpp"
 #include "WebKitCSSMatrix.cpp"
-#include "WebKitCSSRegionRule.cpp"
 #include "WebKitCSSViewportRule.cpp"
 

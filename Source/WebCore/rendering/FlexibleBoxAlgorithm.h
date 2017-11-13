@@ -31,10 +31,9 @@
 #pragma once
 
 #include "LayoutUnit.h"
-#include "OrderIterator.h"
 #include "RenderStyle.h"
+#include <wtf/Forward.h>
 #include <wtf/Noncopyable.h>
-#include <wtf/Vector.h>
 
 namespace WebCore {
 

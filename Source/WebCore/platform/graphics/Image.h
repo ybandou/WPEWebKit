@@ -24,8 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef Image_h
-#define Image_h
+#pragma once
 
 #include "Color.h"
 #include "DecodingOptions.h"
@@ -35,6 +34,7 @@
 #include "ImageOrientation.h"
 #include "ImageTypes.h"
 #include "NativeImage.h"
+#include "Timer.h"
 #include <wtf/Optional.h>
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
@@ -129,15 +129,21 @@ public:
     // Animation begins whenever someone draws the image, so startAnimation() is not normally called.
     // It will automatically pause once all observers no longer want to render the image anywhere.
     virtual void startAnimation() { }
+    void startAnimationAsynchronously();
     virtual void stopAnimation() {}
     virtual void resetAnimation() {}
-    virtual void imageFrameAvailableAtIndex(size_t) { }
     virtual bool isAnimating() const { return false; }
-    
+    bool animationPending() const { return m_animationStartTimer.isActive(); }
+
+    virtual void decode(WTF::Function<void()>&&) { }
+    virtual void imageFrameAvailableAtIndex(size_t) { }
+
     // Typically the CachedImage that owns us.
     ImageObserver* imageObserver() const { return m_imageObserver; }
     void setImageObserver(ImageObserver* observer) { m_imageObserver = observer; }
     URL sourceURL() const;
+    String mimeType() const;
+    long long expectedContentLength() const;
 
     enum TileRule { StretchTile, RoundTile, SpaceTile, RepeatTile };
 
@@ -178,7 +184,7 @@ public:
     virtual bool notSolidColor() { return true; }
 #endif
 
-    virtual void dump(TextStream&) const;
+    virtual void dump(WTF::TextStream&) const;
 
 protected:
     Image(ImageObserver* = nullptr);
@@ -188,9 +194,9 @@ protected:
 #if PLATFORM(WIN)
     virtual void drawFrameMatchingSourceSize(GraphicsContext&, const FloatRect& dstRect, const IntSize& srcSize, CompositeOperator) { }
 #endif
-    virtual void draw(GraphicsContext&, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator, BlendMode, DecodingMode, ImageOrientationDescription) = 0;
-    void drawTiled(GraphicsContext&, const FloatRect& dstRect, const FloatPoint& srcPoint, const FloatSize& tileSize, const FloatSize& spacing, CompositeOperator, BlendMode, DecodingMode);
-    void drawTiled(GraphicsContext&, const FloatRect& dstRect, const FloatRect& srcRect, const FloatSize& tileScaleFactor, TileRule hRule, TileRule vRule, CompositeOperator);
+    virtual ImageDrawResult draw(GraphicsContext&, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator, BlendMode, DecodingMode, ImageOrientationDescription) = 0;
+    ImageDrawResult drawTiled(GraphicsContext&, const FloatRect& dstRect, const FloatPoint& srcPoint, const FloatSize& tileSize, const FloatSize& spacing, CompositeOperator, BlendMode, DecodingMode);
+    ImageDrawResult drawTiled(GraphicsContext&, const FloatRect& dstRect, const FloatRect& srcRect, const FloatSize& tileScaleFactor, TileRule hRule, TileRule vRule, CompositeOperator);
 
     // Supporting tiled drawing
     virtual Color singlePixelSolidColor() const { return Color(); }
@@ -198,9 +204,10 @@ protected:
 private:
     RefPtr<SharedBuffer> m_encodedImageData;
     ImageObserver* m_imageObserver;
+    Timer m_animationStartTimer;
 };
 
-TextStream& operator<<(TextStream&, const Image&);
+WTF::TextStream& operator<<(WTF::TextStream&, const Image&);
 
 } // namespace WebCore
 
@@ -209,4 +216,3 @@ SPECIALIZE_TYPE_TRAITS_BEGIN(WebCore::ToClassName) \
     static bool isType(const WebCore::Image& image) { return image.is##ToClassName(); } \
 SPECIALIZE_TYPE_TRAITS_END()
 
-#endif // Image_h

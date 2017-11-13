@@ -29,6 +29,7 @@
 #import "Document.h"
 #import "DocumentFragment.h"
 #import "DocumentLoader.h"
+#import "DragData.h"
 #import "Editing.h"
 #import "Editor.h"
 #import "EditorClient.h"
@@ -39,6 +40,7 @@
 #import "HTMLParserIdioms.h"
 #import "Image.h"
 #import "LegacyWebArchive.h"
+#import "NotImplemented.h"
 #import "PasteboardStrategy.h"
 #import "PlatformStrategies.h"
 #import "RenderImage.h"
@@ -46,6 +48,7 @@
 #import "SharedBuffer.h"
 #import "Text.h"
 #import "URL.h"
+#import "UTIUtilities.h"
 #import "WebNSAttributedStringExtras.h"
 #import "markup.h"
 #import <MobileCoreServices/MobileCoreServices.h>
@@ -58,11 +61,32 @@
 - (BOOL)containsAttachments;
 @end
 
-#if USE(APPLE_INTERNAL_SDK)
-#import <WebKitAdditions/PasteboardAdditions.mm>
-#endif
-
 namespace WebCore {
+
+#if ENABLE(DRAG_SUPPORT)
+
+Pasteboard::Pasteboard(const String& pasteboardName)
+    : m_pasteboardName(pasteboardName)
+    , m_changeCount(platformStrategies()->pasteboardStrategy()->changeCount(pasteboardName))
+{
+}
+
+void Pasteboard::setDragImage(DragImage, const IntPoint&)
+{
+    notImplemented();
+}
+
+std::unique_ptr<Pasteboard> Pasteboard::createForDragAndDrop()
+{
+    return std::make_unique<Pasteboard>("data interaction pasteboard");
+}
+
+std::unique_ptr<Pasteboard> Pasteboard::createForDragAndDrop(const DragData& dragData)
+{
+    return std::make_unique<Pasteboard>(dragData.pasteboardName());
+}
+
+#endif
 
 static long changeCountForPasteboard(const String& pasteboardName = { })
 {
@@ -109,19 +133,14 @@ std::unique_ptr<Pasteboard> Pasteboard::createForCopyAndPaste()
     return std::make_unique<Pasteboard>(changeCountForPasteboard());
 }
 
-std::unique_ptr<Pasteboard> Pasteboard::createPrivate()
-{
-    return std::make_unique<Pasteboard>(changeCountForPasteboard());
-}
-
 void Pasteboard::write(const PasteboardWebContent& content)
 {
     platformStrategies()->pasteboardStrategy()->writeToPasteboard(content, m_pasteboardName);
 }
 
-String Pasteboard::resourceMIMEType(const NSString *mimeType)
+String Pasteboard::resourceMIMEType(NSString *mimeType)
 {
-    return String(adoptCF(UTTypeCreatePreferredIdentifierForTag(kUTTagClassMIMEType, (CFStringRef)mimeType, NULL)).get());
+    return UTIFromMIMEType(mimeType);
 }
 
 void Pasteboard::write(const PasteboardImage& pasteboardImage)
@@ -131,6 +150,8 @@ void Pasteboard::write(const PasteboardImage& pasteboardImage)
 
 void Pasteboard::writePlainText(const String& text, SmartReplaceOption)
 {
+    // FIXME: We vend "public.text" here for backwards compatibility with pre-iOS 11 apps. In the future, we should stop vending this UTI,
+    // and instead set data for concrete plain text types. See <https://bugs.webkit.org/show_bug.cgi?id=173317>.
     platformStrategies()->pasteboardStrategy()->writeToPasteboard(kUTTypeText, text, m_pasteboardName);
 }
 
@@ -146,10 +167,6 @@ void Pasteboard::writeTrustworthyWebURLsPboardType(const PasteboardURL&)
     // should not use the same pasteboard type as this function for
     // URLs.
     ASSERT_NOT_REACHED();
-}
-
-void Pasteboard::writePasteboard(const Pasteboard&)
-{
 }
 
 bool Pasteboard::canSmartReplace()
@@ -238,7 +255,7 @@ void Pasteboard::read(PasteboardWebContentReader& reader)
     if (!numberOfItems)
         return;
 
-    NSArray *types = supportedPasteboardTypes();
+    NSArray *types = supportedWebContentPasteboardTypes();
     int numberOfTypes = [types count];
 
     for (int i = 0; i < numberOfItems; i++) {
@@ -273,9 +290,19 @@ void Pasteboard::readRespectingUTIFidelities(PasteboardWebContentReader& reader)
     }
 }
 
-NSArray* Pasteboard::supportedPasteboardTypes()
+long Pasteboard::changeCount() const
+{
+    return platformStrategies()->pasteboardStrategy()->changeCount(m_pasteboardName);
+}
+
+NSArray *Pasteboard::supportedWebContentPasteboardTypes()
 {
     return @[(id)WebArchivePboardType, (id)kUTTypeFlatRTFD, (id)kUTTypeRTF, (id)kUTTypeHTML, (id)kUTTypePNG, (id)kUTTypeTIFF, (id)kUTTypeJPEG, (id)kUTTypeGIF, (id)kUTTypeURL, (id)kUTTypeText];
+}
+
+NSArray *Pasteboard::supportedFileUploadPasteboardTypes()
+{
+    return @[ (NSString *)kUTTypeContent, (NSString *)kUTTypeZipArchive, (NSString *)kUTTypeFolder ];
 }
 
 bool Pasteboard::hasData()
@@ -293,27 +320,24 @@ static String utiTypeFromCocoaType(NSString *type)
 
 static RetainPtr<NSString> cocoaTypeFromHTMLClipboardType(const String& type)
 {
-    String strippedType = type.stripWhiteSpace();
-
-    if (strippedType == "Text")
-        return (NSString *)kUTTypeText;
-    if (strippedType == "URL")
-        return (NSString *)kUTTypeURL;
-
     // Ignore any trailing charset - JS strings are Unicode, which encapsulates the charset issue.
-    if (strippedType.startsWith("text/plain"))
+    if (type == "text/plain")
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 110000
+        return (NSString *)kUTTypePlainText;
+#else
         return (NSString *)kUTTypeText;
+#endif
 
     // Special case because UTI doesn't work with Cocoa's URL type.
-    if (strippedType == "text/uri-list")
+    if (type == "text/uri-list")
         return (NSString *)kUTTypeURL;
 
     // Try UTI now.
-    if (NSString *utiType = utiTypeFromCocoaType(strippedType))
+    if (NSString *utiType = utiTypeFromCocoaType(type))
         return utiType;
 
     // No mapping, just pass the whole string though.
-    return (NSString *)strippedType;
+    return (NSString *)type;
 }
 
 void Pasteboard::clear(const String& type)
@@ -371,7 +395,9 @@ String Pasteboard::readString(const String& type)
 static void addHTMLClipboardTypesForCocoaType(ListHashSet<String>& resultTypes, NSString *cocoaType)
 {
     // UTI may not do these right, so make sure we get the right, predictable result.
-    if ([cocoaType isEqualToString:(NSString *)kUTTypeText]) {
+    if ([cocoaType isEqualToString:(NSString *)kUTTypePlainText]
+        || [cocoaType isEqualToString:(NSString *)kUTTypeUTF8PlainText]
+        || [cocoaType isEqualToString:(NSString *)kUTTypeUTF16PlainText]) {
         resultTypes.add(ASCIILiteral("text/plain"));
         return;
     }
@@ -394,12 +420,13 @@ void Pasteboard::writeString(const String& type, const String& data)
     if (!cocoaType)
         return;
 
-    platformStrategies()->pasteboardStrategy()->writeToPasteboard(type, data, m_pasteboardName);
+    platformStrategies()->pasteboardStrategy()->writeToPasteboard(cocoaType.get(), data, m_pasteboardName);
 }
 
 Vector<String> Pasteboard::types()
 {
-    NSArray* types = supportedPasteboardTypes();
+    Vector<String> cocoaTypes;
+    platformStrategies()->pasteboardStrategy()->getTypes(cocoaTypes, m_pasteboardName);
 
     // Enforce changeCount ourselves for security. We check after reading instead of before to be
     // sure it doesn't change between our testing the change count and accessing the data.
@@ -407,11 +434,8 @@ Vector<String> Pasteboard::types()
         return Vector<String>();
 
     ListHashSet<String> result;
-    NSUInteger count = [types count];
-    for (NSUInteger i = 0; i < count; i++) {
-        NSString *type = [types objectAtIndex:i];
-        addHTMLClipboardTypesForCocoaType(result, type);
-    }
+    for (auto cocoaType : cocoaTypes)
+        addHTMLClipboardTypesForCocoaType(result, cocoaType);
 
     Vector<String> vector;
     copyToVector(result, vector);

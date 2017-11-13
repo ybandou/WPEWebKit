@@ -32,8 +32,6 @@
     // are not yet implemented.
 
     attribute EventHandler onabort;
-    [Conditional=REQUEST_AUTOCOMPLETE] attribute EventHandler onautocomplete;
-    [Conditional=REQUEST_AUTOCOMPLETE] attribute EventHandler onautocompleteerror;
     attribute EventHandler onblur;
     // attribute EventHandler oncancel;
     attribute EventHandler oncanplay;
@@ -122,8 +120,4 @@
     [NotEnumerable, Conditional=MOUSE_FORCE_EVENTS] attribute EventHandler onwebkitmouseforcedown;
     [NotEnumerable, Conditional=MOUSE_FORCE_EVENTS] attribute EventHandler onwebkitmouseforcewillbegin;
     [NotEnumerable, Conditional=MOUSE_FORCE_EVENTS] attribute EventHandler onwebkitmouseforceup;
-    [NotEnumerable, Conditional=WILL_REVEAL_EDGE_EVENTS] attribute EventHandler onwebkitwillrevealbottom;
-    [NotEnumerable, Conditional=WILL_REVEAL_EDGE_EVENTS] attribute EventHandler onwebkitwillrevealleft;
-    [NotEnumerable, Conditional=WILL_REVEAL_EDGE_EVENTS] attribute EventHandler onwebkitwillrevealright;
-    [NotEnumerable, Conditional=WILL_REVEAL_EDGE_EVENTS] attribute EventHandler onwebkitwillrevealtop;
 };

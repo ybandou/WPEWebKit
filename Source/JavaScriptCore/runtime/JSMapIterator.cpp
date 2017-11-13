@@ -31,13 +31,13 @@
 
 namespace JSC {
 
-const ClassInfo JSMapIterator::s_info = { "Map Iterator", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSMapIterator) };
+const ClassInfo JSMapIterator::s_info = { "Map Iterator", nullptr, nullptr, nullptr, CREATE_METHOD_TABLE(JSMapIterator) };
 
 void JSMapIterator::finishCreation(VM& vm, JSMap* iteratedObject)
 {
     Base::finishCreation(vm);
     m_map.set(vm, this, iteratedObject);
-    setIterator(vm, m_map->impl()->head());
+    setIterator(vm, m_map->head());
 }
 
 void JSMapIterator::visitChildren(JSCell* cell, SlotVisitor& visitor)
@@ -56,14 +56,6 @@ JSValue JSMapIterator::createPair(CallFrame* callFrame, JSValue key, JSValue val
     args.append(value);
     JSGlobalObject* globalObject = callFrame->jsCallee()->globalObject();
     return constructArray(callFrame, 0, globalObject, args);
-}
-
-JSMapIterator* JSMapIterator::clone(ExecState* exec)
-{
-    VM& vm = exec->vm();
-    auto clone = JSMapIterator::create(vm, exec->jsCallee()->globalObject()->mapIteratorStructure(), m_map.get(), m_kind);
-    clone->setIterator(vm, m_iter.get());
-    return clone;
 }
 
 }

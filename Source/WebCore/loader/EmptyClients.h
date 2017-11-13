@@ -94,7 +94,6 @@ class EmptyChromeClient : public ChromeClient {
 
     bool selectItemWritingDirectionIsNatural() final { return false; }
     bool selectItemAlignmentFollowsMenuWritingDirection() final { return false; }
-    bool hasOpenedPopup() const final { return false; }
     RefPtr<PopupMenu> createPopupMenu(PopupMenuClient&) const final;
     RefPtr<SearchPopupMenu> createSearchPopupMenu(PopupMenuClient&) const final;
 
@@ -109,10 +108,7 @@ class EmptyChromeClient : public ChromeClient {
 
 #if USE(COORDINATED_GRAPHICS)
     void delegatedScrollRequested(const IntPoint&) final { }
-#endif
-
-#if !USE(REQUEST_ANIMATION_FRAME_TIMER)
-    void scheduleAnimation() final { }
+    void resetUpdateAtlasForTesting() final { }
 #endif
 
     IntPoint screenToRootView(const IntPoint& p) const final { return p; }
@@ -126,7 +122,6 @@ class EmptyChromeClient : public ChromeClient {
     PlatformPageClient platformPageClient() const final { return 0; }
     void contentsSizeChanged(Frame&, const IntSize&) const final { }
 
-    void scrollbarsModeDidChange() const final { }
     void mouseDidMoveOverElement(const HitTestResult&, unsigned) final { }
 
     void setToolTip(const String&, TextDirection) final { }

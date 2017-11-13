@@ -104,7 +104,7 @@ GetByIdStatus GetByIdStatus::computeFromLLInt(CodeBlock* profiledBlock, unsigned
     PropertyOffset offset = structure->getConcurrently(uid, attributes);
     if (!isValidOffset(offset))
         return GetByIdStatus(NoInformation, false);
-    if (attributes & CustomAccessor)
+    if (attributes & PropertyAttribute::CustomAccessor)
         return GetByIdStatus(NoInformation, false);
     
     return GetByIdStatus(Simple, false, GetByIdVariant(StructureSet(structure), offset));
@@ -195,7 +195,7 @@ GetByIdStatus GetByIdStatus::computeForStubInfoWithoutExitSiteFeedback(
         variant.m_offset = structure->getConcurrently(uid, attributes);
         if (!isValidOffset(variant.m_offset))
             return GetByIdStatus(slowPathState, true);
-        if (attributes & CustomAccessor)
+        if (attributes & PropertyAttribute::CustomAccessor)
             return GetByIdStatus(slowPathState, true);
         
         variant.m_structureSet.add(structure);
@@ -244,7 +244,8 @@ GetByIdStatus GetByIdStatus::computeForStubInfoWithoutExitSiteFeedback(
             case ComplexGetStatus::Inlineable: {
                 std::unique_ptr<CallLinkStatus> callLinkStatus;
                 JSFunction* intrinsicFunction = nullptr;
-                DOMJIT::GetterSetter* domJIT = nullptr;
+                PropertySlot::GetValueFunc customAccessorGetter = nullptr;
+                std::optional<DOMAttributeAnnotation> domAttribute;
 
                 switch (access.type()) {
                 case AccessCase::Load:
@@ -265,8 +266,9 @@ GetByIdStatus GetByIdStatus::computeForStubInfoWithoutExitSiteFeedback(
                     break;
                 }
                 case AccessCase::CustomAccessorGetter: {
-                    domJIT = access.as<GetterSetterAccessCase>().domJIT();
-                    if (!domJIT)
+                    customAccessorGetter = bitwise_cast<PropertySlot::GetValueFunc>(access.as<GetterSetterAccessCase>().customAccessor());
+                    domAttribute = access.as<GetterSetterAccessCase>().domAttribute();
+                    if (!domAttribute)
                         return GetByIdStatus(slowPathState, true);
                     result.m_state = Custom;
                     break;
@@ -282,12 +284,13 @@ GetByIdStatus GetByIdStatus::computeForStubInfoWithoutExitSiteFeedback(
                     StructureSet(structure), complexGetStatus.offset(),
                     complexGetStatus.conditionSet(), WTFMove(callLinkStatus),
                     intrinsicFunction,
-                    domJIT);
+                    customAccessorGetter,
+                    domAttribute);
 
                 if (!result.appendVariant(variant))
                     return GetByIdStatus(slowPathState, true);
 
-                if (domJIT) {
+                if (domAttribute) {
                     // Give up when cutom accesses are not merged into one.
                     if (result.numVariants() != 1)
                         return GetByIdStatus(slowPathState, true);
@@ -378,9 +381,9 @@ GetByIdStatus GetByIdStatus::computeFor(const StructureSet& set, UniquedStringIm
         PropertyOffset offset = structure->getConcurrently(uid, attributes);
         if (!isValidOffset(offset))
             return GetByIdStatus(TakesSlowPath); // It's probably a prototype lookup. Give up on life for now, even though we could totally be way smarter about it.
-        if (attributes & Accessor)
+        if (attributes & PropertyAttribute::Accessor)
             return GetByIdStatus(MakesCalls); // We could be smarter here, like strength-reducing this to a Call.
-        if (attributes & CustomAccessor)
+        if (attributes & PropertyAttribute::CustomAccessor)
             return GetByIdStatus(TakesSlowPath);
         
         if (!result.appendVariant(GetByIdVariant(structure, offset)))

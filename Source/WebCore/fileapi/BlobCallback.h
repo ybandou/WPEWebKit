@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include "ActiveDOMCallback.h"
+#include "CallbackResult.h"
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
 
@@ -33,10 +35,11 @@ namespace WebCore {
 class Blob;
 class ScriptExecutionContext;
 
-class BlobCallback : public RefCounted<BlobCallback> {
+class BlobCallback : public RefCounted<BlobCallback>, public ActiveDOMCallback {
 public:
-    virtual ~BlobCallback() { }
-    virtual bool handleEvent(Blob*) = 0;
+    using ActiveDOMCallback::ActiveDOMCallback;
+
+    virtual CallbackResult<void> handleEvent(Blob*) = 0;
 
     void scheduleCallback(ScriptExecutionContext&, RefPtr<Blob>&&);
 };

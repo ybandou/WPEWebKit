@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2010-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,14 +32,14 @@
 #import "LengthFunctions.h"
 #import "PlatformCAAnimationCocoa.h"
 #import "PlatformCAFilters.h"
-#import "QuartzCoreSPI.h"
 #import "ScrollbarThemeMac.h"
-#import "SoftLinking.h"
 #import "TileController.h"
 #import "TiledBacking.h"
 #import "WebActionDisablingCALayerDelegate.h"
 #import "WebCoreCALayerExtras.h"
 #import "WebGLLayer.h"
+#import <pal/spi/cocoa/QuartzCoreSPI.h>
+#import <wtf/SoftLinking.h>
 #if ENABLE(WEBGPU)
 #import "WebGPULayer.h"
 #endif
@@ -635,14 +635,21 @@ void PlatformCALayerCocoa::setUserInteractionEnabled(bool)
 {
 }
 
-void PlatformCALayerCocoa::setBackingStoreAttached(bool)
+void PlatformCALayerCocoa::setBackingStoreAttached(bool attached)
 {
-    // We could throw away backing store here with setContents:nil.
+    if (attached == m_backingStoreAttached)
+        return;
+    m_backingStoreAttached = attached;
+
+    if (attached)
+        setNeedsDisplay();
+    else
+        setContents(nullptr);
 }
 
 bool PlatformCALayerCocoa::backingStoreAttached() const
 {
-    return true;
+    return m_backingStoreAttached;
 }
 
 bool PlatformCALayerCocoa::geometryFlipped() const
@@ -1002,10 +1009,10 @@ void PlatformCALayerCocoa::updateCustomAppearance(GraphicsLayer::CustomAppearanc
 #endif
 }
 
-#if (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 90300) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200)
+#if PLATFORM(IOS) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200)
 static NSString *layerContentsFormat(bool acceleratesDrawing, bool wantsDeepColor, bool supportsSubpixelAntialiasedFonts)
 {
-#if PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 90300
+#if PLATFORM(IOS)
     if (wantsDeepColor)
         return kCAContentsFormatRGBA10XR;
 #else
@@ -1028,7 +1035,7 @@ void PlatformCALayerCocoa::updateContentsFormat()
 {
     if (m_layerType == LayerTypeWebLayer || m_layerType == LayerTypeTiledBackingTileLayer) {
         BEGIN_BLOCK_OBJC_EXCEPTIONS
-#if (PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 90300) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200)
+#if PLATFORM(IOS) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101200)
         if (NSString *formatString = layerContentsFormat(acceleratesDrawing(), wantsDeepColorBackingStore(), supportsSubpixelAntialiasedText()))
             [m_layer setContentsFormat:formatString];
 #endif
@@ -1112,12 +1119,15 @@ PlatformCALayer::RepaintRectList PlatformCALayer::collectRectsToPaint(CGContextR
     return dirtyRects;
 }
 
-void PlatformCALayer::drawLayerContents(CGContextRef context, WebCore::PlatformCALayer* platformCALayer, RepaintRectList& dirtyRects)
+void PlatformCALayer::drawLayerContents(CGContextRef context, WebCore::PlatformCALayer* platformCALayer, RepaintRectList& dirtyRects, GraphicsLayerPaintBehavior layerPaintBehavior)
 {
     WebCore::PlatformCALayerClient* layerContents = platformCALayer->owner();
     if (!layerContents)
         return;
-    
+
+    if (!layerContents->platformCALayerRepaintCount(platformCALayer))
+        layerPaintBehavior |= GraphicsLayerPaintFirstTilePaint;
+
 #if PLATFORM(IOS)
     WKSetCurrentGraphicsContext(context);
 #endif
@@ -1159,7 +1169,7 @@ void PlatformCALayer::drawLayerContents(CGContextRef context, WebCore::PlatformC
             GraphicsContextStateSaver stateSaver(graphicsContext);
             graphicsContext.clip(rect);
             
-            layerContents->platformCALayerPaintContents(platformCALayer, graphicsContext, rect);
+            layerContents->platformCALayerPaintContents(platformCALayer, graphicsContext, rect, layerPaintBehavior);
         }
         
 #if PLATFORM(IOS)
@@ -1197,12 +1207,26 @@ Ref<PlatformCALayer> PlatformCALayerCocoa::createCompatibleLayer(PlatformCALayer
 
 void PlatformCALayerCocoa::enumerateRectsBeingDrawn(CGContextRef context, void (^block)(CGRect))
 {
-    wkCALayerEnumerateRectsBeingDrawnWithBlock(m_layer.get(), context, block);
+    CGSRegionObj region = (CGSRegionObj)[m_layer regionBeingDrawn];
+    if (!region) {
+        block(CGContextGetClipBoundingBox(context));
+        return;
+    }
+
+    CGAffineTransform inverseTransform = CGAffineTransformInvert(CGContextGetCTM(context));
+    CGSRegionEnumeratorObj enumerator = CGSRegionEnumerator(region);
+    const CGRect* nextRect;
+    while ((nextRect = CGSNextRect(enumerator))) {
+        CGRect rectToDraw = CGRectApplyAffineTransform(*nextRect, inverseTransform);
+        block(rectToDraw);
+    }
+    
+    CGSReleaseRegionEnumerator(enumerator);
 }
 
 unsigned PlatformCALayerCocoa::backingStoreBytesPerPixel() const
 {
-#if PLATFORM(IOS) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 90300
+#if PLATFORM(IOS)
     if (wantsDeepColorBackingStore())
         return isOpaque() ? 4 : 5;
 #endif

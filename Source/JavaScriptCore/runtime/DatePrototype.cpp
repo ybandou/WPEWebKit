@@ -493,17 +493,17 @@ void DatePrototype::finishCreation(VM& vm, JSGlobalObject* globalObject)
 
     Identifier toUTCStringName = Identifier::fromString(&vm, ASCIILiteral("toUTCString"));
     JSFunction* toUTCStringFunction = JSFunction::create(vm, globalObject, 0, toUTCStringName.string(), dateProtoFuncToUTCString);
-    putDirectWithoutTransition(vm, toUTCStringName, toUTCStringFunction, DontEnum);
-    putDirectWithoutTransition(vm, Identifier::fromString(&vm, ASCIILiteral("toGMTString")), toUTCStringFunction, DontEnum);
+    putDirectWithoutTransition(vm, toUTCStringName, toUTCStringFunction, static_cast<unsigned>(PropertyAttribute::DontEnum));
+    putDirectWithoutTransition(vm, Identifier::fromString(&vm, ASCIILiteral("toGMTString")), toUTCStringFunction, static_cast<unsigned>(PropertyAttribute::DontEnum));
 
 #if ENABLE(INTL)
-    JSC_BUILTIN_FUNCTION_WITHOUT_TRANSITION("toLocaleString", datePrototypeToLocaleStringCodeGenerator, DontEnum);
-    JSC_BUILTIN_FUNCTION_WITHOUT_TRANSITION("toLocaleDateString", datePrototypeToLocaleDateStringCodeGenerator, DontEnum);
-    JSC_BUILTIN_FUNCTION_WITHOUT_TRANSITION("toLocaleTimeString", datePrototypeToLocaleTimeStringCodeGenerator, DontEnum);
+    JSC_BUILTIN_FUNCTION_WITHOUT_TRANSITION("toLocaleString", datePrototypeToLocaleStringCodeGenerator, static_cast<unsigned>(PropertyAttribute::DontEnum));
+    JSC_BUILTIN_FUNCTION_WITHOUT_TRANSITION("toLocaleDateString", datePrototypeToLocaleDateStringCodeGenerator, static_cast<unsigned>(PropertyAttribute::DontEnum));
+    JSC_BUILTIN_FUNCTION_WITHOUT_TRANSITION("toLocaleTimeString", datePrototypeToLocaleTimeStringCodeGenerator, static_cast<unsigned>(PropertyAttribute::DontEnum));
 #endif
 
     JSFunction* toPrimitiveFunction = JSFunction::create(vm, globalObject, 1, ASCIILiteral("[Symbol.toPrimitive]"), dateProtoFuncToPrimitiveSymbol, NoIntrinsic);
-    putDirectWithoutTransition(vm, vm.propertyNames->toPrimitiveSymbol, toPrimitiveFunction, DontEnum | ReadOnly);
+    putDirectWithoutTransition(vm, vm.propertyNames->toPrimitiveSymbol, toPrimitiveFunction, PropertyAttribute::DontEnum | PropertyAttribute::ReadOnly);
 
     // The constructor will be added later, after DateConstructor has been built.
 }
@@ -927,6 +927,7 @@ EncodedJSValue JSC_HOST_CALL dateProtoFuncSetTime(ExecState* exec)
     DateInstance* thisDateObj = asDateInstance(thisValue); 
 
     double milli = timeClip(exec->argument(0).toNumber(exec));
+    RETURN_IF_EXCEPTION(scope, encodedJSValue());
     JSValue result = jsNumber(milli);
     thisDateObj->setInternalValue(vm, result);
     return JSValue::encode(result);
@@ -960,7 +961,9 @@ static EncodedJSValue setNewValueFromTimeArgs(ExecState* exec, int numArgsToUse,
 
     GregorianDateTime gregorianDateTime;
     gregorianDateTime.copyFrom(*other);
-    if (!fillStructuresUsingTimeArgs(exec, numArgsToUse, &ms, &gregorianDateTime)) {
+    bool success = fillStructuresUsingTimeArgs(exec, numArgsToUse, &ms, &gregorianDateTime);
+    RETURN_IF_EXCEPTION(scope, encodedJSValue());
+    if (!success) {
         JSValue result = jsNaN();
         thisDateObj->setInternalValue(vm, result);
         return JSValue::encode(result);
@@ -1168,7 +1171,7 @@ EncodedJSValue JSC_HOST_CALL dateProtoFuncToJSON(ExecState* exec)
     if (callType == CallType::None)
         return throwVMTypeError(exec, scope, ASCIILiteral("toISOString is not a function"));
 
-    JSValue result = call(exec, asObject(toISOValue), callType, callData, object, exec->emptyList());
+    JSValue result = call(exec, asObject(toISOValue), callType, callData, object, *vm.emptyList);
     RETURN_IF_EXCEPTION(scope, encodedJSValue());
     if (result.isObject())
         return throwVMTypeError(exec, scope, ASCIILiteral("toISOString did not return a primitive value"));

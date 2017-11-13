@@ -74,6 +74,7 @@ struct FontDescriptionKey {
         : m_size(description.computedPixelSize())
         , m_fontSelectionRequest(description.fontSelectionRequest())
         , m_flags(makeFlagsKey(description))
+        , m_locale(description.locale())
         , m_featureSettings(description.featureSettings())
 #if ENABLE(VARIATION_FONTS)
         , m_variationSettings(description.variationSettings())
@@ -89,6 +90,7 @@ struct FontDescriptionKey {
         return m_size == other.m_size
             && m_fontSelectionRequest == other.m_fontSelectionRequest
             && m_flags == other.m_flags
+            && m_locale == other.m_locale
 #if ENABLE(VARIATION_FONTS)
             && m_variationSettings == other.m_variationSettings
 #endif
@@ -109,6 +111,7 @@ struct FontDescriptionKey {
         hasher.add(m_fontSelectionRequest.weight);
         hasher.add(m_fontSelectionRequest.width);
         hasher.add(m_fontSelectionRequest.slope);
+        hasher.add(m_locale.existingHash());
         for (unsigned flagItem : m_flags)
             hasher.add(flagItem);
         hasher.add(m_featureSettings.hash());
@@ -121,8 +124,8 @@ struct FontDescriptionKey {
 private:
     static std::array<unsigned, 2> makeFlagsKey(const FontDescription& description)
     {
-        static_assert(USCRIPT_CODE_LIMIT < 0x1000, "Script code must fit in an unsigned along with the other flags");
-        unsigned first = static_cast<unsigned>(description.script()) << 12
+        unsigned first = static_cast<unsigned>(description.script()) << 13
+            | static_cast<unsigned>(description.fontStyleAxis() == FontStyleAxis::slnt) << 12
             | static_cast<unsigned>(description.opticalSizing()) << 11
             | static_cast<unsigned>(description.textRenderingMode()) << 9
             | static_cast<unsigned>(description.fontSynthesis()) << 6
@@ -154,6 +157,7 @@ private:
     unsigned m_size { 0 };
     FontSelectionRequest m_fontSelectionRequest;
     std::array<unsigned, 2> m_flags {{ 0, 0 }};
+    AtomicString m_locale;
     FontFeatureSettings m_featureSettings;
 #if ENABLE(VARIATION_FONTS)
     FontVariationSettings m_variationSettings;
@@ -225,6 +229,9 @@ public:
 #endif
 
     std::unique_ptr<FontPlatformData> createFontPlatformDataForTesting(const FontDescription&, const AtomicString& family);
+    
+    bool shouldMockBoldSystemFontForAccessibility() const { return m_shouldMockBoldSystemFontForAccessibility; }
+    void setShouldMockBoldSystemFontForAccessibility(bool shouldMockBoldSystemFontForAccessibility) { m_shouldMockBoldSystemFontForAccessibility = shouldMockBoldSystemFontForAccessibility; }
 
 private:
     FontCache();
@@ -245,6 +252,8 @@ private:
     static const AtomicString& platformAlternateFamilyName(const AtomicString&);
 
     Timer m_purgeTimer;
+    
+    bool m_shouldMockBoldSystemFontForAccessibility { false };
 
 #if PLATFORM(COCOA)
     friend class ComplexTextController;
@@ -275,7 +284,7 @@ struct SynthesisPair {
     bool needsSyntheticOblique;
 };
 
-RetainPtr<CTFontRef> preparePlatformFont(CTFontRef, TextRenderingMode, const FontFeatureSettings* fontFaceFeatures, const FontVariantSettings* fontFaceVariantSettings, FontSelectionSpecifiedCapabilities fontFaceCapabilities, const FontFeatureSettings& features, const FontVariantSettings&, FontSelectionRequest, const FontVariationSettings&, FontOpticalSizing, float size);
+RetainPtr<CTFontRef> preparePlatformFont(CTFontRef, const FontDescription&, const FontFeatureSettings* fontFaceFeatures, const FontVariantSettings* fontFaceVariantSettings, FontSelectionSpecifiedCapabilities fontFaceCapabilities, float size, bool applyWeightWidthSlopeVariations = true);
 SynthesisPair computeNecessarySynthesis(CTFontRef, const FontDescription&, bool isPlatformFont = false);
 RetainPtr<CTFontRef> platformFontWithFamilySpecialCase(const AtomicString& family, FontSelectionRequest, float size);
 RetainPtr<CTFontRef> platformFontWithFamily(const AtomicString& family, FontSelectionRequest, TextRenderingMode, float size);

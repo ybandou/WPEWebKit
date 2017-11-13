@@ -46,20 +46,20 @@
 #include "HTMLNames.h"
 #include "IndentOutdentCommand.h"
 #include "InsertListCommand.h"
-#include "KillRing.h"
 #include "Page.h"
 #include "Pasteboard.h"
 #include "RenderBox.h"
 #include "ReplaceSelectionCommand.h"
 #include "Scrollbar.h"
 #include "Settings.h"
-#include "Sound.h"
 #include "StyleProperties.h"
 #include "TypingCommand.h"
 #include "UnlinkCommand.h"
 #include "UserGestureIndicator.h"
 #include "UserTypingGestureIndicator.h"
 #include "markup.h"
+#include <pal/system/Sound.h>
+#include <pal/text/KillRing.h>
 #include <wtf/text/AtomicString.h>
 
 namespace WebCore {
@@ -930,8 +930,7 @@ static bool executePrint(Frame& frame, Event*, EditorCommandSource, const String
     Page* page = frame.page();
     if (!page)
         return false;
-    page->chrome().print(frame);
-    return true;
+    return page->chrome().print(frame);
 }
 
 static bool executeRedo(Frame& frame, Event*, EditorCommandSource, const String&)
@@ -1002,7 +1001,7 @@ static bool executeSelectToMark(Frame& frame, Event*, EditorCommandSource, const
     RefPtr<Range> mark = frame.editor().mark().toNormalizedRange();
     RefPtr<Range> selection = frame.editor().selectedRange();
     if (!mark || !selection) {
-        systemBeep();
+        PAL::systemBeep();
         return false;
     }
     frame.selection().setSelectedRange(unionDOMRanges(*mark, *selection).get(), DOWNSTREAM, true);
@@ -1061,7 +1060,7 @@ static bool executeSwapWithMark(Frame& frame, Event*, EditorCommandSource, const
     const VisibleSelection& mark = frame.editor().mark();
     const VisibleSelection& selection = frame.selection().selection();
     if (mark.isNone() || selection.isNone()) {
-        systemBeep();
+        PAL::systemBeep();
         return false;
     }
     frame.selection().setSelection(mark);

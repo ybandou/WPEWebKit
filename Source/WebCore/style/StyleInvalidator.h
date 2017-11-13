@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include <wtf/text/AtomicStringImpl.h>
+#include <wtf/Forward.h>
 
 namespace WebCore {
 

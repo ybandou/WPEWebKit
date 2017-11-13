@@ -52,8 +52,8 @@ public:
     std::optional<Seconds> updateAnimations(SetChanged callSetChanged = DoNotCallSetChanged);
     void updateAnimationTimer(SetChanged callSetChanged = DoNotCallSetChanged);
 
-    CompositeAnimation& ensureCompositeAnimation(RenderElement&);
-    bool clear(RenderElement&);
+    CompositeAnimation& ensureCompositeAnimation(Element&);
+    bool clear(Element&);
 
     void updateStyleIfNeededDispatcherFired();
     void startUpdateStyleIfNeededDispatcher();
@@ -79,13 +79,13 @@ public:
     bool isRunningAnimationOnRenderer(RenderElement&, CSSPropertyID, AnimationBase::RunningState) const;
     bool isRunningAcceleratedAnimationOnRenderer(RenderElement&, CSSPropertyID, AnimationBase::RunningState) const;
 
-    bool pauseAnimationAtTime(RenderElement*, const AtomicString& name, double t);
-    bool pauseTransitionAtTime(RenderElement*, const String& property, double t);
+    bool pauseAnimationAtTime(Element&, const AtomicString& name, double t);
+    bool pauseTransitionAtTime(Element&, const String& property, double t);
     unsigned numberOfActiveAnimations(Document*) const;
 
-    std::unique_ptr<RenderStyle> getAnimatedStyleForRenderer(RenderElement&);
+    std::unique_ptr<RenderStyle> animatedStyleForElement(Element&);
 
-    bool computeExtentOfAnimation(RenderElement&, LayoutRect&) const;
+    bool computeExtentOfAnimation(Element&, LayoutRect&) const;
 
     double beginAnimationUpdateTime();
     
@@ -101,10 +101,12 @@ public:
 
     void animationWillBeRemoved(AnimationBase*);
 
-    void updateAnimationTimerForRenderer(RenderElement&);
+    void updateAnimationTimerForElement(Element&);
 
     bool allowsNewAnimationsWhileSuspended() const { return m_allowsNewAnimationsWhileSuspended; }
     void setAllowsNewAnimationsWhileSuspended(bool);
+
+    void setRequiresLayout() { m_requiresLayout = true; }
 
 #if ENABLE(CSS_ANIMATIONS_LEVEL_2)
     bool wantsScrollUpdates() const { return !m_animationsDependentOnScroll.isEmpty(); }
@@ -122,7 +124,7 @@ private:
     void fireEventsAndUpdateStyle();
     void startTimeResponse(double t);
 
-    HashMap<RenderElement*, RefPtr<CompositeAnimation>> m_compositeAnimations;
+    HashMap<Element*, RefPtr<CompositeAnimation>> m_compositeAnimations;
     Timer m_animationTimer;
     Timer m_updateStyleIfNeededDispatcher;
     Frame& m_frame;
@@ -147,6 +149,7 @@ private:
 
     bool m_waitingForAsyncStartNotification;
     bool m_isSuspended { false };
+    bool m_requiresLayout { false };
 
     // Used to flag whether we should revert to previous buggy
     // behavior of allowing new transitions and animations to

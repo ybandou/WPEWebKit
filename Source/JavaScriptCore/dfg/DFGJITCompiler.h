@@ -34,8 +34,6 @@
 #include "DFGInlineCacheWrapper.h"
 #include "DFGJITCode.h"
 #include "DFGOSRExitCompilationInfo.h"
-#include "DFGRegisterBank.h"
-#include "FPRInfo.h"
 #include "GPRInfo.h"
 #include "HandlerInfo.h"
 #include "JITCode.h"
@@ -43,7 +41,6 @@
 #include "LinkBuffer.h"
 #include "MacroAssembler.h"
 #include "PCToCodeOriginMap.h"
-#include "TempRegisterSet.h"
 
 namespace JSC {
 
@@ -259,6 +256,7 @@ public:
     }
 
     void noticeOSREntry(BasicBlock&, JITCompiler::Label blockHead, LinkBuffer&);
+    void noticeCatchEntrypoint(BasicBlock&, JITCompiler::Label blockHead, LinkBuffer&, Vector<FlushFormat>&& argumentFormats);
     
     RefPtr<JITCode> jitCode() { return m_jitCode; }
     
@@ -286,6 +284,8 @@ private:
     void disassemble(LinkBuffer&);
 
     void appendExceptionHandlingOSRExit(ExitKind, unsigned eventStreamIndex, CodeOrigin, HandlerInfo* exceptionHandler, CallSiteIndex, MacroAssembler::JumpList jumpsToFail = MacroAssembler::JumpList());
+
+    void makeCatchOSREntryBuffer();
 
     // The dataflow graph currently being generated.
     Graph& m_graph;

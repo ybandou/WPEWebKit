@@ -62,12 +62,17 @@ class AudioTrackPrivate;
 class VideoTrackPrivate;
 class AudioTrackPrivateMediaSourceAVFObjC;
 class VideoTrackPrivateMediaSourceAVFObjC;
+class WebCoreDecompressionSession;
 
 class SourceBufferPrivateAVFObjCErrorClient {
 public:
     virtual ~SourceBufferPrivateAVFObjCErrorClient() { }
     virtual void layerDidReceiveError(AVSampleBufferDisplayLayer *, NSError *, bool& shouldIgnore) = 0;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
     virtual void rendererDidReceiveError(AVSampleBufferAudioRenderer *, NSError *, bool& shouldIgnore) = 0;
+#pragma clang diagnostic pop
 };
 
 class SourceBufferPrivateAVFObjC final : public SourceBufferPrivate {
@@ -88,6 +93,7 @@ public:
     bool processCodedFrame(int trackID, CMSampleBufferRef, const String& mediaType);
 
     bool hasVideo() const;
+    bool hasSelectedVideo() const;
     bool hasAudio() const;
 
     void trackDidChangeEnabled(VideoTrackPrivateMediaSourceAVFObjC*);
@@ -107,7 +113,16 @@ public:
     void registerForErrorNotifications(SourceBufferPrivateAVFObjCErrorClient*);
     void unregisterForErrorNotifications(SourceBufferPrivateAVFObjCErrorClient*);
     void layerDidReceiveError(AVSampleBufferDisplayLayer *, NSError *);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
     void rendererDidReceiveError(AVSampleBufferAudioRenderer *, NSError *);
+#pragma clang diagnostic pop
+
+    void setVideoLayer(AVSampleBufferDisplayLayer*);
+    void setDecompressionSession(WebCoreDecompressionSession*);
+
+    void bufferWasConsumed();
 
 private:
     explicit SourceBufferPrivateAVFObjC(MediaSourcePrivateAVFObjC*);
@@ -131,10 +146,14 @@ private:
     void destroyParser();
     void destroyRenderers();
 
-    void flush(AVSampleBufferDisplayLayer *);
+    void flushVideo();
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
     void flush(AVSampleBufferAudioRenderer *);
+#pragma clang diagnostic pop
 
-    WeakPtr<SourceBufferPrivateAVFObjC> createWeakPtr() { return m_weakFactory.createWeakPtr(); }
+    WeakPtr<SourceBufferPrivateAVFObjC> createWeakPtr() { return m_weakFactory.createWeakPtr(*this); }
 
     Vector<RefPtr<VideoTrackPrivateMediaSourceAVFObjC>> m_videoTracks;
     Vector<RefPtr<AudioTrackPrivateMediaSourceAVFObjC>> m_audioTracks;
@@ -146,12 +165,17 @@ private:
     RetainPtr<AVStreamDataParser> m_parser;
     RetainPtr<AVAsset> m_asset;
     RetainPtr<AVSampleBufferDisplayLayer> m_displayLayer;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
     HashMap<int, RetainPtr<AVSampleBufferAudioRenderer>> m_audioRenderers;
+#pragma clang diagnostic pop
     RetainPtr<WebAVStreamDataParserListener> m_delegate;
     RetainPtr<WebAVSampleBufferErrorListener> m_errorListener;
     RetainPtr<NSError> m_hdcpError;
     OSObjectPtr<dispatch_semaphore_t> m_hasSessionSemaphore;
     OSObjectPtr<dispatch_group_t> m_isAppendingGroup;
+    RefPtr<WebCoreDecompressionSession> m_decompressionSession;
 
     MediaSourcePrivateAVFObjC* m_mediaSource;
     SourceBufferPrivateClient* m_client { nullptr };

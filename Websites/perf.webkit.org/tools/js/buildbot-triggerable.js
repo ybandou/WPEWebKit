@@ -16,13 +16,23 @@ class BuildbotTriggerable {
         assert(typeof(this._lookbackCount) == 'number' && this._lookbackCount > 0, 'lookbackCount must be a number greater than 0');
 
         this._remote = remote;
+        this._config = config;
+        this._buildbotRemote = buildbotRemote;
 
         this._slaveInfo = slaveInfo;
         assert(typeof(slaveInfo.name) == 'string', 'slave name must be specified');
         assert(typeof(slaveInfo.password) == 'string', 'slave password must be specified');
 
-        this._syncers = BuildbotSyncer._loadConfig(buildbotRemote, config);
+        this._syncers = null;
         this._logger = logger || {log: () => { }, error: () => { }};
+    }
+
+    initSyncers()
+    {
+        return new Promise((resolve, reject) => {
+            this._syncers = BuildbotSyncer._loadConfig(this._buildbotRemote, this._config);
+            setTimeout(resolve, 0);
+        });
     }
 
     name() { return this._name; }
@@ -74,7 +84,9 @@ class BuildbotTriggerable {
                 const nextRequest = this._nextRequestInGroup(group, updates);
                 if (!validRequests.has(nextRequest))
                     continue;
-                const promise = this._scheduleRequestIfSlaveIsAvailable(nextRequest, group.syncer, group.slaveName);
+                const promise = this._scheduleRequestIfSlaveIsAvailable(nextRequest, group.requests,
+                    nextRequest.isBuild() ? group.buildSyncer : group.testSyncer,
+                    nextRequest.isBuild() ? group.buildSlaveName : group.testSlaveName);
                 if (promise)
                     promistList.push(promise);
             }
@@ -97,9 +109,10 @@ class BuildbotTriggerable {
         const validatedRequests = new Set;
         for (let request of buildRequests) {
             if (!this._syncers.some((syncer) => syncer.matchesConfiguration(request))) {
-                const key = request.platform().id + '-' + request.test().id();
+                const key = request.platform().id + '-' + (request.isBuild() ? 'build' : request.test().id());
+                const kind = request.isBuild() ? 'Building' : `"${request.test().fullName()}"`;
                 if (!(key in testPlatformPairs))
-                    this._logger.error(`Build request ${request.id()} has no matching configuration: "${request.test().fullName()}" on "${request.platform().name()}".`);
+                    this._logger.error(`Build request ${request.id()} has no matching configuration: ${kind} on "${request.platform().name()}".`);
                 testPlatformPairs[key] = true;
                 continue;
             }
@@ -140,11 +153,18 @@ class BuildbotTriggerable {
                     associatedRequests.add(request);
 
                     const info = buildReqeustsByGroup.get(request.testGroupId());
-                    assert(!info.syncer || info.syncer == syncer);
-                    info.syncer = syncer;
-                    if (entry.slaveName()) {
-                        assert(!info.slaveName || info.slaveName == entry.slaveName());
-                        info.slaveName = entry.slaveName();
+                    if (request.isBuild()) {
+                        assert(!info.buildSyncer || info.buildSyncer == buildSyncer);
+                        if (entry.slaveName()) {
+                            assert(!info.buildSlaveName || info.buildSlaveName == entry.slaveName());
+                            info.buildSlaveName = entry.slaveName();
+                        }
+                    } else {
+                        assert(!info.testSyncer || info.testSyncer == testSyncer);
+                        if (entry.slaveName()) {
+                            assert(!info.testSlaveName || info.testSlaveName == entry.slaveName());
+                            info.testSlaveName = entry.slaveName();
+                        }
                     }
 
                     const newStatus = entry.buildRequestStatusIfUpdateIsNeeded(request);
@@ -175,32 +195,36 @@ class BuildbotTriggerable {
                 return null;
             if (request.isPending() && !(request.id() in pendingUpdates))
                 return request;
+            if (request.isBuild() && !request.hasCompleted())
+                return null; // A build request is still pending, scheduled, running, or failed.
         }
         return null;
     }
 
-    _scheduleRequestIfSlaveIsAvailable(nextRequest, syncer, slaveName)
+    _scheduleRequestIfSlaveIsAvailable(nextRequest, requestsInGroup, syncer, slaveName)
     {
         if (!nextRequest)
             return null;
 
-        if (!!nextRequest.order()) {
+        const isFirstRequest = nextRequest == requestsInGroup[0] || !nextRequest.order();
+        if (!isFirstRequest) {
             if (syncer)
-                return this._scheduleRequestWithLog(syncer, nextRequest, slaveName);
+                return this._scheduleRequestWithLog(syncer, nextRequest, requestsInGroup, slaveName);
             this._logger.error(`Could not identify the syncer for ${nextRequest.id()}.`);
         }
 
+        // Pick a new syncer for the first test.
         for (const syncer of this._syncers) {
-            const promise = this._scheduleRequestWithLog(syncer, nextRequest, null);
+            const promise = this._scheduleRequestWithLog(syncer, nextRequest, requestsInGroup, null);
             if (promise)
                 return promise;
         }
         return null;
     }
 
-    _scheduleRequestWithLog(syncer, request, slaveName)
+    _scheduleRequestWithLog(syncer, request, requestsInGroup, slaveName)
     {
-        const promise = syncer.scheduleRequestInGroupIfAvailable(request, slaveName);
+        const promise = syncer.scheduleRequestInGroupIfAvailable(request, requestsInGroup, slaveName);
         if (!promise)
             return promise;
         this._logger.log(`Scheduling build request ${request.id()}${slaveName ? ' on ' + slaveName : ''} in ${syncer.builderName()}`);

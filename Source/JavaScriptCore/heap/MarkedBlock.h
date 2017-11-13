@@ -23,19 +23,18 @@
 
 #include "AllocatorAttributes.h"
 #include "DestructionMode.h"
-#include "FreeList.h"
 #include "HeapCell.h"
 #include "IterationStatus.h"
 #include "WeakSet.h"
 #include <wtf/Atomics.h>
 #include <wtf/Bitmap.h>
-#include <wtf/DataLog.h>
-#include <wtf/DoublyLinkedList.h>
 #include <wtf/HashFunctions.h>
 #include <wtf/StdLibExtras.h>
 
 namespace JSC {
-    
+
+class AlignedMemoryAllocator;    
+class FreeList;
 class Heap;
 class JSCell;
 class MarkedAllocator;
@@ -112,26 +111,28 @@ public:
 
         MarkedAllocator* allocator() const;
         Subspace* subspace() const;
+        AlignedMemoryAllocator* alignedMemoryAllocator() const;
         Heap* heap() const;
         inline MarkedSpace* space() const;
         VM* vm() const;
         WeakSet& weakSet();
             
+        enum SweepMode { SweepOnly, SweepToFreeList };
+
         // Sweeping ensures that destructors get called and removes the block from the unswept
         // set. Sweeping to free list also removes the block from the empty set, if it was in that
         // set. Sweeping with SweepOnly may add this block to the empty set, if the block is found
-        // to be empty.
+        // to be empty. The free-list being null implies SweepOnly.
         //
         // Note that you need to make sure that the empty bit reflects reality. If it's not set
         // and the block is freshly created, then we'll make the mistake of running destructors in
         // the block. If it's not set and the block has nothing marked, then we'll make the
         // mistake of making a pop freelist rather than a bump freelist.
-        enum SweepMode { SweepOnly, SweepToFreeList };
-        FreeList sweep(SweepMode = SweepOnly);
+        void sweep(FreeList*);
         
         // This is to be called by Subspace.
         template<typename DestroyFunc>
-        FreeList finishSweepKnowingSubspace(SweepMode, const DestroyFunc&);
+        void finishSweepKnowingSubspace(FreeList*, const DestroyFunc&);
         
         void unsweepWithNoNewlyAllocated();
         
@@ -147,7 +148,7 @@ public:
         // of these functions:
         void didConsumeFreeList(); // Call this once you've allocated all the items in the free list.
         void stopAllocating(const FreeList&);
-        FreeList resumeAllocating(); // Call this if you canonicalized a block for some non-collection related purpose.
+        void resumeAllocating(FreeList&); // Call this if you canonicalized a block for some non-collection related purpose.
             
         size_t cellSize();
         inline unsigned cellsPerBlock();
@@ -165,6 +166,8 @@ public:
 
         bool isLive(const HeapCell*);
         bool isLiveCell(const void*);
+
+        bool isFreeListedCell(const void* target) const;
 
         bool isNewlyAllocated(const void*);
         void setNewlyAllocated(const void*);
@@ -198,7 +201,7 @@ public:
         void dumpState(PrintStream&);
         
     private:
-        Handle(Heap&, void*);
+        Handle(Heap&, AlignedMemoryAllocator*, void*);
         
         enum SweepDestructionMode { BlockHasNoDestructors, BlockHasDestructors, BlockHasDestructorsAndCollectorIsRunning };
         enum ScribbleMode { DontScribble, Scribble };
@@ -213,15 +216,12 @@ public:
         MarksMode marksMode();
         
         template<bool, EmptyMode, SweepMode, SweepDestructionMode, ScribbleMode, NewlyAllocatedMode, MarksMode, typename DestroyFunc>
-        FreeList specializedSweep(EmptyMode, SweepMode, SweepDestructionMode, ScribbleMode, NewlyAllocatedMode, MarksMode, const DestroyFunc&);
-        
-        template<typename Func>
-        void forEachFreeCell(const FreeList&, const Func&);
+        void specializedSweep(FreeList*, EmptyMode, SweepMode, SweepDestructionMode, ScribbleMode, NewlyAllocatedMode, MarksMode, const DestroyFunc&);
         
         void setIsFreeListed();
         
-        MarkedBlock::Handle* m_prev;
-        MarkedBlock::Handle* m_next;
+        MarkedBlock::Handle* m_prev { nullptr };
+        MarkedBlock::Handle* m_next { nullptr };
             
         size_t m_atomsPerCell { std::numeric_limits<size_t>::max() };
         size_t m_endAtom { std::numeric_limits<size_t>::max() }; // This is a fuzzy end. Always test for < m_endAtom.
@@ -230,7 +230,8 @@ public:
             
         AllocatorAttributes m_attributes;
         bool m_isFreeListed { false };
-            
+
+        AlignedMemoryAllocator* m_alignedMemoryAllocator { nullptr };
         MarkedAllocator* m_allocator { nullptr };
         size_t m_index { std::numeric_limits<size_t>::max() };
         WeakSet m_weakSet;
@@ -240,7 +241,7 @@ public:
         MarkedBlock* m_block { nullptr };
     };
         
-    static MarkedBlock::Handle* tryCreate(Heap&);
+    static MarkedBlock::Handle* tryCreate(Heap&, AlignedMemoryAllocator*);
         
     Handle& handle();
         
@@ -395,6 +396,11 @@ inline MarkedBlock* MarkedBlock::blockFor(const void* p)
 inline MarkedAllocator* MarkedBlock::Handle::allocator() const
 {
     return m_allocator;
+}
+
+inline AlignedMemoryAllocator* MarkedBlock::Handle::alignedMemoryAllocator() const
+{
+    return m_alignedMemoryAllocator;
 }
 
 inline Heap* MarkedBlock::Handle::heap() const

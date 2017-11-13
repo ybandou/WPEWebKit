@@ -149,6 +149,17 @@ void MediaElementSession::removeBehaviorRestriction(BehaviorRestrictions restric
     m_restrictions &= ~restriction;
 }
 
+#if PLATFORM(MAC)
+static bool needsArbitraryUserGestureAutoplayQuirk(const Document& document)
+{
+    if (!document.settings().needsSiteSpecificQuirks())
+        return false;
+
+    auto host = document.url().host();
+    return equalLettersIgnoringASCIICase(host, "washingtonpost.com") || host.endsWithIgnoringASCIICase(".washingtonpost.com");
+}
+#endif // PLATFORM(MAC)
+
 SuccessOr<MediaPlaybackDenialReason> MediaElementSession::playbackPermitted(const HTMLMediaElement& element) const
 {
     if (element.document().isMediaDocument() && !element.document().ownerElement())
@@ -158,7 +169,7 @@ SuccessOr<MediaPlaybackDenialReason> MediaElementSession::playbackPermitted(cons
         return { };
 
     if (requiresFullscreenForVideoPlayback(element) && !fullscreenPermitted(element)) {
-        LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of fullscreen restriction");
+        RELEASE_LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of fullscreen restriction");
         return MediaPlaybackDenialReason::FullscreenRequired;
     }
 
@@ -174,18 +185,28 @@ SuccessOr<MediaPlaybackDenialReason> MediaElementSession::playbackPermitted(cons
     }
 #endif
 
+#if PLATFORM(MAC)
+    // FIXME <https://webkit.org/b/175856>: Make this dependent on a runtime flag for desktop autoplay restrictions.
+    const auto& topDocument = element.document().topDocument();
+    if (topDocument.mediaState() & MediaProducer::HasUserInteractedWithMediaElement && topDocument.settings().needsSiteSpecificQuirks())
+        return { };
+
+    if (element.document().hasHadUserInteraction() && needsArbitraryUserGestureAutoplayQuirk(element.document()))
+        return { };
+#endif
+
     if (m_restrictions & RequireUserGestureForVideoRateChange && element.isVideo() && !element.document().processingUserGestureForMedia()) {
-        LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of video rate change restriction");
+        RELEASE_LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of video rate change restriction");
         return MediaPlaybackDenialReason::UserGestureRequired;
     }
 
     if (m_restrictions & RequireUserGestureForAudioRateChange && (!element.isVideo() || element.hasAudio()) && !element.muted() && element.volume() && !element.document().processingUserGestureForMedia()) {
-        LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of audio rate change restriction");
+        RELEASE_LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of audio rate change restriction");
         return MediaPlaybackDenialReason::UserGestureRequired;
     }
 
     if (m_restrictions & RequireUserGestureForVideoDueToLowPowerMode && element.isVideo() && !element.document().processingUserGestureForMedia()) {
-        LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of video low power mode restriction");
+        RELEASE_LOG(Media, "MediaElementSession::playbackPermitted - returning FALSE because of video low power mode restriction");
         return MediaPlaybackDenialReason::UserGestureRequired;
     }
 
@@ -276,7 +297,7 @@ bool MediaElementSession::canShowControlsManager(PlaybackControlsPurpose purpose
         return false;
     }
 
-    if (m_element.document().isMediaDocument()) {
+    if (m_element.document().isMediaDocument() && (m_element.document().frame() && m_element.document().frame()->isMainFrame())) {
         LOG(Media, "MediaElementSession::canShowControlsManager - returning TRUE: Is media document");
         return true;
     }
@@ -430,7 +451,7 @@ bool MediaElementSession::wirelessVideoPlaybackDisabled(const HTMLMediaElement& 
     }
 
 #if PLATFORM(IOS)
-    String legacyAirplayAttributeValue = element.attributeWithoutSynchronization(HTMLNames::webkitairplayAttr);
+    auto& legacyAirplayAttributeValue = element.attributeWithoutSynchronization(HTMLNames::webkitairplayAttr);
     if (equalLettersIgnoringASCIICase(legacyAirplayAttributeValue, "deny")) {
         LOG(Media, "MediaElementSession::wirelessVideoPlaybackDisabled - returning TRUE because of legacy attribute");
         return true;
@@ -561,6 +582,13 @@ bool MediaElementSession::requiresFullscreenForVideoPlayback(const HTMLMediaElem
     if (is<HTMLAudioElement>(element))
         return false;
 
+    if (element.document().isMediaDocument()) {
+        ASSERT(is<HTMLVideoElement>(element));
+        const HTMLVideoElement& videoElement = *downcast<const HTMLVideoElement>(&element);
+        if (element.readyState() < HTMLVideoElement::HAVE_METADATA || !videoElement.hasEverHadVideo())
+            return false;
+    }
+
     if (element.isTemporarilyAllowingInlinePlaybackAfterFullscreen())
         return false;
 
@@ -576,6 +604,10 @@ bool MediaElementSession::requiresFullscreenForVideoPlayback(const HTMLMediaElem
     if (dyld_get_program_sdk_version() < DYLD_IOS_VERSION_10_0)
         return !element.hasAttributeWithoutSynchronization(HTMLNames::webkit_playsinlineAttr);
 #endif
+
+    if (element.document().isMediaDocument() && element.document().ownerElement())
+        return false;
+
     return !element.hasAttributeWithoutSynchronization(HTMLNames::playsinlineAttr);
 }
 

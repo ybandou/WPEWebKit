@@ -3,3 +3,7 @@
 # See http://trac.webkit.org/wiki/TestExpectations for more information on this file.
 #
 
+fast/events/offsetX-offsetY.html [ Timeout ]
+
+# Untriage pasteboard test failures
+editing/pasteboard/

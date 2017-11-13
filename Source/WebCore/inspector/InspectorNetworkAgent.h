@@ -40,6 +40,7 @@
 
 namespace Inspector {
 class InspectorObject;
+class InjectedScriptManager;
 }
 
 namespace WebCore {
@@ -56,10 +57,9 @@ class ResourceLoader;
 class ResourceRequest;
 class ResourceResponse;
 class URL;
+class WebSocket;
 
-#if ENABLE(WEB_SOCKETS)
 struct WebSocketFrame;
-#endif
 
 typedef String ErrorString;
 
@@ -87,7 +87,6 @@ public:
     void didLoadXHRSynchronously();
     void didReceiveScriptResponse(unsigned long identifier);
     void willDestroyCachedResource(CachedResource&);
-#if ENABLE(WEB_SOCKETS)
     void didCreateWebSocket(unsigned long identifier, const URL& requestURL);
     void willSendWebSocketHandshakeRequest(unsigned long identifier, const ResourceRequest&);
     void didReceiveWebSocketHandshakeResponse(unsigned long identifier, const ResourceResponse&);
@@ -95,7 +94,6 @@ public:
     void didReceiveWebSocketFrame(unsigned long identifier, const WebSocketFrame&);
     void didSendWebSocketFrame(unsigned long identifier, const WebSocketFrame&);
     void didReceiveWebSocketFrameError(unsigned long identifier, const String&);
-#endif
     void mainFrameNavigated(DocumentLoader&);
     void setInitialScriptContent(unsigned long identifier, const String& sourceString);
     void didScheduleStyleRecalculation(Document&);
@@ -112,9 +110,12 @@ public:
     void getResponseBody(ErrorString&, const String& requestId, String* content, bool* base64Encoded) override;
     void setResourceCachingDisabled(ErrorString&, bool disabled) override;
     void loadResource(ErrorString&, const String& frameId, const String& url, Ref<LoadResourceCallback>&&) override;
+    void resolveWebSocket(ErrorString&, const String& requestId, const String* const objectGroup, RefPtr<Inspector::Protocol::Runtime::RemoteObject>&) override;
 
 private:
     void enable();
+
+    WebSocket* webSocketForRequestId(const String& requestId);
 
     Ref<Inspector::Protocol::Network::ResourceTiming> buildObjectForTiming(const NetworkLoadMetrics&, ResourceLoader&);
     Ref<Inspector::Protocol::Network::Metrics> buildObjectForMetrics(const NetworkLoadMetrics&);
@@ -125,6 +126,7 @@ private:
 
     std::unique_ptr<Inspector::NetworkFrontendDispatcher> m_frontendDispatcher;
     RefPtr<Inspector::NetworkBackendDispatcher> m_backendDispatcher;
+    Inspector::InjectedScriptManager& m_injectedScriptManager;
     InspectorPageAgent* m_pageAgent { nullptr };
 
     // FIXME: InspectorNetworkAgent should not be aware of style recalculation.

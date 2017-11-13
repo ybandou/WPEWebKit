@@ -589,7 +589,14 @@ void AccessibilityUIElement::setBoolAttributeValue(JSStringRef attribute, bool v
     [m_element _accessibilitySetTestValue:@(value) forAttribute:[NSString stringWithJSStringRef:attribute]];
     END_AX_OBJC_EXCEPTIONS
 }
-
+    
+void AccessibilityUIElement::setValue(JSStringRef value)
+{
+    BEGIN_AX_OBJC_EXCEPTIONS
+    [m_element accessibilitySetValue:[NSString stringWithJSStringRef:value] forAttribute:NSAccessibilityValueAttribute];
+    END_AX_OBJC_EXCEPTIONS
+}
+    
 bool AccessibilityUIElement::isAttributeSettable(JSStringRef attribute)
 {
     BEGIN_AX_OBJC_EXCEPTIONS
@@ -1408,7 +1415,7 @@ void AccessibilityUIElement::press()
 void AccessibilityUIElement::setSelectedChild(AccessibilityUIElement* element) const
 {
     BEGIN_AX_OBJC_EXCEPTIONS
-    NSArray* array = [NSArray arrayWithObject:element->platformUIElement()];
+    NSArray* array = element ? [NSArray arrayWithObject:element->platformUIElement()] : [NSArray array];
     [m_element accessibilitySetValue:array forAttribute:NSAccessibilitySelectedChildrenAttribute];
     END_AX_OBJC_EXCEPTIONS    
 }

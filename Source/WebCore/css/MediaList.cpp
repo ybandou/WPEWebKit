@@ -22,18 +22,14 @@
 #include "MediaList.h"
 
 #include "CSSImportRule.h"
-#include "CSSParser.h"
 #include "CSSStyleSheet.h"
 #include "DOMWindow.h"
 #include "Document.h"
-#include "ExceptionCode.h"
-#include "HTMLParserIdioms.h"
-#include "MediaFeatureNames.h"
 #include "MediaQuery.h"
 #include "MediaQueryParser.h"
-#include "ScriptableDocumentParser.h"
 #include <wtf/NeverDestroyed.h>
 #include <wtf/text/StringBuilder.h>
+#include <wtf/text/TextStream.h>
 
 namespace WebCore {
 
@@ -62,7 +58,7 @@ namespace WebCore {
  * document.styleSheets[0].media.mediaText = "screen and resolution > 40dpi" will be ok and
  * enabled, while
  * document.styleSheets[0].cssRules[0].media.mediaText = "screen and resolution > 40dpi" will
- * throw SYNTAX_ERR exception.
+ * throw SyntaxError exception.
  */
     
 Ref<MediaQuerySet> MediaQuerySet::create(const String& mediaString)
@@ -74,7 +70,6 @@ Ref<MediaQuerySet> MediaQuerySet::create(const String& mediaString)
 }
 
 MediaQuerySet::MediaQuerySet()
-    : m_lastLine(0)
 {
 }
 
@@ -209,7 +204,7 @@ ExceptionOr<void> MediaList::deleteMedium(const String& medium)
 
     bool success = m_mediaQueries->remove(medium);
     if (!success)
-        return Exception { NOT_FOUND_ERR };
+        return Exception { NotFoundError };
     if (m_parentStyleSheet)
         m_parentStyleSheet->didMutate();
     return { };
@@ -221,8 +216,8 @@ ExceptionOr<void> MediaList::appendMedium(const String& medium)
 
     bool success = m_mediaQueries->add(medium);
     if (!success) {
-        // FIXME: Should this really be INVALID_CHARACTER_ERR?
-        return Exception { INVALID_CHARACTER_ERR };
+        // FIXME: Should this really be InvalidCharacterError?
+        return Exception { InvalidCharacterError };
     }
     if (m_parentStyleSheet)
         m_parentStyleSheet->didMutate();
@@ -282,4 +277,17 @@ void reportMediaQueryWarningIfNeeded(Document* document, const MediaQuerySet* me
 
 #endif
 
+TextStream& operator<<(TextStream& ts, const MediaQuerySet& querySet)
+{
+    ts << querySet.mediaText();
+    return ts;
 }
+
+TextStream& operator<<(TextStream& ts, const MediaList& mediaList)
+{
+    ts << mediaList.mediaText();
+    return ts;
+}
+
+} // namespace WebCore
+

@@ -71,6 +71,10 @@ public:
 
     void notifyDownloadDone();
 
+    void didClearStatisticsThroughWebsiteDataRemoval();
+
+    void didRemoveAllSessionCredentials();
+    
 private:
     void dumpResults();
     static void dump(const char* textToStdout, const char* textToStderr = 0, bool seenError = false);

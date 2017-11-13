@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,7 +41,14 @@ class JSWebAssemblyMemory : public JSDestructibleObject {
 public:
     typedef JSDestructibleObject Base;
 
-    static JSWebAssemblyMemory* create(VM&, Structure*, Ref<Wasm::Memory>&&);
+    template<typename CellType>
+    static Subspace* subspaceFor(VM& vm)
+    {
+        // We hold onto a lot of memory, so it makes a lot of sense to be swept eagerly.
+        return &vm.eagerlySweptDestructibleObjectSpace;
+    }
+
+    static JSWebAssemblyMemory* create(ExecState*, VM&, Structure*, Ref<Wasm::Memory>&&);
     static Structure* createStructure(VM&, JSGlobalObject*, JSValue);
 
     DECLARE_EXPORT_INFO;

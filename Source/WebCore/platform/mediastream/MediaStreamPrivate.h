@@ -107,7 +107,7 @@ public:
 
     FloatSize intrinsicSize() const;
 
-    WeakPtr<MediaStreamPrivate> createWeakPtr() { return m_weakPtrFactory.createWeakPtr(); }
+    WeakPtr<MediaStreamPrivate> createWeakPtr() { return m_weakPtrFactory.createWeakPtr(*this); }
 
     void monitorOrientation(OrientationNotifier&);
 
@@ -125,6 +125,7 @@ private:
     MediaStreamPrivate(const MediaStreamTrackPrivateVector&, String&&);
 
     // MediaStreamTrackPrivate::Observer
+    void trackStarted(MediaStreamTrackPrivate&) override;
     void trackEnded(MediaStreamTrackPrivate&) override;
     void trackMutedChanged(MediaStreamTrackPrivate&) override;
     void trackSettingsChanged(MediaStreamTrackPrivate&) override;

@@ -28,22 +28,19 @@
 
 #include "CSSFontFaceSource.h"
 #include "CSSFontFaceSrcValue.h"
-#include "CSSFontFamily.h"
 #include "CSSFontFeatureValue.h"
 #include "CSSFontSelector.h"
 #include "CSSFontStyleRangeValue.h"
-#include "CSSFontStyleValue.h"
 #include "CSSPrimitiveValueMappings.h"
-#include "CSSSegmentedFontFace.h"
 #include "CSSUnicodeRangeValue.h"
 #include "CSSValue.h"
 #include "CSSValueList.h"
 #include "Document.h"
 #include "Font.h"
+#include "FontCache.h"
 #include "FontDescription.h"
 #include "FontFace.h"
 #include "FontVariantBuilder.h"
-#include "RuntimeEnabledFeatures.h"
 #include "Settings.h"
 #include "StyleBuilderConverter.h"
 #include "StyleProperties.h"
@@ -152,6 +149,9 @@ static FontSelectionRange calculateWeightRange(CSSValue& value)
 void CSSFontFace::setWeight(CSSValue& weight)
 {
     auto range = calculateWeightRange(weight);
+    if (m_fontSelectionCapabilities.weight == range)
+        return;
+
     setWeight(range);
 
     if (m_cssConnection)
@@ -187,6 +187,9 @@ static FontSelectionRange calculateStretchRange(CSSValue& value)
 void CSSFontFace::setStretch(CSSValue& style)
 {
     auto range = calculateStretchRange(style);
+    if (m_fontSelectionCapabilities.width == range)
+        return;
+
     setStretch(range);
 
     if (m_cssConnection)
@@ -232,6 +235,9 @@ static FontSelectionRange calculateItalicRange(CSSValue& value)
 void CSSFontFace::setStyle(CSSValue& style)
 {
     auto range = calculateItalicRange(style);
+    if (m_fontSelectionCapabilities.slope == range)
+        return;
+
     setStyle(range);
 
     if (m_cssConnection)
@@ -247,12 +253,17 @@ bool CSSFontFace::setUnicodeRange(CSSValue& unicodeRange)
     if (!is<CSSValueList>(unicodeRange))
         return false;
 
-    m_ranges.clear();
+    Vector<UnicodeRange> ranges;
     auto& list = downcast<CSSValueList>(unicodeRange);
     for (auto& rangeValue : list) {
         auto& range = downcast<CSSUnicodeRangeValue>(rangeValue.get());
-        m_ranges.append({ range.from(), range.to() });
+        ranges.append({ range.from(), range.to() });
     }
+
+    if (ranges == m_ranges)
+        return true;
+
+    m_ranges = WTFMove(ranges);
 
     if (m_cssConnection)
         m_cssConnection->mutableProperties().setProperty(CSSPropertyUnicodeRange, &unicodeRange);
@@ -267,6 +278,12 @@ bool CSSFontFace::setUnicodeRange(CSSValue& unicodeRange)
 bool CSSFontFace::setVariantLigatures(CSSValue& variantLigatures)
 {
     auto ligatures = extractFontVariantLigatures(variantLigatures);
+
+    if (m_variantSettings.commonLigatures == ligatures.commonLigatures
+        && m_variantSettings.discretionaryLigatures == ligatures.discretionaryLigatures
+        && m_variantSettings.historicalLigatures == ligatures.historicalLigatures
+        && m_variantSettings.contextualAlternates == ligatures.contextualAlternates)
+        return true;
 
     m_variantSettings.commonLigatures = ligatures.commonLigatures;
     m_variantSettings.discretionaryLigatures = ligatures.discretionaryLigatures;
@@ -288,7 +305,12 @@ bool CSSFontFace::setVariantPosition(CSSValue& variantPosition)
     if (!is<CSSPrimitiveValue>(variantPosition))
         return false;
 
-    m_variantSettings.position = downcast<CSSPrimitiveValue>(variantPosition);
+    FontVariantPosition position = downcast<CSSPrimitiveValue>(variantPosition);
+
+    if (m_variantSettings.position == position)
+        return true;
+
+    m_variantSettings.position = position;
 
     if (m_cssConnection)
         m_cssConnection->mutableProperties().setProperty(CSSPropertyFontVariantPosition, &variantPosition);
@@ -305,7 +327,12 @@ bool CSSFontFace::setVariantCaps(CSSValue& variantCaps)
     if (!is<CSSPrimitiveValue>(variantCaps))
         return false;
 
-    m_variantSettings.caps = downcast<CSSPrimitiveValue>(variantCaps);
+    FontVariantCaps caps = downcast<CSSPrimitiveValue>(variantCaps);
+
+    if (m_variantSettings.caps == caps)
+        return true;
+
+    m_variantSettings.caps = caps;
 
     if (m_cssConnection)
         m_cssConnection->mutableProperties().setProperty(CSSPropertyFontVariantCaps, &variantCaps);
@@ -320,6 +347,13 @@ bool CSSFontFace::setVariantCaps(CSSValue& variantCaps)
 bool CSSFontFace::setVariantNumeric(CSSValue& variantNumeric)
 {
     auto numeric = extractFontVariantNumeric(variantNumeric);
+
+    if (m_variantSettings.numericFigure == numeric.figure
+        && m_variantSettings.numericSpacing == numeric.spacing
+        && m_variantSettings.numericFraction == numeric.fraction
+        && m_variantSettings.numericOrdinal == numeric.ordinal
+        && m_variantSettings.numericSlashedZero == numeric.slashedZero)
+        return true;
 
     m_variantSettings.numericFigure = numeric.figure;
     m_variantSettings.numericSpacing = numeric.spacing;
@@ -342,7 +376,12 @@ bool CSSFontFace::setVariantAlternates(CSSValue& variantAlternates)
     if (!is<CSSPrimitiveValue>(variantAlternates))
         return false;
 
-    m_variantSettings.alternates = downcast<CSSPrimitiveValue>(variantAlternates);
+    FontVariantAlternates alternates = downcast<CSSPrimitiveValue>(variantAlternates);
+
+    if (m_variantSettings.alternates == alternates)
+        return true;
+
+    m_variantSettings.alternates = alternates;
 
     if (m_cssConnection)
         m_cssConnection->mutableProperties().setProperty(CSSPropertyFontVariantAlternates, &variantAlternates);
@@ -357,6 +396,11 @@ bool CSSFontFace::setVariantAlternates(CSSValue& variantAlternates)
 bool CSSFontFace::setVariantEastAsian(CSSValue& variantEastAsian)
 {
     auto eastAsian = extractFontVariantEastAsian(variantEastAsian);
+
+    if (m_variantSettings.eastAsianVariant == eastAsian.variant
+        && m_variantSettings.eastAsianWidth == eastAsian.width
+        && m_variantSettings.eastAsianRuby == eastAsian.ruby)
+        return true;
 
     m_variantSettings.eastAsianVariant = eastAsian.variant;
     m_variantSettings.eastAsianWidth = eastAsian.width;
@@ -394,6 +438,23 @@ void CSSFontFace::setFeatureSettings(CSSValue& featureSettings)
 
     if (m_cssConnection)
         m_cssConnection->mutableProperties().setProperty(CSSPropertyFontFeatureSettings, &featureSettings);
+
+    iterateClients(m_clients, [&](Client& client) {
+        client.fontPropertyChanged(*this);
+    });
+}
+
+void CSSFontFace::setLoadingBehavior(CSSValue& loadingBehaviorValue)
+{
+    auto loadingBehavior = static_cast<FontLoadingBehavior>(downcast<CSSPrimitiveValue>(loadingBehaviorValue).valueID());
+
+    if (m_loadingBehavior == loadingBehavior)
+        return;
+
+    m_loadingBehavior = loadingBehavior;
+
+    if (m_cssConnection)
+        m_cssConnection->mutableProperties().setProperty(CSSPropertyFontDisplay, &loadingBehaviorValue);
 
     iterateClients(m_clients, [&](Client& client) {
         client.fontPropertyChanged(*this);

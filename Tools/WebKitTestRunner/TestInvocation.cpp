@@ -506,6 +506,11 @@ void TestInvocation::didReceiveMessageFromInjectedBundle(WKStringRef messageName
         return;
     }
 
+    if (WKStringIsEqualToUTF8CString(messageName, "ResetUserMediaPermission")) {
+        TestController::singleton().resetUserMediaPermission();
+        return;
+    }
+
     if (WKStringIsEqualToUTF8CString(messageName, "SetUserMediaPersistentPermissionForOrigin")) {
         ASSERT(WKGetTypeID(messageBody) == WKDictionaryGetTypeID());
         WKDictionaryRef messageBodyDictionary = static_cast<WKDictionaryRef>(messageBody);
@@ -666,6 +671,13 @@ void TestInvocation::didReceiveMessageFromInjectedBundle(WKStringRef messageName
         ASSERT(WKGetTypeID(messageBody) == WKBooleanGetTypeID());
         WKBooleanRef value = static_cast<WKBooleanRef>(messageBody);
         TestController::singleton().setShouldLogCanAuthenticateAgainstProtectionSpace(WKBooleanGetValue(value));
+        return;
+    }
+
+    if (WKStringIsEqualToUTF8CString(messageName, "SetShouldLogDownloadCallbacks")) {
+        ASSERT(WKGetTypeID(messageBody) == WKBooleanGetTypeID());
+        WKBooleanRef value = static_cast<WKBooleanRef>(messageBody);
+        TestController::singleton().setShouldLogDownloadCallbacks(WKBooleanGetValue(value));
         return;
     }
 
@@ -907,6 +919,21 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         return result;
     }
 
+    if (WKStringIsEqualToUTF8CString(messageName, "SetStatisticsLastSeen")) {
+        ASSERT(WKGetTypeID(messageBody) == WKDictionaryGetTypeID());
+        
+        WKDictionaryRef messageBodyDictionary = static_cast<WKDictionaryRef>(messageBody);
+        WKRetainPtr<WKStringRef> hostNameKey(AdoptWK, WKStringCreateWithUTF8CString("HostName"));
+        WKRetainPtr<WKStringRef> valueKey(AdoptWK, WKStringCreateWithUTF8CString("Value"));
+        
+        WKStringRef hostName = static_cast<WKStringRef>(WKDictionaryGetItemForKey(messageBodyDictionary, hostNameKey.get()));
+        WKDoubleRef value = static_cast<WKDoubleRef>(WKDictionaryGetItemForKey(messageBodyDictionary, valueKey.get()));
+        
+        TestController::singleton().setStatisticsLastSeen(hostName, WKDoubleGetValue(value));
+        
+        return nullptr;
+    }
+    
     if (WKStringIsEqualToUTF8CString(messageName, "SetStatisticsPrevalentResource")) {
         ASSERT(WKGetTypeID(messageBody) == WKDictionaryGetTypeID());
 
@@ -950,6 +977,29 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         WKStringRef hostName = static_cast<WKStringRef>(messageBody);
         bool hasHadUserInteraction = TestController::singleton().isStatisticsHasHadUserInteraction(hostName);
         WKRetainPtr<WKTypeRef> result(AdoptWK, WKBooleanCreate(hasHadUserInteraction));
+        return result;
+    }
+    
+    if (WKStringIsEqualToUTF8CString(messageName, "SetStatisticsGrandfathered")) {
+        ASSERT(WKGetTypeID(messageBody) == WKDictionaryGetTypeID());
+        
+        WKDictionaryRef messageBodyDictionary = static_cast<WKDictionaryRef>(messageBody);
+        WKRetainPtr<WKStringRef> hostNameKey(AdoptWK, WKStringCreateWithUTF8CString("HostName"));
+        WKRetainPtr<WKStringRef> valueKey(AdoptWK, WKStringCreateWithUTF8CString("Value"));
+        
+        WKStringRef hostName = static_cast<WKStringRef>(WKDictionaryGetItemForKey(messageBodyDictionary, hostNameKey.get()));
+        WKBooleanRef value = static_cast<WKBooleanRef>(WKDictionaryGetItemForKey(messageBodyDictionary, valueKey.get()));
+        
+        TestController::singleton().setStatisticsGrandfathered(hostName, WKBooleanGetValue(value));
+        return nullptr;
+    }
+    
+    if (WKStringIsEqualToUTF8CString(messageName, "IsStatisticsGrandfathered")) {
+        ASSERT(WKGetTypeID(messageBody) == WKStringGetTypeID());
+        
+        WKStringRef hostName = static_cast<WKStringRef>(messageBody);
+        bool isGrandfathered = TestController::singleton().isStatisticsGrandfathered(hostName);
+        WKRetainPtr<WKTypeRef> result(AdoptWK, WKBooleanCreate(isGrandfathered));
         return result;
     }
     
@@ -1009,17 +1059,17 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         return nullptr;
     }
 
-    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsFireDataModificationHandler")) {
-        TestController::singleton().statisticsFireDataModificationHandler();
+    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsProcessStatisticsAndDataRecords")) {
+        TestController::singleton().statisticsProcessStatisticsAndDataRecords();
         return nullptr;
     }
     
-    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsFireShouldPartitionCookiesHandler")) {
-        TestController::singleton().statisticsFireShouldPartitionCookiesHandler();
+    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsUpdateCookiePartitioning")) {
+        TestController::singleton().statisticsUpdateCookiePartitioning();
         return nullptr;
     }
 
-    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsFireShouldPartitionCookiesHandlerForOneDomain")) {
+    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsSetShouldPartitionCookiesForHost")) {
         ASSERT(WKGetTypeID(messageBody) == WKDictionaryGetTypeID());
         
         WKDictionaryRef messageBodyDictionary = static_cast<WKDictionaryRef>(messageBody);
@@ -1029,7 +1079,12 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         WKStringRef hostName = static_cast<WKStringRef>(WKDictionaryGetItemForKey(messageBodyDictionary, hostNameKey.get()));
         WKBooleanRef value = static_cast<WKBooleanRef>(WKDictionaryGetItemForKey(messageBodyDictionary, valueKey.get()));
         
-        TestController::singleton().statisticsFireShouldPartitionCookiesHandlerForOneDomain(hostName, WKBooleanGetValue(value));
+        TestController::singleton().statisticsSetShouldPartitionCookiesForHost(hostName, WKBooleanGetValue(value));
+        return nullptr;
+    }
+    
+    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsSubmitTelemetry")) {
+        TestController::singleton().statisticsSubmitTelemetry();
         return nullptr;
     }
     
@@ -1040,6 +1095,13 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         return nullptr;
     }
 
+    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsNotifyPagesWhenTelemetryWasCaptured")) {
+        ASSERT(WKGetTypeID(messageBody) == WKBooleanGetTypeID());
+        WKBooleanRef value = static_cast<WKBooleanRef>(messageBody);
+        TestController::singleton().setStatisticsNotifyPagesWhenTelemetryWasCaptured(WKBooleanGetValue(value));
+        return nullptr;
+    }
+    
     if (WKStringIsEqualToUTF8CString(messageName, "StatisticsShouldClassifyResourcesBeforeDataRecordsRemoval")) {
         ASSERT(WKGetTypeID(messageBody) == WKBooleanGetTypeID());
         WKBooleanRef value = static_cast<WKBooleanRef>(messageBody);
@@ -1047,10 +1109,31 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         return nullptr;
     }
 
-    if (WKStringIsEqualToUTF8CString(messageName, "SetStatisticsMinimumTimeBetweeenDataRecordsRemoval")) {
+    if (WKStringIsEqualToUTF8CString(messageName, "SetStatisticsMinimumTimeBetweenDataRecordsRemoval")) {
         ASSERT(WKGetTypeID(messageBody) == WKDoubleGetTypeID());
         WKDoubleRef seconds = static_cast<WKDoubleRef>(messageBody);
-        TestController::singleton().setStatisticsMinimumTimeBetweeenDataRecordsRemoval(WKDoubleGetValue(seconds));
+        TestController::singleton().setStatisticsMinimumTimeBetweenDataRecordsRemoval(WKDoubleGetValue(seconds));
+        return nullptr;
+    }
+    
+    if (WKStringIsEqualToUTF8CString(messageName, "SetStatisticsGrandfatheringTime")) {
+        ASSERT(WKGetTypeID(messageBody) == WKDoubleGetTypeID());
+        WKDoubleRef seconds = static_cast<WKDoubleRef>(messageBody);
+        TestController::singleton().setStatisticsGrandfatheringTime(WKDoubleGetValue(seconds));
+        return nullptr;
+    }
+    
+    if (WKStringIsEqualToUTF8CString(messageName, "SetMaxStatisticsEntries")) {
+        ASSERT(WKGetTypeID(messageBody) == WKUInt64GetTypeID());
+        WKUInt64Ref entries = static_cast<WKUInt64Ref>(messageBody);
+        TestController::singleton().setStatisticsMaxStatisticsEntries(WKUInt64GetValue(entries));
+        return nullptr;
+    }
+    
+    if (WKStringIsEqualToUTF8CString(messageName, "SetPruneEntriesDownTo")) {
+        ASSERT(WKGetTypeID(messageBody) == WKUInt64GetTypeID());
+        WKUInt64Ref entries = static_cast<WKUInt64Ref>(messageBody);
+        TestController::singleton().setStatisticsPruneEntriesDownTo(WKUInt64GetValue(entries));
         return nullptr;
     }
     
@@ -1066,8 +1149,18 @@ WKRetainPtr<WKTypeRef> TestInvocation::didReceiveSynchronousMessageFromInjectedB
         return nullptr;
     }
     
+    if (WKStringIsEqualToUTF8CString(messageName, "StatisticsClearThroughWebsiteDataRemoval")) {
+        TestController::singleton().statisticsClearThroughWebsiteDataRemoval();
+        return nullptr;
+    }
+    
     if (WKStringIsEqualToUTF8CString(messageName, "StatisticsResetToConsistentState")) {
         TestController::singleton().statisticsResetToConsistentState();
+        return nullptr;
+    }
+
+    if (WKStringIsEqualToUTF8CString(messageName, "RemoveAllSessionCredentials")) {
+        TestController::singleton().removeAllSessionCredentials();
         return nullptr;
     }
 
@@ -1142,6 +1235,18 @@ void TestInvocation::didRemoveSwipeSnapshot()
 void TestInvocation::notifyDownloadDone()
 {
     WKRetainPtr<WKStringRef> messageName = adoptWK(WKStringCreateWithUTF8CString("NotifyDownloadDone"));
+    WKPagePostMessageToInjectedBundle(TestController::singleton().mainWebView()->page(), messageName.get(), 0);
+}
+
+void TestInvocation::didClearStatisticsThroughWebsiteDataRemoval()
+{
+    WKRetainPtr<WKStringRef> messageName = adoptWK(WKStringCreateWithUTF8CString("CallDidClearStatisticsThroughWebsiteDataRemoval"));
+    WKPagePostMessageToInjectedBundle(TestController::singleton().mainWebView()->page(), messageName.get(), 0);
+}
+
+void TestInvocation::didRemoveAllSessionCredentials()
+{
+    WKRetainPtr<WKStringRef> messageName = adoptWK(WKStringCreateWithUTF8CString("CallDidRemoveAllSessionCredentialsCallback"));
     WKPagePostMessageToInjectedBundle(TestController::singleton().mainWebView()->page(), messageName.get(), 0);
 }
 

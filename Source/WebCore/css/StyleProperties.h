@@ -26,7 +26,7 @@
 #include "CSSProperty.h"
 #include "CSSValueKeywords.h"
 #include <memory>
-#include <wtf/ListHashSet.h>
+#include <wtf/Function.h>
 #include <wtf/TypeCasts.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
@@ -36,6 +36,7 @@ namespace WebCore {
 class CSSDeferredParser;
 class CSSStyleDeclaration;
 class CachedResource;
+class Color;
 class ImmutableStyleProperties;
 class URL;
 class MutableStyleProperties;
@@ -112,6 +113,10 @@ public:
 
     WEBCORE_EXPORT RefPtr<CSSValue> getPropertyCSSValue(CSSPropertyID) const;
     WEBCORE_EXPORT String getPropertyValue(CSSPropertyID) const;
+
+    WEBCORE_EXPORT std::optional<Color> propertyAsColor(CSSPropertyID) const;
+    WEBCORE_EXPORT CSSValueID propertyAsValueID(CSSPropertyID) const;
+
     bool propertyIsImportant(CSSPropertyID) const;
     String getPropertyShorthand(CSSPropertyID) const;
     bool isPropertyImplicit(CSSPropertyID) const;
@@ -132,7 +137,7 @@ public:
     bool hasCSSOMWrapper() const;
     bool isMutable() const { return type() == MutablePropertiesType; }
 
-    bool traverseSubresources(const std::function<bool (const CachedResource&)>& handler) const;
+    bool traverseSubresources(const WTF::Function<bool (const CachedResource&)>& handler) const;
 
     static unsigned averageSizeInBytes();
 

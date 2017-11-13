@@ -327,15 +327,11 @@ void ApplicationCacheHost::stopDeferringEvents()
 
 Vector<ApplicationCacheHost::ResourceInfo> ApplicationCacheHost::resourceList()
 {
-    Vector<ResourceInfo> result;
-
     auto* cache = applicationCache();
     if (!cache || !cache->isComplete())
-        return result;
+        return { };
 
-    result.reserveInitialCapacity(cache->resources().size());
-
-    for (auto& urlAndResource : cache->resources()) {
+    return WTF::map(cache->resources(), [] (auto& urlAndResource) -> ApplicationCacheHost::ResourceInfo {
         ASSERT(urlAndResource.value);
         auto& resource = *urlAndResource.value;
 
@@ -346,10 +342,8 @@ Vector<ApplicationCacheHost::ResourceInfo> ApplicationCacheHost::resourceList()
         bool isForeign = type & ApplicationCacheResource::Foreign;
         bool isFallback = type & ApplicationCacheResource::Fallback;
 
-        result.uncheckedAppend({ resource.url(), isMaster, isManifest, isFallback, isForeign, isExplicit, resource.estimatedSizeInStorage() });
-    }
-
-    return result;
+        return { resource.url(), isMaster, isManifest, isFallback, isForeign, isExplicit, resource.estimatedSizeInStorage() };
+    });
 }
 
 ApplicationCacheHost::CacheInfo ApplicationCacheHost::applicationCacheInfo()
@@ -508,7 +502,7 @@ bool ApplicationCacheHost::swapCache()
         return true;
     }
 
-    // If there is no newer cache, raise an INVALID_STATE_ERR exception.
+    // If there is no newer cache, raise an InvalidStateError exception.
     auto* newestCache = cache->group()->newestCache();
     if (cache == newestCache)
         return false;

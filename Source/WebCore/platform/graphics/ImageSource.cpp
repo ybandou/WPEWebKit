@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2010, 2011, 2012, 2014, 2016 Apple Inc.  All rights reserved.
+ * Copyright (C) 2006-2017 Apple Inc. All rights reserved.
  * Copyright (C) 2007 Alp Toker <alp.toker@collabora.co.uk>
  * Copyright (C) 2008, Google Inc. All rights reserved.
  * Copyright (C) 2007-2009 Torch Mobile, Inc
@@ -70,19 +70,12 @@ void ImageSource::clearFrameBufferCache(size_t clearBeforeFrame)
     m_decoder->clearFrameBufferCache(clearBeforeFrame);
 }
 
-void ImageSource::clear(SharedBuffer* data)
-{
-    m_decoder = nullptr;
-    m_frameCache->setDecoder(nullptr);
-    setData(data, isAllDataReceived());
-}
-
 bool ImageSource::ensureDecoderAvailable(SharedBuffer* data)
 {
     if (!data || isDecoderAvailable())
         return true;
 
-    m_decoder = ImageDecoder::create(*data, m_frameCache->sourceURL(), m_alphaOption, m_gammaAndColorProfileOption);
+    m_decoder = ImageDecoder::create(*data, m_frameCache->mimeType(), m_alphaOption, m_gammaAndColorProfileOption);
     if (!isDecoderAvailable())
         return false;
 
@@ -109,6 +102,13 @@ void ImageSource::setData(SharedBuffer* data, bool allDataReceived)
         return;
 
     m_decoder->setData(*data, allDataReceived);
+}
+
+void ImageSource::resetData(SharedBuffer* data)
+{
+    m_decoder = nullptr;
+    m_frameCache->setDecoder(nullptr);
+    setData(data, isAllDataReceived());
 }
 
 EncodedDataStatus ImageSource::dataChanged(SharedBuffer* data, bool allDataReceived)
@@ -149,8 +149,10 @@ bool ImageSource::isAllDataReceived()
     return isDecoderAvailable() ? m_decoder->isAllDataReceived() : m_frameCache->frameCount();
 }
 
-bool ImageSource::shouldUseAsyncDecoding()
+bool ImageSource::canUseAsyncDecoding()
 {
+    if (!isDecoderAvailable())
+        return false;
     // FIXME: figure out the best heuristic for enabling async image decoding.
     return size().area() * sizeof(RGBA32) >= (frameCount() > 1 ? 100 * KB : 500 * KB);
 }
@@ -182,7 +184,7 @@ SubsamplingLevel ImageSource::subsamplingLevelForScaleFactor(GraphicsContext& co
 {
 #if USE(CG)
     // Never use subsampled images for drawing into PDF contexts.
-    if (wkCGContextIsPDFContext(context.platformContext()))
+    if (CGContextGetType(context.platformContext()) == kCGContextTypePDF)
         return SubsamplingLevel::Default;
 
     float scale = std::min(float(1), std::max(scaleFactor.width(), scaleFactor.height()));

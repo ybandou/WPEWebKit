@@ -1792,12 +1792,23 @@ class CppStyleTest(CppStyleTestBase):
             'int foo() override {',
             'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
         self.assert_multi_line_lint(
+            'int foo() const final {',
+            'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
+        self.assert_multi_line_lint(
+            'int foo() final {',
+            'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
+        self.assert_multi_line_lint(
             'int foo() const\n'
             '{\n'
             '}\n',
             '')
         self.assert_multi_line_lint(
             'int foo() override\n'
+            '{\n'
+            '}\n',
+            '')
+        self.assert_multi_line_lint(
+            'int foo() final\n'
             '{\n'
             '}\n',
             '')
@@ -1818,6 +1829,11 @@ class CppStyleTest(CppStyleTestBase):
             '')
         self.assert_multi_line_lint(
             'int foo() const override\n'
+            '{\n'
+            '}\n',
+            '')
+        self.assert_multi_line_lint(
+            'int foo() const final\n'
             '{\n'
             '}\n',
             '')
@@ -2017,6 +2033,8 @@ class CppStyleTest(CppStyleTestBase):
         self.assert_multi_line_lint('#include <sys/io.h>\n', '')
         self.assert_multi_line_lint('#import <foo/bar.h>\n', '')
         self.assert_multi_line_lint('#if __has_include(<ApplicationServices/ApplicationServicesPriv.h>)\n', '')
+        self.assert_multi_line_lint('#elif __has_include(<ApplicationServices/ApplicationServicesPriv.h>)\n', '')
+        self.assert_multi_line_lint('#endif // __has_include(<ApplicationServices/ApplicationServicesPriv.h>)\n', '')
         self.assert_lint('Foo&& a = bar();', '')
 
     def test_operator_methods(self):
@@ -2916,7 +2934,7 @@ class OrderOfIncludesTest(CppStyleTestBase):
         self.assert_language_rules_check('FooSoftLink.cpp',
                                          '#include "config.h"\n'
                                          '\n'
-                                         '#include "SoftLinking.h"\n',
+                                         '#include <wtf/SoftLinking.h>\n',
                                          '')
         # Having include for existing primary header -> no error.
         self.assert_language_rules_check('foo.cpp',
@@ -4476,6 +4494,18 @@ class WebKitStyleTest(CppStyleTestBase):
             '}\n',
             'This { should be at the end of the previous line  [whitespace/braces] [4]')
         self.assert_multi_line_lint(
+            'typedef CF_OPTIONS(NSInteger, type)\n'
+            '{\n'
+            '    0,\n'
+            '    1\n'
+            '};',
+            'This { should be at the end of the previous line  [whitespace/braces] [4]')
+        self.assert_multi_line_lint(
+            'typedef CF_OPTIONS(NSInteger, type) {\n'
+            '    0,\n'
+            '    1\n'
+            '};', '')
+        self.assert_multi_line_lint(
             'typedef NS_ENUM(NSInteger, type)\n'
             '{\n'
             '    0,\n'
@@ -4484,6 +4514,30 @@ class WebKitStyleTest(CppStyleTestBase):
             'This { should be at the end of the previous line  [whitespace/braces] [4]')
         self.assert_multi_line_lint(
             'typedef NS_ENUM(NSInteger, type) {\n'
+            '    0,\n'
+            '    1\n'
+            '};', '')
+        self.assert_multi_line_lint(
+            'typedef NS_ERROR_ENUM(NSInteger, type)\n'
+            '{\n'
+            '    0,\n'
+            '    1\n'
+            '};',
+            'This { should be at the end of the previous line  [whitespace/braces] [4]')
+        self.assert_multi_line_lint(
+            'typedef NS_ERROR_ENUM(NSInteger, type) {\n'
+            '    0,\n'
+            '    1\n'
+            '};', '')
+        self.assert_multi_line_lint(
+            'typedef NS_OPTIONS(NSInteger, type)\n'
+            '{\n'
+            '    0,\n'
+            '    1\n'
+            '};',
+            'This { should be at the end of the previous line  [whitespace/braces] [4]')
+        self.assert_multi_line_lint(
+            'typedef NS_OPTIONS(NSInteger, type) {\n'
             '    0,\n'
             '    1\n'
             '};', '')

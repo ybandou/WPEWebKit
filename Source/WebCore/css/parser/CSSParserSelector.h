@@ -22,7 +22,6 @@
 
 #include "CSSSelector.h"
 #include "CSSValueKeywords.h"
-#include "CSSValueList.h"
 #include <wtf/text/AtomicString.h>
 #include <wtf/text/AtomicStringHash.h>
 #include <wtf/text/WTFString.h>
@@ -35,9 +34,6 @@ class QualifiedName;
 enum class CSSParserSelectorCombinator {
     Child,
     DescendantSpace,
-#if ENABLE(CSS_SELECTORS_LEVEL4)
-    DescendantDoubleChild,
-#endif
     DirectAdjacent,
     IndirectAdjacent
 };

@@ -46,7 +46,6 @@ public:
     static String deniedByClientKey();
     static String deviceMotionKey();
     static String deviceOrientationKey();
-    static String deviceProximityKey();
     static String diskCacheKey();
     static String diskCacheAfterValidationKey();
     static String documentLoaderStoppingKey();
@@ -171,6 +170,8 @@ public:
     WEBCORE_EXPORT static String memoryUsageToDiagnosticLoggingKey(uint64_t memoryUsage);
     WEBCORE_EXPORT static String foregroundCPUUsageToDiagnosticLoggingKey(double cpuUsage);
     WEBCORE_EXPORT static String backgroundCPUUsageToDiagnosticLoggingKey(double cpuUsage);
+    
+    WEBCORE_EXPORT static String resourceLoadStatisticsTelemetryKey();
 };
 
 } // namespace WebCore

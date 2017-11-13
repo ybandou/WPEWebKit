@@ -24,8 +24,6 @@
 #import "FontCascade.h"
 
 #import "ComplexTextController.h"
-#import "CoreGraphicsSPI.h"
-#import "CoreTextSPI.h"
 #import "DashArray.h"
 #import "Font.h"
 #import "GlyphBuffer.h"
@@ -33,14 +31,16 @@
 #import "LayoutRect.h"
 #import "Logging.h"
 #import "WebCoreSystemInterface.h"
+#import <pal/spi/cg/CoreGraphicsSPI.h>
+#import <pal/spi/cocoa/CoreTextSPI.h>
 #if USE(APPKIT)
 #import <AppKit/AppKit.h>
 #endif
 #import <wtf/MathExtras.h>
 
 #if ENABLE(LETTERPRESS)
-#import "CoreUISPI.h"
-#import "SoftLinking.h"
+#import <pal/spi/ios/CoreUISPI.h>
+#import <wtf/SoftLinking.h>
 
 SOFT_LINK_PRIVATE_FRAMEWORK(CoreUI)
 SOFT_LINK_CLASS(CoreUI, CUICatalog)

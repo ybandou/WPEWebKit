@@ -40,9 +40,9 @@
 
 namespace WebCore {
 
-ImplicitAnimation::ImplicitAnimation(const Animation& transition, CSSPropertyID animatingProperty, RenderElement* renderer, CompositeAnimation* compAnim, const RenderStyle* fromStyle)
-    : AnimationBase(transition, renderer, compAnim)
-    , m_fromStyle(RenderStyle::clonePtr(*fromStyle))
+ImplicitAnimation::ImplicitAnimation(const Animation& transition, CSSPropertyID animatingProperty, Element& element, CompositeAnimation& compositeAnimation, const RenderStyle& fromStyle)
+    : AnimationBase(transition, element, compositeAnimation)
+    , m_fromStyle(RenderStyle::clonePtr(fromStyle))
     , m_transitionProperty(transition.property())
     , m_animatingProperty(animatingProperty)
 {
@@ -58,10 +58,10 @@ ImplicitAnimation::~ImplicitAnimation()
 
 bool ImplicitAnimation::shouldSendEventForListener(Document::ListenerType inListenerType) const
 {
-    return m_object->document().hasListenerType(inListenerType);
+    return element()->document().hasListenerType(inListenerType);
 }
 
-bool ImplicitAnimation::animate(CompositeAnimation*, RenderElement*, const RenderStyle*, const RenderStyle* targetStyle, std::unique_ptr<RenderStyle>& animatedStyle, bool& didBlendStyle)
+bool ImplicitAnimation::animate(CompositeAnimation& compositeAnimation, const RenderStyle& targetStyle, std::unique_ptr<RenderStyle>& animatedStyle, bool& didBlendStyle)
 {
     // If we get this far and the animation is done, it means we are cleaning up a just finished animation.
     // So just return. Everything is already all cleaned up.
@@ -72,12 +72,12 @@ bool ImplicitAnimation::animate(CompositeAnimation*, RenderElement*, const Rende
 
     // Reset to start the transition if we are new
     if (isNew())
-        reset(targetStyle);
+        reset(targetStyle, compositeAnimation);
 
     // Run a cycle of animation.
     // We know we will need a new render style, so make one if needed
     if (!animatedStyle)
-        animatedStyle = RenderStyle::clonePtr(*targetStyle);
+        animatedStyle = RenderStyle::clonePtr(targetStyle);
 
     CSSPropertyAnimation::blendProperties(this, m_animatingProperty, animatedStyle.get(), m_fromStyle.get(), m_toStyle.get(), progress());
     // FIXME: we also need to detect cases where we have to software animate for other reasons,
@@ -102,12 +102,12 @@ bool ImplicitAnimation::computeExtentOfTransformAnimation(LayoutRect& bounds) co
 {
     ASSERT(hasStyle());
 
-    if (!is<RenderBox>(m_object))
+    if (!is<RenderBox>(renderer()))
         return true; // Non-boxes don't get transformed;
 
     ASSERT(m_animatingProperty == CSSPropertyTransform);
 
-    RenderBox& box = downcast<RenderBox>(*m_object);
+    RenderBox& box = downcast<RenderBox>(*renderer());
     FloatRect rendererBox = snapRectToDevicePixels(box.borderBoxRect(), box.document().deviceScaleFactor());
 
     LayoutRect startBounds = bounds;
@@ -133,27 +133,24 @@ bool ImplicitAnimation::computeExtentOfTransformAnimation(LayoutRect& bounds) co
 
 bool ImplicitAnimation::startAnimation(double timeOffset)
 {
-    if (m_object && m_object->isComposited())
-        return downcast<RenderBoxModelObject>(*m_object).startTransition(timeOffset, m_animatingProperty, m_fromStyle.get(), m_toStyle.get());
+    if (auto* renderer = compositedRenderer())
+        return renderer->startTransition(timeOffset, m_animatingProperty, m_fromStyle.get(), m_toStyle.get());
     return false;
 }
 
 void ImplicitAnimation::pauseAnimation(double timeOffset)
 {
-    if (!m_object)
-        return;
-
-    if (m_object->isComposited())
-        downcast<RenderBoxModelObject>(*m_object).transitionPaused(timeOffset, m_animatingProperty);
+    if (auto* renderer = compositedRenderer())
+        renderer->transitionPaused(timeOffset, m_animatingProperty);
     // Restore the original (unanimated) style
     if (!paused())
-        setNeedsStyleRecalc(m_object->element());
+        setNeedsStyleRecalc(element());
 }
 
 void ImplicitAnimation::endAnimation()
 {
-    if (m_object && m_object->isComposited())
-        downcast<RenderBoxModelObject>(*m_object).transitionFinished(m_animatingProperty);
+    if (auto* renderer = compositedRenderer())
+        renderer->transitionFinished(m_animatingProperty);
 }
 
 void ImplicitAnimation::onAnimationEnd(double elapsedTime)
@@ -179,7 +176,7 @@ bool ImplicitAnimation::sendTransitionEvent(const AtomicString& eventType, doubl
             String propertyName = getPropertyNameString(m_animatingProperty);
                 
             // Dispatch the event
-            RefPtr<Element> element = m_object->element();
+            auto element = makeRefPtr(this->element());
 
             ASSERT(!element || element->document().pageCacheState() == Document::NotInPageCache);
             if (!element)
@@ -199,21 +196,20 @@ bool ImplicitAnimation::sendTransitionEvent(const AtomicString& eventType, doubl
     return false; // Didn't dispatch an event
 }
 
-void ImplicitAnimation::reset(const RenderStyle* to)
+void ImplicitAnimation::reset(const RenderStyle& to, CompositeAnimation& compositeAnimation)
 {
-    ASSERT(to);
     ASSERT(m_fromStyle);
 
-    m_toStyle = RenderStyle::clonePtr(*to);
+    m_toStyle = RenderStyle::clonePtr(to);
 
-    if (m_object && m_object->element())
-        Style::loadPendingResources(*m_toStyle, m_object->element()->document(), m_object->element());
+    if (element())
+        Style::loadPendingResources(*m_toStyle, element()->document(), element());
 
-    // Restart the transition
-    if (m_fromStyle && m_toStyle)
+    // Restart the transition.
+    if (m_fromStyle && m_toStyle && !compositeAnimation.isSuspended())
         updateStateMachine(AnimationStateInput::RestartAnimation, -1);
-        
-    // set the transform animation list
+
+    // Set the transform animation list.
     validateTransformFunctionList();
     checkForMatchingFilterFunctionLists();
 #if ENABLE(FILTERS_LEVEL_2)

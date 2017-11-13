@@ -24,10 +24,13 @@
  */
 
 .popover {
+    background-color: #EEEEEE;
+    border: 1px solid darkgrey;
     position: absolute;
     min-width: 20px;
     min-height: 20px;
     box-sizing: border-box;
+    background-image: -webkit-canvas(popover);
     pointer-events: none;
     z-index: var(--z-index-popover);
 }

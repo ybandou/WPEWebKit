@@ -42,6 +42,10 @@ typedef const struct __CFURL* CFURLRef;
 OBJC_CLASS NSURL;
 #endif
 
+namespace WTF {
+class TextStream;
+}
+
 namespace WebCore {
 
 class TextEncoding;
@@ -71,7 +75,7 @@ public:
     WEBCORE_EXPORT URL(const URL& base, const String& relative);
     URL(const URL& base, const String& relative, const TextEncoding&);
 
-    static URL fakeURLWithRelativePart(const String&);
+    WEBCORE_EXPORT static URL fakeURLWithRelativePart(const String&);
     WEBCORE_EXPORT static URL fileURLWithFileSystemPath(const String&);
 
     String strippedForUseAsReferrer() const;
@@ -135,7 +139,7 @@ public:
     bool protocolIsData() const { return protocolIs("data"); }
     bool protocolIsInHTTPFamily() const;
     WEBCORE_EXPORT bool isLocalFile() const;
-    bool isBlankURL() const;
+    WEBCORE_EXPORT bool isBlankURL() const;
     bool cannotBeABaseURL() const { return m_cannotBeABaseURL; }
 
     WEBCORE_EXPORT bool setProtocol(const String&);
@@ -157,10 +161,12 @@ public:
     // The query may begin with a question mark, or, if not, one will be added
     // for you. Setting the query to the empty string will leave a "?" in the
     // URL (with nothing after it). To clear the query, pass a null string.
-    void setQuery(const String&);
+    WEBCORE_EXPORT void setQuery(const String&);
 
-    void setFragmentIdentifier(StringView);
-    void removeFragmentIdentifier();
+    WEBCORE_EXPORT void setFragmentIdentifier(StringView);
+    WEBCORE_EXPORT void removeFragmentIdentifier();
+
+    WEBCORE_EXPORT void removeQueryAndFragmentIdentifier();
 
     WEBCORE_EXPORT friend bool equalIgnoringFragmentIdentifier(const URL&, const URL&);
 
@@ -231,7 +237,6 @@ private:
     unsigned m_pathAfterLastSlash;
     unsigned m_pathEnd;
     unsigned m_queryEnd;
-    unsigned m_fragmentEnd;
 };
 
 template <class Encoder>
@@ -251,7 +256,6 @@ void URL::encode(Encoder& encoder) const
     encoder << m_pathAfterLastSlash;
     encoder << m_pathEnd;
     encoder << m_queryEnd;
-    encoder << m_fragmentEnd;
 }
 
 template <class Decoder>
@@ -286,8 +290,6 @@ bool URL::decode(Decoder& decoder, URL& url)
     if (!decoder.decode(url.m_pathEnd))
         return false;
     if (!decoder.decode(url.m_queryEnd))
-        return false;
-    if (!decoder.decode(url.m_fragmentEnd))
         return false;
     return true;
 }
@@ -412,7 +414,7 @@ inline bool URL::hasQuery() const
 
 inline bool URL::hasFragment() const
 {
-    return m_fragmentEnd > m_queryEnd;
+    return m_isValid && m_string.length() > m_queryEnd;
 }
 
 inline bool URL::protocolIsInHTTPFamily() const
@@ -444,6 +446,8 @@ inline unsigned URL::pathAfterLastSlash() const
 {
     return m_pathAfterLastSlash;
 }
+
+WTF::TextStream& operator<<(WTF::TextStream&, const URL&);
 
 } // namespace WebCore
 

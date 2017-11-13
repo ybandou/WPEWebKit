@@ -2,8 +2,8 @@
 <meta charset=utf-8>
 <title>Document.createEvent</title>
 <link rel=help href="https://dom.spec.whatwg.org/#dom-document-createevent">
-<script src="../../../../../resources/testharness.js"></script>
-<script src="../../../../../resources/testharnessreport.js"></script>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
 <script src="Document-createEvent.js"></script>
 <div id="log"></div>
 <script>
@@ -71,6 +71,7 @@ test(function() {
  * interfaces that it is known some UA does or did not throw for.
  */
 var someNonCreateableEvents = [
+  "AnimationEvent",
   "AnimationPlaybackEvent",
   "AnimationPlayerEvent",
   "ApplicationCacheErrorEvent",
@@ -79,15 +80,17 @@ var someNonCreateableEvents = [
   "BeforeInstallPromptEvent",
   "BlobEvent",
   "ClipboardEvent",
+  "CloseEvent",
   "CommandEvent",
   "DataContainerEvent",
-  "DeviceLightEvent",
+  "ErrorEvent",
   "ExtendableEvent",
   "ExtendableMessageEvent",
   "FetchEvent",
   "FontFaceSetLoadEvent",
   "GamepadEvent",
   "GeofencingEvent",
+  "IDBVersionChangeEvent",
   "InstallEvent",
   "KeyEvent",
   "MIDIConnectionEvent",
@@ -105,7 +108,9 @@ var someNonCreateableEvents = [
   "OfflineAudioCompletionEvent",
   "OrientationEvent",
   "PageTransition", // Yes, with no "Event"
+  "PageTransitionEvent",
   "PointerEvent",
+  "PopStateEvent",
   "PopUpEvent",
   "PresentationConnectionAvailableEvent",
   "PresentationConnectionCloseEvent",
@@ -129,8 +134,12 @@ var someNonCreateableEvents = [
   "SpeechSynthesisEvent",
   "SyncEvent",
   "TimeEvent",
+  "TrackEvent",
+  "TransitionEvent",
+  "WebGLContextEvent",
   "WebKitAnimationEvent",
   "WebKitTransitionEvent",
+  "WheelEvent",
   "XULCommandEvent",
 ];
 someNonCreateableEvents.forEach(function (eventInterface) {

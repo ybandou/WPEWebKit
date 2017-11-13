@@ -58,15 +58,19 @@ public:
     MediaSourcePrivate::AddStatus addSourceBuffer(RefPtr<SourceBufferPrivateGStreamer>);
     void removeSourceBuffer(RefPtr<SourceBufferPrivateGStreamer>);
     void attachTrack(RefPtr<SourceBufferPrivateGStreamer>, RefPtr<TrackPrivateBase>, GstStructure*, GstCaps*);
-    void reattachTrack(RefPtr<SourceBufferPrivateGStreamer>, RefPtr<TrackPrivateBase>);
+    void reattachTrack(RefPtr<SourceBufferPrivateGStreamer>, RefPtr<TrackPrivateBase>, const char*);
     void notifyDurationChanged();
-
+#if ENABLE(ENCRYPTED_MEDIA)
+    void dispatchDecryptionStructure(GUniquePtr<GstStructure>&&);
+#endif
     // From MediaSourceGStreamer.
     void markEndOfStream(MediaSourcePrivate::EndOfStreamStatus);
 
     // From SourceBufferPrivateGStreamer.
     void flush(AtomicString);
     void enqueueSample(Ref<MediaSample>&&);
+
+    bool hasFutureData(const MediaTime& start);
 
     GstElement* pipeline();
 private:

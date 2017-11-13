@@ -32,7 +32,7 @@
 namespace WebCore {
 
 GIFImageDecoder::GIFImageDecoder(AlphaOption alphaOption, GammaAndColorProfileOption gammaAndColorProfileOption)
-    : ImageDecoder(alphaOption, gammaAndColorProfileOption)
+    : ScalableImageDecoder(alphaOption, gammaAndColorProfileOption)
 {
 }
 
@@ -45,17 +45,17 @@ void GIFImageDecoder::setData(SharedBuffer& data, bool allDataReceived)
     if (failed())
         return;
 
-    ImageDecoder::setData(data, allDataReceived);
+    ScalableImageDecoder::setData(data, allDataReceived);
     if (m_reader)
         m_reader->setData(&data);
 }
 
 bool GIFImageDecoder::setSize(const IntSize& size)
 {
-    if (ImageDecoder::encodedDataStatus() >= EncodedDataStatus::SizeAvailable && this->size() == size)
+    if (ScalableImageDecoder::encodedDataStatus() >= EncodedDataStatus::SizeAvailable && this->size() == size)
         return true;
 
-    if (!ImageDecoder::setSize(size))
+    if (!ScalableImageDecoder::setSize(size))
         return false;
 
     prepareScaleDataIfNecessary();
@@ -115,7 +115,7 @@ ImageFrame* GIFImageDecoder::frameBufferAtIndex(size_t index)
 bool GIFImageDecoder::setFailed()
 {
     m_reader = nullptr;
-    return ImageDecoder::setFailed();
+    return ScalableImageDecoder::setFailed();
 }
 
 void GIFImageDecoder::clearFrameBufferCache(size_t clearBeforeFrame)
@@ -243,8 +243,8 @@ bool GIFImageDecoder::frameComplete(unsigned frameIndex, unsigned frameDuration,
     if (buffer.isInvalid() && !initFrameBuffer(frameIndex))
         return false; // initFrameBuffer() has already called setFailed().
 
-    buffer.setDecodingStatus(ImageFrame::DecodingStatus::Complete);
-    buffer.setDuration(frameDuration);
+    buffer.setDecodingStatus(DecodingStatus::Complete);
+    buffer.setDuration(Seconds::fromMilliseconds(frameDuration));
     buffer.setDisposalMethod(disposalMethod);
 
     if (!m_currentBufferSawAlpha) {
@@ -396,7 +396,7 @@ bool GIFImageDecoder::initFrameBuffer(unsigned frameIndex)
     buffer->backingStore()->setFrameRect(IntRect(left, top, right - left, bottom - top));
 
     // Update our status to be partially complete.
-    buffer->setDecodingStatus(ImageFrame::DecodingStatus::Partial);
+    buffer->setDecodingStatus(DecodingStatus::Partial);
 
     // Reset the alpha pixel tracker for this frame.
     m_currentBufferSawAlpha = false;

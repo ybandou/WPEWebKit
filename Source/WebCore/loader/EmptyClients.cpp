@@ -110,10 +110,10 @@ class EmptyContextMenuClient final : public ContextMenuClient {
 
 class EmptyDatabaseProvider final : public DatabaseProvider {
 #if ENABLE(INDEXED_DATABASE)
-    IDBClient::IDBConnectionToServer& idbConnectionToServerForSession(const SessionID&) final
+    IDBClient::IDBConnectionToServer& idbConnectionToServerForSession(const PAL::SessionID&) final
     {
-        static NeverDestroyed<Ref<InProcessIDBServer>> sharedConnection(InProcessIDBServer::create());
-        return sharedConnection.get()->connectionToServer();
+        static auto& sharedConnection = InProcessIDBServer::create().leakRef();
+        return sharedConnection.connectionToServer();
     }
 #endif
 };
@@ -131,7 +131,7 @@ class EmptyDragClient final : public DragClient {
     void willPerformDragDestinationAction(DragDestinationAction, const DragData&) final { }
     void willPerformDragSourceAction(DragSourceAction, const IntPoint&, DataTransfer&) final { }
     DragSourceAction dragSourceActionMaskForPoint(const IntPoint&) final { return DragSourceActionNone; }
-    void startDrag(DragImage, const IntPoint&, const IntPoint&, const FloatPoint&, DataTransfer&, Frame&, DragSourceAction) final { }
+    void startDrag(DragItem, DataTransfer&, Frame&) final { }
     void dragControllerDestroyed() final { }
 };
 
@@ -166,11 +166,12 @@ private:
     void didBeginEditing() final { }
     void respondToChangedContents() final { }
     void respondToChangedSelection(Frame*) final { }
-    void didChangeSelectionAndUpdateLayout() final { }
     void updateEditorStateAfterLayoutIfEditabilityChanged() final { }
     void discardedComposition(Frame*) final { }
     void canceledComposition() final { }
+    void didUpdateComposition() final { }
     void didEndEditing() final { }
+    void didEndUserTriggeredSelectionChanges() final { }
     void willWriteSelectionToPasteboard(Range*) final { }
     void didWriteSelectionToPasteboard() final { }
     void getClientPasteboardDataForRange(Range*, Vector<String>&, Vector<RefPtr<SharedBuffer>>&) final { }
@@ -203,21 +204,16 @@ private:
 #if PLATFORM(IOS)
     void startDelayingAndCoalescingContentChangeNotifications() final { }
     void stopDelayingAndCoalescingContentChangeNotifications() final { }
-    void writeDataToPasteboard(NSDictionary*) final { }
-    NSArray* supportedPasteboardTypesForCurrentSelection() final { return nullptr; }
-    NSArray* readDataFromPasteboard(NSString*, int) final { return nullptr; }
     bool hasRichlyEditableSelection() final { return false; }
     int getPasteboardItemsCount() final { return 0; }
     RefPtr<DocumentFragment> documentFragmentFromDelegate(int) final { return nullptr; }
     bool performsTwoStepPaste(DocumentFragment*) final { return false; }
-    int pasteboardChangeCount() final { return 0; }
 #endif
 
+    bool performTwoStepDrop(DocumentFragment&, Range&, bool) final { return false; }
+
 #if PLATFORM(COCOA)
-    NSString *userVisibleString(NSURL *) final { return nullptr; }
     void setInsertionPasteboard(const String&) final { };
-    NSURL *canonicalizeURL(NSURL *) final { return nullptr; }
-    NSURL *canonicalizeURLString(NSString *) final { return nullptr; }
 #endif
 
 #if USE(APPKIT)
@@ -291,7 +287,7 @@ class EmptyFrameLoaderClient final : public FrameLoaderClient {
     void detachedFromParent2() final { }
     void detachedFromParent3() final { }
 
-    void convertMainResourceLoadToDownload(DocumentLoader*, SessionID, const ResourceRequest&, const ResourceResponse&) final { }
+    void convertMainResourceLoadToDownload(DocumentLoader*, PAL::SessionID, const ResourceRequest&, const ResourceResponse&) final { }
 
     void assignIdentifierToInitialRequest(unsigned long, DocumentLoader*, const ResourceRequest&) final { }
     bool shouldUseCredentialStorage(DocumentLoader*, unsigned long) final { return false; }
@@ -323,7 +319,6 @@ class EmptyFrameLoaderClient final : public FrameLoaderClient {
     void dispatchDidReplaceStateWithinPage() final { }
     void dispatchDidPopStateWithinPage() final { }
     void dispatchWillClose() final { }
-    void dispatchDidReceiveIcon() final { }
     void dispatchDidStartProvisionalLoad() final { }
     void dispatchDidReceiveTitle(const StringWithDirection&) final { }
     void dispatchDidCommitLoad(std::optional<HasInsecureContent>) final { }
@@ -336,15 +331,15 @@ class EmptyFrameLoaderClient final : public FrameLoaderClient {
     Frame* dispatchCreatePage(const NavigationAction&) final { return nullptr; }
     void dispatchShow() final { }
 
-    void dispatchDecidePolicyForResponse(const ResourceResponse&, const ResourceRequest&, FramePolicyFunction) final { }
-    void dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String&, FramePolicyFunction) final;
-    void dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, FormState*, FramePolicyFunction) final;
+    void dispatchDecidePolicyForResponse(const ResourceResponse&, const ResourceRequest&, FramePolicyFunction&&) final { }
+    void dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String&, FramePolicyFunction&&) final;
+    void dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, bool didReceiveRedirectResponse, FormState*, FramePolicyFunction&&) final;
     void cancelPolicyCheck() final { }
 
     void dispatchUnableToImplementPolicy(const ResourceError&) final { }
 
     void dispatchWillSendSubmitEvent(Ref<FormState>&&) final;
-    void dispatchWillSubmitForm(FormState&, FramePolicyFunction) final;
+    void dispatchWillSubmitForm(FormState&, WTF::Function<void(void)>&&) final;
 
     void revertToProvisionalState(DocumentLoader*) final { }
     void setMainDocumentError(DocumentLoader*, const ResourceError&) final { }
@@ -427,8 +422,6 @@ class EmptyFrameLoaderClient final : public FrameLoaderClient {
     void redirectDataToPlugin(Widget&) final { }
     void dispatchDidClearWindowObjectInWorld(DOMWrapperWorld&) final { }
 
-    void registerForIconNotification(bool) final { }
-
 #if PLATFORM(COCOA)
     RemoteAXObjectRef accessibilityRemoteObject() final { return nullptr; }
     NSCachedURLResponse *willCacheResponse(DocumentLoader*, unsigned long, NSCachedURLResponse *response) const final { return response; }
@@ -439,10 +432,6 @@ class EmptyFrameLoaderClient final : public FrameLoaderClient {
 #endif
 
     Ref<FrameNetworkingContext> createNetworkingContext() final;
-
-#if ENABLE(REQUEST_AUTOCOMPLETE)
-    void didRequestAutocomplete(Ref<FormState>&&) final { }
-#endif
 
     bool isEmptyFrameLoaderClient() final { return true; }
     void prefetchDNS(const String&) final { }
@@ -486,9 +475,9 @@ class EmptyInspectorClient final : public InspectorClient {
 class EmptyPaymentCoordinatorClient final : public PaymentCoordinatorClient {
     bool supportsVersion(unsigned) final { return false; }
     bool canMakePayments() final { return false; }
-    void canMakePaymentsWithActiveCard(const String&, const String&, std::function<void(bool)> completionHandler) final { callOnMainThread([completionHandler] { completionHandler(false); }); }
-    void openPaymentSetup(const String&, const String&, std::function<void(bool)> completionHandler) final { callOnMainThread([completionHandler] { completionHandler(false); }); }
-    bool showPaymentUI(const URL&, const Vector<URL>&, const PaymentRequest&) final { return false; }
+    void canMakePaymentsWithActiveCard(const String&, const String&, WTF::Function<void(bool)>&& completionHandler) final { callOnMainThread([completionHandler = WTFMove(completionHandler)] { completionHandler(false); }); }
+    void openPaymentSetup(const String&, const String&, WTF::Function<void(bool)>&& completionHandler) final { callOnMainThread([completionHandler = WTFMove(completionHandler)] { completionHandler(false); }); }
+    bool showPaymentUI(const URL&, const Vector<URL>&, const ApplePaySessionPaymentRequest&) final { return false; }
     void completeMerchantValidation(const PaymentMerchantSession&) final { }
     void completeShippingMethodSelection(std::optional<ShippingMethodUpdate>&&) final { }
     void completeShippingContactSelection(std::optional<ShippingContactUpdate>&&) final { }
@@ -550,7 +539,6 @@ class EmptyStorageNamespaceProvider final : public StorageNamespaceProvider {
         void removeItem(Frame*, const String&) final { }
         void clear(Frame*) final { }
         bool contains(const String&) final { return false; }
-        bool canAccessStorage(Frame*) final { return false; }
         StorageType storageType() const final { return StorageType::Local; }
         size_t memoryBytesUsedByCache() final { return 0; }
         SecurityOriginData securityOrigin() const final { return { }; }
@@ -606,11 +594,11 @@ void EmptyChromeClient::runOpenPanel(Frame&, FileChooser&)
 {
 }
 
-void EmptyFrameLoaderClient::dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String&, FramePolicyFunction)
+void EmptyFrameLoaderClient::dispatchDecidePolicyForNewWindowAction(const NavigationAction&, const ResourceRequest&, FormState*, const String&, FramePolicyFunction&&)
 {
 }
 
-void EmptyFrameLoaderClient::dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, FormState*, FramePolicyFunction)
+void EmptyFrameLoaderClient::dispatchDecidePolicyForNavigationAction(const NavigationAction&, const ResourceRequest&, bool, FormState*, FramePolicyFunction&&)
 {
 }
 
@@ -618,7 +606,7 @@ void EmptyFrameLoaderClient::dispatchWillSendSubmitEvent(Ref<FormState>&&)
 {
 }
 
-void EmptyFrameLoaderClient::dispatchWillSubmitForm(FormState&, FramePolicyFunction)
+void EmptyFrameLoaderClient::dispatchWillSubmitForm(FormState&, WTF::Function<void(void)>&&)
 {
 }
 

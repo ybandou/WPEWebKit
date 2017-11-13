@@ -38,6 +38,7 @@ class GridSpan;
 struct ContentAlignmentData;
 
 enum GridAxisPosition {GridAxisStart, GridAxisEnd, GridAxisCenter};
+enum GridAxis { GridRowAxis, GridColumnAxis };
 
 class RenderGrid final : public RenderBlock {
 public:
@@ -64,6 +65,8 @@ public:
     bool isOrthogonalChild(const RenderBox&) const;
     LayoutUnit guttersSize(const Grid&, GridTrackSizingDirection, unsigned startLine, unsigned span, std::optional<LayoutUnit> availableSize) const;
 
+    StyleContentAlignmentData contentAlignment(GridTrackSizingDirection) const;
+
 protected:
     ItemPosition selfAlignmentNormalBehavior(const RenderBox* child = nullptr) const override
     {
@@ -78,6 +81,10 @@ private:
 
     void addChild(RenderObject* newChild, RenderObject* beforeChild) final;
     void removeChild(RenderObject&) final;
+
+    StyleSelfAlignmentData selfAlignmentForChild(GridAxis, const RenderBox&, const RenderStyle* = nullptr) const;
+    bool selfAlignmentChangedToStretch(GridAxis, const RenderStyle& oldStyle, const RenderStyle& newStyle, const RenderBox&) const;
+    bool selfAlignmentChangedFromStretch(GridAxis, const RenderStyle& oldStyle, const RenderStyle& newStyle, const RenderBox&) const;
 
     std::optional<LayoutUnit> availableSpaceForGutters(GridTrackSizingDirection) const;
 
@@ -127,14 +134,12 @@ private:
 
     LayoutUnit gridAreaBreadthForChildIncludingAlignmentOffsets(const RenderBox&, GridTrackSizingDirection) const;
 
-    void applyStretchAlignmentToTracksIfNeeded(GridTrackSizingDirection);
-
     void paintChildren(PaintInfo& forSelf, const LayoutPoint& paintOffset, PaintInfo& forChild, bool usePrintRect) override;
-    LayoutUnit marginLogicalHeightForChild(const RenderBox&) const;
+    LayoutUnit marginLogicalSizeForChild(GridTrackSizingDirection, const RenderBox&) const;
     LayoutUnit computeMarginLogicalSizeForChild(GridTrackSizingDirection, const RenderBox&) const;
     LayoutUnit availableAlignmentSpaceForChildBeforeStretching(LayoutUnit gridAreaBreadthForChild, const RenderBox&) const;
-    StyleSelfAlignmentData justifySelfForChild(const RenderBox&) const;
-    StyleSelfAlignmentData alignSelfForChild(const RenderBox&) const;
+    StyleSelfAlignmentData justifySelfForChild(const RenderBox&, const RenderStyle* = nullptr) const;
+    StyleSelfAlignmentData alignSelfForChild(const RenderBox&, const RenderStyle* = nullptr) const;
     void applyStretchAlignmentToChildIfNeeded(RenderBox&);
     bool hasAutoSizeInColumnAxis(const RenderBox& child) const { return isHorizontalWritingMode() ? child.style().height().isAuto() : child.style().width().isAuto(); }
     bool hasAutoSizeInRowAxis(const RenderBox& child) const { return isHorizontalWritingMode() ? child.style().width().isAuto() : child.style().height().isAuto(); }

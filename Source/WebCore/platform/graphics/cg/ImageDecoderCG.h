@@ -25,51 +25,45 @@
 
 #pragma once
 
-#include "ImageSourceCG.h"
-#include "IntSize.h"
-
-#include <wtf/Optional.h>
-
-typedef struct CGImageSource* CGImageSourceRef;
-typedef const struct __CFData* CFDataRef;
+#include "ImageDecoder.h"
 
 namespace WebCore {
 
-class ImageDecoder : public ThreadSafeRefCounted<ImageDecoder> {
+class ImageDecoderCG final : public ImageDecoder {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    ImageDecoder(const URL& sourceURL, AlphaOption, GammaAndColorProfileOption);
+    ImageDecoderCG(SharedBuffer& data, AlphaOption, GammaAndColorProfileOption);
 
-    static Ref<ImageDecoder> create(const SharedBuffer&, const URL& sourceURL, AlphaOption alphaOption, GammaAndColorProfileOption gammaAndColorProfileOption)
+    static Ref<ImageDecoderCG> create(SharedBuffer& data, AlphaOption alphaOption, GammaAndColorProfileOption gammaAndColorProfileOption)
     {
-        return adoptRef(*new ImageDecoder(sourceURL, alphaOption, gammaAndColorProfileOption));
+        return adoptRef(*new ImageDecoderCG(data, alphaOption, gammaAndColorProfileOption));
     }
     
-    static size_t bytesDecodedToDetermineProperties();
+    size_t bytesDecodedToDetermineProperties() const final;
 
-    EncodedDataStatus encodedDataStatus() const;
-    bool isSizeAvailable() { return encodedDataStatus() >= EncodedDataStatus::SizeAvailable; }
-    size_t frameCount() const;
-    RepetitionCount repetitionCount() const;
-    String uti() const;
-    String filenameExtension() const;
-    std::optional<IntPoint> hotSpot() const;
+    EncodedDataStatus encodedDataStatus() const final;
+    IntSize size() const final { return IntSize(); }
+    size_t frameCount() const final;
+    RepetitionCount repetitionCount() const final;
+    String uti() const final;
+    String filenameExtension() const final;
+    std::optional<IntPoint> hotSpot() const final;
 
-    IntSize frameSizeAtIndex(size_t, SubsamplingLevel = SubsamplingLevel::Default) const;
-    bool frameIsCompleteAtIndex(size_t) const;
-    ImageOrientation frameOrientationAtIndex(size_t) const;
-    
-    float frameDurationAtIndex(size_t) const;
-    bool frameHasAlphaAtIndex(size_t) const;
-    bool frameAllowSubsamplingAtIndex(size_t) const;
-    unsigned frameBytesAtIndex(size_t, SubsamplingLevel = SubsamplingLevel::Default) const;
-    
-    NativeImagePtr createFrameImageAtIndex(size_t, SubsamplingLevel = SubsamplingLevel::Default, const DecodingOptions& = DecodingMode::Synchronous) const;
-    
-    void setData(SharedBuffer&, bool allDataReceived);
-    bool isAllDataReceived() const { return m_isAllDataReceived; }
-    void clearFrameBufferCache(size_t) { }
-    
+    IntSize frameSizeAtIndex(size_t, SubsamplingLevel = SubsamplingLevel::Default) const final;
+    bool frameIsCompleteAtIndex(size_t) const final;
+    ImageOrientation frameOrientationAtIndex(size_t) const final;
+
+    Seconds frameDurationAtIndex(size_t) const final;
+    bool frameHasAlphaAtIndex(size_t) const final;
+    bool frameAllowSubsamplingAtIndex(size_t) const final;
+    unsigned frameBytesAtIndex(size_t, SubsamplingLevel = SubsamplingLevel::Default) const final;
+
+    NativeImagePtr createFrameImageAtIndex(size_t, SubsamplingLevel = SubsamplingLevel::Default, const DecodingOptions& = DecodingMode::Synchronous) final;
+
+    void setData(SharedBuffer&, bool allDataReceived) final;
+    bool isAllDataReceived() const final { return m_isAllDataReceived; }
+    void clearFrameBufferCache(size_t) final { }
+
 protected:
     bool m_isAllDataReceived { false };
     RetainPtr<CGImageSourceRef> m_nativeDecoder;

@@ -38,7 +38,6 @@
 #define ASSERT_JIT_OFFSET(actual, expected) ASSERT_WITH_MESSAGE(actual == expected, "JIT Offset \"%s\" should be %d, not %d.\n", #expected, static_cast<int>(expected), static_cast<int>(actual));
 
 #include "CodeBlock.h"
-#include "CompactJITCodeMap.h"
 #include "JITDisassembler.h"
 #include "JITInlineCacheGenerator.h"
 #include "JITMathIC.h"
@@ -335,7 +334,7 @@ namespace JSC {
 
         // This assumes that the value to profile is in regT0 and that regT3 is available for
         // scratch.
-        void emitValueProfilingSite(ValueProfile*);
+        void emitValueProfilingSite(ValueProfile&);
         void emitValueProfilingSite(unsigned bytecodeOffset);
         void emitValueProfilingSite();
         void emitArrayProfilingSiteWithCell(RegisterID cell, RegisterID indexingType, ArrayProfile*);
@@ -489,6 +488,8 @@ namespace JSC {
         void emit_op_get_rest_length(Instruction*);
         void emit_op_check_tdz(Instruction*);
         void emit_op_assert(Instruction*);
+        void emit_op_identity_with_profile(Instruction*);
+        void emit_op_unreachable(Instruction*);
         void emit_op_debug(Instruction*);
         void emit_op_del_by_id(Instruction*);
         void emit_op_del_by_val(Instruction*);
@@ -531,6 +532,7 @@ namespace JSC {
         void emit_op_jtrue(Instruction*);
         void emit_op_loop_hint(Instruction*);
         void emit_op_check_traps(Instruction*);
+        void emit_op_nop(Instruction*);
         void emit_op_lshift(Instruction*);
         void emit_op_mod(Instruction*);
         void emit_op_mov(Instruction*);
@@ -549,6 +551,8 @@ namespace JSC {
         void emit_op_new_generator_func_exp(Instruction*);
         void emit_op_new_async_func(Instruction*);
         void emit_op_new_async_func_exp(Instruction*);
+        void emit_op_new_async_generator_func(Instruction*);
+        void emit_op_new_async_generator_func_exp(Instruction*);
         void emit_op_new_object(Instruction*);
         void emit_op_new_regexp(Instruction*);
         void emit_op_not(Instruction*);
@@ -794,6 +798,7 @@ namespace JSC {
         MacroAssembler::Call callOperation(J_JITOperation_EZZ, int, int32_t, int32_t);
         MacroAssembler::Call callOperation(P_JITOperation_E);
         MacroAssembler::Call callOperation(P_JITOperation_EJS, GPRReg, size_t);
+        MacroAssembler::Call callOperation(P_JITOperation_EUi, uint32_t);
         MacroAssembler::Call callOperation(S_JITOperation_ECC, RegisterID, RegisterID);
         MacroAssembler::Call callOperation(S_JITOperation_EJ, RegisterID);
         MacroAssembler::Call callOperation(S_JITOperation_EJI, GPRReg, UniquedStringImpl*);
@@ -961,7 +966,6 @@ namespace JSC {
 
         std::unique_ptr<JITDisassembler> m_disassembler;
         RefPtr<Profiler::Compilation> m_compilation;
-        WeakRandom m_randomGenerator;
         static CodeRef stringGetByValStubGenerator(VM*);
 
         PCToCodeOriginMapBuilder m_pcToCodeOriginMapBuilder;

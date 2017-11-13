@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,10 +38,12 @@
 
 namespace WebCore {
 
+using namespace std::literals::chrono_literals;
+
 // These response headers are not copied from a revalidated response to the
 // cached response headers. For compatibility, this list is based on Chromium's
 // net/http/http_response_headers.cc.
-const char* const headersToIgnoreAfterRevalidation[] = {
+static const char* const headersToIgnoreAfterRevalidation[] = {
     "allow",
     "connection",
     "etag",
@@ -60,7 +62,7 @@ const char* const headersToIgnoreAfterRevalidation[] = {
 // Some header prefixes mean "Don't copy this header from a 304 response.".
 // Rather than listing all the relevant headers, we can consolidate them into
 // this list, also grabbed from Chromium's net/http/http_response_headers.cc.
-const char* const headerPrefixesToIgnoreAfterRevalidation[] = {
+static const char* const headerPrefixesToIgnoreAfterRevalidation[] = {
     "content-",
     "x-content-",
     "x-webkit-"
@@ -72,8 +74,10 @@ static inline bool shouldUpdateHeaderAfterRevalidation(const String& header)
         if (equalIgnoringASCIICase(header, headerToIgnore))
             return false;
     }
-    for (size_t i = 0; i < WTF_ARRAY_LENGTH(headerPrefixesToIgnoreAfterRevalidation); i++) {
-        if (header.startsWith(headerPrefixesToIgnoreAfterRevalidation[i], false))
+    for (auto& prefixToIgnore : headerPrefixesToIgnoreAfterRevalidation) {
+        // FIXME: Would be more efficient if we added an overload of
+        // startsWithIgnoringASCIICase that takes a const char*.
+        if (header.startsWithIgnoringASCIICase(prefixToIgnore))
             return false;
     }
     return true;
@@ -113,7 +117,9 @@ std::chrono::microseconds computeCurrentAge(const ResourceResponse& response, st
 std::chrono::microseconds computeFreshnessLifetimeForHTTPFamily(const ResourceResponse& response, std::chrono::system_clock::time_point responseTime)
 {
     using namespace std::chrono;
-    ASSERT(response.url().protocolIsInHTTPFamily());
+
+    if (!response.url().protocolIsInHTTPFamily())
+        return 0us;
 
     // Freshness Lifetime:
     // http://tools.ietf.org/html/rfc7234#section-4.2.1
@@ -333,24 +339,25 @@ CacheControlDirectives parseCacheControlDirectives(const HTTPHeaderMap& headers)
     return result;
 }
 
-static String headerValueForVary(const ResourceRequest& request, const String& headerName, SessionID sessionID)
+static String headerValueForVary(const ResourceRequest& request, const String& headerName, PAL::SessionID sessionID)
 {
     // Explicit handling for cookies is needed because they are added magically by the networking layer.
     // FIXME: The value might have changed between making the request and retrieving the cookie here.
     // We could fetch the cookie when making the request but that seems overkill as the case is very rare and it
     // is a blocking operation. This should be sufficient to cover reasonable cases.
     if (headerName == httpHeaderNameString(HTTPHeaderName::Cookie)) {
+        auto includeSecureCookies = request.url().protocolIs("https") ? IncludeSecureCookies::Yes : IncludeSecureCookies::No;
         auto* cookieStrategy = platformStrategies() ? platformStrategies()->cookiesStrategy() : nullptr;
         if (!cookieStrategy) {
-            ASSERT(sessionID == SessionID::defaultSessionID());
-            return cookieRequestHeaderFieldValue(NetworkStorageSession::defaultStorageSession(), request.firstPartyForCookies(), request.url());
+            ASSERT(sessionID == PAL::SessionID::defaultSessionID());
+            return cookieRequestHeaderFieldValue(NetworkStorageSession::defaultStorageSession(), request.firstPartyForCookies(), request.url(), includeSecureCookies).first;
         }
-        return cookieStrategy->cookieRequestHeaderFieldValue(sessionID, request.firstPartyForCookies(), request.url());
+        return cookieStrategy->cookieRequestHeaderFieldValue(sessionID, request.firstPartyForCookies(), request.url(), includeSecureCookies).first;
     }
     return request.httpHeaderField(headerName);
 }
 
-Vector<std::pair<String, String>> collectVaryingRequestHeaders(const WebCore::ResourceRequest& request, const WebCore::ResourceResponse& response, SessionID sessionID)
+Vector<std::pair<String, String>> collectVaryingRequestHeaders(const WebCore::ResourceRequest& request, const WebCore::ResourceResponse& response, PAL::SessionID sessionID)
 {
     String varyValue = response.httpHeaderField(WebCore::HTTPHeaderName::Vary);
     if (varyValue.isEmpty())
@@ -367,7 +374,7 @@ Vector<std::pair<String, String>> collectVaryingRequestHeaders(const WebCore::Re
     return varyingRequestHeaders;
 }
 
-bool verifyVaryingRequestHeaders(const Vector<std::pair<String, String>>& varyingRequestHeaders, const WebCore::ResourceRequest& request, SessionID sessionID)
+bool verifyVaryingRequestHeaders(const Vector<std::pair<String, String>>& varyingRequestHeaders, const WebCore::ResourceRequest& request, PAL::SessionID sessionID)
 {
     for (auto& varyingRequestHeader : varyingRequestHeaders) {
         // FIXME: Vary: * in response would ideally trigger a cache delete instead of a store.

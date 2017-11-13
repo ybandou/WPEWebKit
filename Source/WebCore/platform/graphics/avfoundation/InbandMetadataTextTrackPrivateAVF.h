@@ -41,7 +41,7 @@ struct IncompleteMetaDataCue {
 
 class InbandMetadataTextTrackPrivateAVF : public InbandTextTrackPrivate {
 public:
-    static Ref<InbandMetadataTextTrackPrivateAVF> create(Kind, CueFormat, const AtomicString& id = emptyAtom);
+    static Ref<InbandMetadataTextTrackPrivateAVF> create(Kind, CueFormat, const AtomicString& id = emptyAtom());
 
     ~InbandMetadataTextTrackPrivateAVF();
 
@@ -59,6 +59,10 @@ public:
 
 private:
     InbandMetadataTextTrackPrivateAVF(Kind, CueFormat, const AtomicString&);
+
+#if !RELEASE_LOG_DISABLED
+    const char* logClassName() const final { return "InbandMetadataTextTrackPrivateAVF"; }
+#endif
 
     Kind m_kind;
     AtomicString m_id;

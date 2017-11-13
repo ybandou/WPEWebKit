@@ -45,7 +45,6 @@ public:
     WTF_EXPORT_STRING_API static RefPtr<AtomicStringImpl> add(const LChar*, unsigned length);
     WTF_EXPORT_STRING_API static RefPtr<AtomicStringImpl> add(const UChar*, unsigned length);
     ALWAYS_INLINE static RefPtr<AtomicStringImpl> add(const char* s, unsigned length) { return add(reinterpret_cast<const LChar*>(s), length); };
-    WTF_EXPORT_STRING_API static Ref<AtomicStringImpl> add(const UChar*, unsigned length, unsigned existingHash);
     WTF_EXPORT_STRING_API static RefPtr<AtomicStringImpl> add(const UChar*);
     WTF_EXPORT_STRING_API static RefPtr<AtomicStringImpl> add(StringImpl*, unsigned offset, unsigned length);
     ALWAYS_INLINE static RefPtr<AtomicStringImpl> add(StringImpl* string)
@@ -104,7 +103,7 @@ private:
 #if !ASSERT_DISABLED
 // AtomicStringImpls created from StaticStringImpl will ASSERT
 // in the generic ValueCheck<T>::checkConsistency
-// as they are not allocated by fastMalloc.
+// as they are not allocated by StringMalloc.
 // We don't currently have any way to detect that case
 // so we ignore the consistency check for all AtomicStringImpls*.
 template<> struct

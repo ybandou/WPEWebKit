@@ -88,8 +88,8 @@ public:
     GraphicsLayer* graphicsLayer() const { return m_graphicsLayer.get(); }
 
     // Layer to clip children
-    bool hasClippingLayer() const { return (m_childContainmentLayer && !m_isMainFrameLayerWithTiledBacking); }
-    GraphicsLayer* clippingLayer() const { return !m_isMainFrameLayerWithTiledBacking ? m_childContainmentLayer.get() : nullptr; }
+    bool hasClippingLayer() const { return (m_childContainmentLayer && !m_isFrameLayerWithTiledBacking); }
+    GraphicsLayer* clippingLayer() const { return !m_isFrameLayerWithTiledBacking ? m_childContainmentLayer.get() : nullptr; }
 
     // Layer to get clipped by ancestor
     bool hasAncestorClippingLayer() const { return m_ancestorClippingLayer != nullptr; }
@@ -182,7 +182,7 @@ public:
     void positionOverflowControlsLayers();
     bool hasUnpositionedOverflowControlsLayers() const;
 
-    bool isMainFrameLayerWithTiledBacking() const { return m_isMainFrameLayerWithTiledBacking; }
+    bool isFrameLayerWithTiledBacking() const { return m_isFrameLayerWithTiledBacking; }
 
     WEBCORE_EXPORT TiledBacking* tiledBacking() const;
     void adjustTiledBackingCoverage();
@@ -197,7 +197,7 @@ public:
     void notifyFlushRequired(const GraphicsLayer*) override;
     void notifyFlushBeforeDisplayRefresh(const GraphicsLayer*) override;
 
-    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const FloatRect& clip) override;
+    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const FloatRect& clip, GraphicsLayerPaintBehavior) override;
 
     float deviceScaleFactor() const override;
     float contentsScaleMultiplierForNewTiles(const GraphicsLayer*) const override;
@@ -216,6 +216,7 @@ public:
     bool shouldAggressivelyRetainTiles(const GraphicsLayer*) const override;
     bool shouldTemporarilyRetainTileCohorts(const GraphicsLayer*) const override;
     bool useGiantTiles() const override;
+    void logFilledVisibleFreshTile(unsigned) override;
     bool needsPixelAligment() const override { return !m_isMainFrameRenderViewLayer; }
 
     LayoutSize subpixelOffsetFromRenderer() const { return m_subpixelOffsetFromRenderer; }
@@ -338,13 +339,10 @@ private:
 
     bool shouldClipCompositedBounds() const;
 
-    bool hasTiledBackingFlatteningLayer() const { return (m_childContainmentLayer && m_isMainFrameLayerWithTiledBacking); }
-    GraphicsLayer* tileCacheFlatteningLayer() const { return m_isMainFrameLayerWithTiledBacking ? m_childContainmentLayer.get() : nullptr; }
+    bool hasTiledBackingFlatteningLayer() const { return (m_childContainmentLayer && m_isFrameLayerWithTiledBacking); }
+    GraphicsLayer* tileCacheFlatteningLayer() const { return m_isFrameLayerWithTiledBacking ? m_childContainmentLayer.get() : nullptr; }
 
     void paintIntoLayer(const GraphicsLayer*, GraphicsContext&, const IntRect& paintDirtyRect, PaintBehavior, GraphicsLayerPaintingPhase);
-
-    // Helper function for updateGeometry.
-    void adjustAncestorCompositingBoundsForFlowThread(LayoutRect& ancestorCompositingBounds, const RenderLayer* compositingAncestor) const;
 
     static CSSPropertyID graphicsLayerToCSSProperty(AnimatedPropertyID);
     static AnimatedPropertyID cssToGraphicsLayerProperty(CSSPropertyID);
@@ -380,7 +378,7 @@ private:
 
     bool m_artificiallyInflatedBounds { false }; // bounds had to be made non-zero to make transform-origin work
     bool m_isMainFrameRenderViewLayer { false };
-    bool m_isMainFrameLayerWithTiledBacking { false };
+    bool m_isFrameLayerWithTiledBacking { false };
     bool m_requiresOwnBackingStore { true };
     bool m_canCompositeFilters { false };
 #if ENABLE(FILTERS_LEVEL_2)
@@ -396,5 +394,7 @@ enum CanvasCompositingStrategy {
     CanvasAsLayerContents
 };
 CanvasCompositingStrategy canvasCompositingStrategy(const RenderObject&);
+
+WTF::TextStream& operator<<(WTF::TextStream&, const RenderLayerBacking&);
 
 } // namespace WebCore

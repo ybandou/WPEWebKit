@@ -578,7 +578,7 @@ AXRole: AXSection
 AXParent: AXWebArea
 AXChildren: 0
 AXPosition: { 8.000000, 8.000000 }
-AXSize: { 784.000000, 17.000000 }
+AXSize: { 784.000000, 18.000000 }
 AXTitle: 
 AXDescription: 
 AXValue: X
@@ -1241,7 +1241,7 @@ AXRequired: 0
 AXChecked: 0
 AXPlatformAttributes: computed-role:group, xml-roles:doc-example, tag:div, toolkit:WebKitGtk
 ------------
-AXRole: AXSection
+AXRole: AXFootnote
 AXParent: AXWebArea
 AXChildren: 0
 AXPosition: { 0.000000, 0.000000 }
@@ -1588,8 +1588,8 @@ AXPlatformAttributes: computed-role:navigation, xml-roles:doc-toc, tag:div, tool
 AXRole: AXParagraph
 AXParent: AXWebArea
 AXChildren: 2
-AXPosition: { 8.000000, 41.000000 }
-AXSize: { 784.000000, 50.000000 }
+AXPosition: { 8.000000, 42.000000 }
+AXSize: { 784.000000, 52.000000 }
 AXTitle: 
 AXDescription: 
 AXValue: Verify exposure of ARIA role values via the 'xml-roles' object attribute.<\n><\n>On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".<\n><\n><\n>

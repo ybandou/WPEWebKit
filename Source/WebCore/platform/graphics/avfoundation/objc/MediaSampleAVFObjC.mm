@@ -43,54 +43,58 @@ static inline void releaseUint8Vector(void *array, const void*)
 
 RefPtr<MediaSampleAVFObjC> MediaSampleAVFObjC::createImageSample(Vector<uint8_t>&& array, unsigned long width, unsigned long height)
 {
-    CVPixelBufferRef imageBuffer = nullptr;
-    auto status = CVPixelBufferCreateWithBytes(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA, array.data(), width * 4, releaseUint8Vector, array.releaseBuffer().leakPtr(), NULL, &imageBuffer);
+    CVPixelBufferRef pixelBuffer = nullptr;
+    auto status = CVPixelBufferCreateWithBytes(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA, array.data(), width * 4, releaseUint8Vector, array.releaseBuffer().leakPtr(), NULL, &pixelBuffer);
+    auto imageBuffer = adoptCF(pixelBuffer);
 
     ASSERT_UNUSED(status, !status);
     if (!imageBuffer)
         return nullptr;
 
     CMVideoFormatDescriptionRef formatDescription = nullptr;
-    status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, imageBuffer, &formatDescription);
+    status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, imageBuffer.get(), &formatDescription);
     ASSERT(!status);
 
     CMSampleTimingInfo sampleTimingInformation = { kCMTimeInvalid, kCMTimeInvalid, kCMTimeInvalid };
 
-    CMSampleBufferRef sample;
-    status = CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, imageBuffer, formatDescription, &sampleTimingInformation, &sample);
+    CMSampleBufferRef sampleBuffer;
+    status = CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, imageBuffer.get(), formatDescription, &sampleTimingInformation, &sampleBuffer);
+    CFRelease(formatDescription);
     ASSERT(!status);
 
-    CFArrayRef attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sample, true);
+    auto sample = adoptCF(sampleBuffer);
+
+    CFArrayRef attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sample.get(), true);
     for (CFIndex i = 0; i < CFArrayGetCount(attachmentsArray); ++i) {
         CFMutableDictionaryRef attachments = (CFMutableDictionaryRef)CFArrayGetValueAtIndex(attachmentsArray, i);
         CFDictionarySetValue(attachments, kCMSampleAttachmentKey_DisplayImmediately, kCFBooleanTrue);
     }
-    return create(sample);
+    return create(sample.get());
 }
 
 MediaTime MediaSampleAVFObjC::presentationTime() const
 {
-    return toMediaTime(CMSampleBufferGetPresentationTimeStamp(m_sample.get()));
+    return PAL::toMediaTime(CMSampleBufferGetPresentationTimeStamp(m_sample.get()));
 }
 
 MediaTime MediaSampleAVFObjC::outputPresentationTime() const
 {
-    return toMediaTime(CMSampleBufferGetOutputPresentationTimeStamp(m_sample.get()));
+    return PAL::toMediaTime(CMSampleBufferGetOutputPresentationTimeStamp(m_sample.get()));
 }
 
 MediaTime MediaSampleAVFObjC::decodeTime() const
 {
-    return toMediaTime(CMSampleBufferGetDecodeTimeStamp(m_sample.get()));
+    return PAL::toMediaTime(CMSampleBufferGetDecodeTimeStamp(m_sample.get()));
 }
 
 MediaTime MediaSampleAVFObjC::duration() const
 {
-    return toMediaTime(CMSampleBufferGetDuration(m_sample.get()));
+    return PAL::toMediaTime(CMSampleBufferGetDuration(m_sample.get()));
 }
 
 MediaTime MediaSampleAVFObjC::outputDuration() const
 {
-    return toMediaTime(CMSampleBufferGetOutputDuration(m_sample.get()));
+    return PAL::toMediaTime(CMSampleBufferGetOutputDuration(m_sample.get()));
 }
 
 size_t MediaSampleAVFObjC::sizeInBytes() const
@@ -172,8 +176,8 @@ void MediaSampleAVFObjC::offsetTimestampsBy(const MediaTime& offset)
         return;
     
     for (auto& timing : timingInfoArray) {
-        timing.presentationTimeStamp = toCMTime(toMediaTime(timing.presentationTimeStamp) + offset);
-        timing.decodeTimeStamp = toCMTime(toMediaTime(timing.decodeTimeStamp) + offset);
+        timing.presentationTimeStamp = PAL::toCMTime(PAL::toMediaTime(timing.presentationTimeStamp) + offset);
+        timing.decodeTimeStamp = PAL::toCMTime(PAL::toMediaTime(timing.decodeTimeStamp) + offset);
     }
     
     CMSampleBufferRef newSample;
@@ -195,8 +199,8 @@ void MediaSampleAVFObjC::setTimestamps(const WTF::MediaTime &presentationTimesta
         return;
     
     for (auto& timing : timingInfoArray) {
-        timing.presentationTimeStamp = toCMTime(presentationTimestamp);
-        timing.decodeTimeStamp = toCMTime(decodeTimestamp);
+        timing.presentationTimeStamp = PAL::toCMTime(presentationTimestamp);
+        timing.decodeTimeStamp = PAL::toCMTime(decodeTimestamp);
     }
     
     CMSampleBufferRef newSample;
@@ -225,7 +229,7 @@ std::pair<RefPtr<MediaSample>, RefPtr<MediaSample>> MediaSampleAVFObjC::divide(c
     CFIndex samplesBeforePresentationTime = 0;
 
     CMSampleBufferCallBlockForEachSample(m_sample.get(), [&] (CMSampleBufferRef sampleBuffer, CMItemCount) -> OSStatus {
-        if (toMediaTime(CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) >= presentationTime)
+        if (PAL::toMediaTime(CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) >= presentationTime)
             return 1;
         ++samplesBeforePresentationTime;
         return noErr;

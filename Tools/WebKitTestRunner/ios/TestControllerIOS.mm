@@ -31,7 +31,7 @@
 #import "PlatformWebView.h"
 #import "TestInvocation.h"
 #import "TestRunnerWKWebView.h"
-#import "UIKitSPI.h"
+#import "UIKitTestSPI.h"
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <WebKit/WKPreferencesRefPrivate.h>
@@ -51,7 +51,10 @@ void TestController::notifyDone()
 void TestController::platformInitialize()
 {
     setUpIOSLayoutTestCommunication();
+    cocoaPlatformInitialize();
+
     [UIApplication sharedApplication].idleTimerDisabled = YES;
+    [[UIScreen mainScreen] _setScale:2.0];
 }
 
 void TestController::platformDestroy()

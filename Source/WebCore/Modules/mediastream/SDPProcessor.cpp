@@ -42,6 +42,7 @@
 #include "ScriptSourceCode.h"
 #include "inspector/InspectorValues.h"
 #include <bindings/ScriptObject.h>
+#include <runtime/CatchScope.h>
 #include <wtf/NeverDestroyed.h>
 
 using namespace Inspector;
@@ -535,7 +536,7 @@ bool SDPProcessor::callScript(const String& functionName, const String& argument
 
     JSC::JSObject* function = functionValue.toObject(exec);
     JSC::CallData callData;
-    JSC::CallType callType = function->methodTable()->getCallData(function, callData);
+    JSC::CallType callType = function->methodTable(vm)->getCallData(function, callData);
     if (callType == JSC::CallType::None)
         return false;
 

@@ -26,8 +26,9 @@
 #include "config.h"
 
 #include <WebCore/CalculationValue.h>
+#include <wtf/RefPtr.h>
 
-namespace WebCore {
+namespace WTF {
 class TextStream;
 };
 
@@ -46,7 +47,7 @@ public:
     bool operator==(const CalcExpressionNode&) const override { ASSERT_NOT_REACHED(); return false; }
 
 private:
-    void dump(WebCore::TextStream&) const override { };
+    void dump(WTF::TextStream&) const override { };
 };
 
 static Ref<WebCore::CalculationValue> createTestValue()

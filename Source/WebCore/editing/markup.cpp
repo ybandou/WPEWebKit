@@ -29,25 +29,28 @@
 #include "config.h"
 #include "markup.h"
 
+#include "ArchiveResource.h"
 #include "CSSPrimitiveValue.h"
 #include "CSSPropertyNames.h"
 #include "CSSValue.h"
 #include "CSSValueKeywords.h"
 #include "ChildListMutationScope.h"
 #include "DocumentFragment.h"
+#include "DocumentLoader.h"
 #include "DocumentType.h"
 #include "Editing.h"
 #include "Editor.h"
 #include "ElementIterator.h"
-#include "ExceptionCode.h"
 #include "File.h"
 #include "Frame.h"
+#include "FrameLoader.h"
 #include "HTMLAttachmentElement.h"
 #include "HTMLBRElement.h"
 #include "HTMLBodyElement.h"
 #include "HTMLDivElement.h"
 #include "HTMLHeadElement.h"
 #include "HTMLHtmlElement.h"
+#include "HTMLImageElement.h"
 #include "HTMLNames.h"
 #include "HTMLTableElement.h"
 #include "HTMLTextAreaElement.h"
@@ -75,7 +78,7 @@ static bool propertyMissingOrEqualToNone(StyleProperties*, CSSPropertyID);
 class AttributeChange {
 public:
     AttributeChange()
-        : m_name(nullAtom, nullAtom, nullAtom)
+        : m_name(nullAtom(), nullAtom(), nullAtom())
     {
     }
 
@@ -581,13 +584,13 @@ static String createMarkupInternal(Document& document, const Range& range, Vecto
     bool collapsed = range.collapsed();
     if (collapsed)
         return emptyString();
-    Node* commonAncestor = range.commonAncestorContainer();
+    RefPtr<Node> commonAncestor = range.commonAncestorContainer();
     if (!commonAncestor)
         return emptyString();
 
     document.updateLayoutIgnorePendingStylesheets();
 
-    auto* body = enclosingElementWithTag(firstPositionInNode(commonAncestor), bodyTag);
+    auto* body = enclosingElementWithTag(firstPositionInNode(commonAncestor.get()), bodyTag);
     Element* fullySelectedRoot = nullptr;
     // FIXME: Do this for all fully selected blocks, not just the body.
     if (body && VisiblePosition(firstPositionInNode(body)) == VisiblePosition(range.startPosition())
@@ -891,7 +894,7 @@ ExceptionOr<Ref<DocumentFragment>> createFragmentForInnerOuterHTML(Element& cont
 
     bool wasValid = fragment->parseXML(markup, &contextElement, parserContentPolicy);
     if (!wasValid)
-        return Exception { SYNTAX_ERR };
+        return Exception { SyntaxError };
     return WTFMove(fragment);
 }
 
@@ -916,6 +919,17 @@ RefPtr<DocumentFragment> createFragmentForTransformToFragment(Document& outputDo
     
     // FIXME: Do we need to mess with URLs here?
     
+    return fragment;
+}
+
+Ref<DocumentFragment> createFragmentForImageAndURL(Document& document, const String& url)
+{
+    auto imageElement = HTMLImageElement::create(document);
+    imageElement->setAttributeWithoutSynchronization(HTMLNames::srcAttr, url);
+
+    auto fragment = document.createDocumentFragment();
+    fragment->appendChild(imageElement);
+
     return fragment;
 }
 

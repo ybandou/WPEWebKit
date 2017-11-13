@@ -43,10 +43,13 @@ struct TestOptions {
     bool needsSiteSpecificQuirks { false };
     bool ignoresViewportScaleLimits { false };
     bool useCharacterSelectionGranularity { false };
+    bool enableAttachmentElement { false };
     bool enableIntersectionObserver { false };
     bool enableModernMediaControls { true };
     bool enablePointerLock { false };
     bool enableCredentialManagement { false };
+    bool enableIsSecureContextAttribute { true };
+    bool enableInspectorAdditions { false };
 
     float deviceScaleFactor { 1 };
     Vector<String> overrideLanguages;
@@ -64,10 +67,13 @@ struct TestOptions {
             || useMockScrollbars != options.useMockScrollbars
             || needsSiteSpecificQuirks != options.needsSiteSpecificQuirks
             || useCharacterSelectionGranularity != options.useCharacterSelectionGranularity
+            || enableAttachmentElement != options.enableAttachmentElement
             || enableIntersectionObserver != options.enableIntersectionObserver
             || enableModernMediaControls != options.enableModernMediaControls
             || enablePointerLock != options.enablePointerLock
-            || enableCredentialManagement != options.enableCredentialManagement)
+            || enableCredentialManagement != options.enableCredentialManagement
+            || enableIsSecureContextAttribute != options.enableIsSecureContextAttribute
+            || enableInspectorAdditions != options.enableInspectorAdditions)
             return false;
 
         return true;

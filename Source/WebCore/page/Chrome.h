@@ -41,6 +41,7 @@ class DateTimeChooserClient;
 class FileChooser;
 class FileIconLoader;
 class FloatRect;
+class FrameLoadRequest;
 class Element;
 class Frame;
 class Geolocation;
@@ -55,7 +56,6 @@ class PopupOpeningObserver;
 class SearchPopupMenu;
 
 struct DateTimeChooserParameters;
-struct FrameLoadRequest;
 struct ViewportArguments;
 struct WindowFeatures;
     
@@ -81,11 +81,10 @@ public:
     IntRect rootViewToAccessibilityScreen(const IntRect&) const override;
 #endif
     PlatformPageClient platformPageClient() const override;
-    void scrollbarsModeDidChange() const override;
     void setCursor(const Cursor&) override;
     void setCursorHiddenUntilMouseMoves(bool) override;
 
-    void scheduleAnimation() override;
+    void scheduleAnimation() override { }
 
     PlatformDisplayID displayID() const override;
     void windowScreenDidChange(PlatformDisplayID) override;
@@ -145,7 +144,7 @@ public:
 
     void setToolTip(const HitTestResult&);
 
-    WEBCORE_EXPORT void print(Frame&);
+    WEBCORE_EXPORT bool print(Frame&);
 
     WEBCORE_EXPORT void enableSuddenTermination();
     WEBCORE_EXPORT void disableSuddenTermination();
@@ -167,7 +166,6 @@ public:
 
     bool selectItemWritingDirectionIsNatural();
     bool selectItemAlignmentFollowsMenuWritingDirection();
-    bool hasOpenedPopup() const;
     RefPtr<PopupMenu> createPopupMenu(PopupMenuClient&) const;
     RefPtr<SearchPopupMenu> createSearchPopupMenu(PopupMenuClient&) const;
 

@@ -28,13 +28,13 @@
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA)
 
+#include "ContentType.h"
 #include "LegacyCDM.h"
 #include "LegacyCDMSession.h"
-#include "ContentType.h"
 #include "MediaPlayer.h"
 
 #if PLATFORM(IOS)
-#include "SoftLinking.h"
+#include <wtf/SoftLinking.h>
 #endif
 
 namespace WebCore {

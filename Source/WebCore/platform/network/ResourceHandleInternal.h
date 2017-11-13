@@ -25,11 +25,11 @@
 
 #pragma once
 
+#include "AuthenticationChallenge.h"
 #include "NetworkingContext.h"
 #include "ResourceHandle.h"
 #include "ResourceHandleClient.h"
 #include "ResourceRequest.h"
-#include "AuthenticationChallenge.h"
 #include "Timer.h"
 
 #if USE(CFURLCONNECTION)
@@ -43,9 +43,7 @@
 #endif
 
 #if USE(CURL)
-#include <curl/curl.h>
-#include "FormDataStreamCurl.h"
-#include "MultipartHandle.h"
+#include "ResourceHandleCurlDelegate.h"
 #endif
 
 #if USE(SOUP)
@@ -85,9 +83,6 @@ public:
         , m_usesAsyncCallbacks(client && client->usesAsyncCallbacks())
 #if USE(CFURLCONNECTION)
         , m_currentRequest(request)
-#endif
-#if USE(CURL)
-        , m_formDataStream(loader)
 #endif
 #if USE(SOUP)
         , m_timeoutSource(RunLoop::main(), loader, &ResourceHandle::timeoutFired)
@@ -137,20 +132,10 @@ public:
     RetainPtr<CFURLStorageSessionRef> m_storageSession;
 #endif
 #if USE(CURL)
-    CURL* m_handle { nullptr };
-    char* m_url { nullptr };
-    struct curl_slist* m_customHeaders { nullptr };
+    RefPtr<ResourceHandleCurlDelegate> m_delegate;
     ResourceResponse m_response;
-    bool m_cancelled { false };
-    unsigned short m_authFailureCount { 0 };
-
-    FormDataStream m_formDataStream;
-    unsigned m_sslErrors { 0 };
-    Vector<char> m_postBytes;
-
-    std::unique_ptr<MultipartHandle> m_multipartHandle;
-    bool m_addedCacheValidationHeaders { false };
 #endif
+
 #if USE(SOUP)
     SoupNetworkSession* m_session { nullptr };
     GRefPtr<SoupMessage> m_soupMessage;

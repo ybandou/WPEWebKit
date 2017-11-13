@@ -25,10 +25,9 @@
 
 #pragma once
 
-#include "CSSFontFaceRule.h"
-#include "FontSelectionAlgorithm.h"
 #include "FontSelectionValueInlines.h"
 #include "FontTaggedSettings.h"
+#include "StyleRule.h"
 #include "TextFlags.h"
 #include "Timer.h"
 #include <memory>
@@ -77,6 +76,7 @@ public:
     bool setVariantAlternates(CSSValue&);
     bool setVariantEastAsian(CSSValue&);
     void setFeatureSettings(CSSValue&);
+    void setLoadingBehavior(CSSValue&);
 
     enum class Status;
     struct UnicodeRange;
@@ -138,6 +138,8 @@ public:
     struct UnicodeRange {
         UChar32 from;
         UChar32 to;
+        bool operator==(const UnicodeRange& other) const { return from == other.from && to == other.to; }
+        bool operator!=(const UnicodeRange& other) const { return !(*this == other); }
     };
 
     bool rangesMatchCodePoint(UChar32) const;
@@ -180,6 +182,7 @@ private:
     HashSet<Client*> m_clients;
     WeakPtr<FontFace> m_wrapper;
     FontSelectionSpecifiedCapabilities m_fontSelectionCapabilities;
+    FontLoadingBehavior m_loadingBehavior { FontLoadingBehavior::Auto };
     Status m_status { Status::Pending };
     bool m_isLocalFallback { false };
     bool m_sourcesPopulated { false };

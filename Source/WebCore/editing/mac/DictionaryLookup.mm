@@ -35,8 +35,6 @@
 #import "FrameSelection.h"
 #import "HTMLConverter.h"
 #import "HitTestResult.h"
-#import "LookupSPI.h"
-#import "NSImmediateActionGestureRecognizerSPI.h"
 #import "Page.h"
 #import "Range.h"
 #import "RenderObject.h"
@@ -46,6 +44,8 @@
 #import "VisibleUnits.h"
 #import "WebCoreSystemInterface.h"
 #import <PDFKit/PDFKit.h>
+#import <pal/spi/mac/LookupSPI.h>
+#import <pal/spi/mac/NSImmediateActionGestureRecognizerSPI.h>
 #import <wtf/BlockObjCExceptions.h>
 #import <wtf/RefPtr.h>
 
@@ -206,7 +206,7 @@ NSString *DictionaryLookup::stringForPDFSelection(PDFSelection *selection, NSDic
     return nil;
 }
 
-static PlatformAnimationController showPopupOrCreateAnimationController(bool createAnimationController, const DictionaryPopupInfo& dictionaryPopupInfo, NSView *view, std::function<void(TextIndicator&)> textIndicatorInstallationCallback, std::function<FloatRect(FloatRect)> rootViewToViewConversionCallback)
+static PlatformAnimationController showPopupOrCreateAnimationController(bool createAnimationController, const DictionaryPopupInfo& dictionaryPopupInfo, NSView *view, const WTF::Function<void(TextIndicator&)>& textIndicatorInstallationCallback, const WTF::Function<FloatRect(FloatRect)>& rootViewToViewConversionCallback)
 {
     BEGIN_BLOCK_OBJC_EXCEPTIONS;
 
@@ -249,7 +249,7 @@ static PlatformAnimationController showPopupOrCreateAnimationController(bool cre
     return nil;
 }
 
-void DictionaryLookup::showPopup(const DictionaryPopupInfo& dictionaryPopupInfo, NSView *view, std::function<void(TextIndicator&)> textIndicatorInstallationCallback, std::function<FloatRect(FloatRect)> rootViewToViewConversionCallback)
+void DictionaryLookup::showPopup(const DictionaryPopupInfo& dictionaryPopupInfo, NSView *view, const WTF::Function<void(TextIndicator&)>& textIndicatorInstallationCallback, const WTF::Function<FloatRect(FloatRect)>& rootViewToViewConversionCallback)
 {
     showPopupOrCreateAnimationController(false, dictionaryPopupInfo, view, textIndicatorInstallationCallback, rootViewToViewConversionCallback);
 }
@@ -265,7 +265,7 @@ void DictionaryLookup::hidePopup()
     END_BLOCK_OBJC_EXCEPTIONS;
 }
 
-PlatformAnimationController DictionaryLookup::animationControllerForPopup(const DictionaryPopupInfo& dictionaryPopupInfo, NSView *view, std::function<void(TextIndicator&)> textIndicatorInstallationCallback, std::function<FloatRect(FloatRect)> rootViewToViewConversionCallback)
+PlatformAnimationController DictionaryLookup::animationControllerForPopup(const DictionaryPopupInfo& dictionaryPopupInfo, NSView *view, const WTF::Function<void(TextIndicator&)>& textIndicatorInstallationCallback, const WTF::Function<FloatRect(FloatRect)>& rootViewToViewConversionCallback)
 {
     return showPopupOrCreateAnimationController(true, dictionaryPopupInfo, view, textIndicatorInstallationCallback, rootViewToViewConversionCallback);
 }

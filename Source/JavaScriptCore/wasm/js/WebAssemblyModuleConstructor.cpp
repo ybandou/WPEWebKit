@@ -183,6 +183,7 @@ JSValue WebAssemblyModuleConstructor::createModule(ExecState* exec, JSValue buff
     Vector<uint8_t> source = createSourceBufferFromValue(vm, exec, buffer);
     RETURN_IF_EXCEPTION(scope, { });
 
+    scope.release();
     return JSWebAssemblyModule::createStub(vm, exec, structure, Wasm::Module::validateSync(vm, WTFMove(source)));
 }
 
@@ -201,8 +202,8 @@ Structure* WebAssemblyModuleConstructor::createStructure(VM& vm, JSGlobalObject*
 void WebAssemblyModuleConstructor::finishCreation(VM& vm, WebAssemblyModulePrototype* prototype)
 {
     Base::finishCreation(vm, ASCIILiteral("Module"));
-    putDirectWithoutTransition(vm, vm.propertyNames->prototype, prototype, DontEnum | DontDelete | ReadOnly);
-    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), ReadOnly | DontEnum | DontDelete);
+    putDirectWithoutTransition(vm, vm.propertyNames->prototype, prototype, PropertyAttribute::DontEnum | PropertyAttribute::DontDelete | PropertyAttribute::ReadOnly);
+    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum | PropertyAttribute::DontDelete);
 }
 
 WebAssemblyModuleConstructor::WebAssemblyModuleConstructor(VM& vm, Structure* structure)
@@ -220,13 +221,6 @@ CallType WebAssemblyModuleConstructor::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = callJSWebAssemblyModule;
     return CallType::Host;
-}
-
-void WebAssemblyModuleConstructor::visitChildren(JSCell* cell, SlotVisitor& visitor)
-{
-    auto* thisObject = jsCast<WebAssemblyModuleConstructor*>(cell);
-    ASSERT_GC_OBJECT_INHERITS(thisObject, info());
-    Base::visitChildren(thisObject, visitor);
 }
 
 } // namespace JSC

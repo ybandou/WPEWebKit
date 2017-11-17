@@ -102,6 +102,7 @@ public:
 
     const Vector<Key>& keys() const { return m_keys; }
 
+    Ref<SharedBuffer> extractKeyidsFromCencInitData(const SharedBuffer& initData);
 private:
     WeakPtrFactory<CDMInstanceClearKey> m_weakPtrFactory;
     Vector<Key> m_keys;

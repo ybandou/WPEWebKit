@@ -42,6 +42,17 @@
 using namespace Inspector;
 
 namespace WebCore {
+// ClearKey CENC SystemID.
+// https://www.w3.org/TR/eme-initdata-cenc/#common-system
+const uint8_t ClearKeyCencSystemId[] = { 0x10, 0x77, 0xef, 0xec,
+                                         0xc0, 0xb2, 0x4d, 0x02,
+                                         0xac, 0xe3, 0x3c, 0x1e,
+                                         0x52, 0xe2, 0xfb, 0x4b };
+const unsigned ClearKeyCencSystemIdSize = sizeof(ClearKeyCencSystemId) / sizeof(uint8_t);
+
+const unsigned KIDSize = 16;
+
+
 
 class ClearKeyState {
     using KeyStore = HashMap<String, Vector<CDMInstanceClearKey::Key>>;
@@ -171,8 +182,8 @@ CDMPrivateClearKey::~CDMPrivateClearKey() = default;
 
 bool CDMPrivateClearKey::supportsInitDataType(const AtomicString& initDataType) const
 {
-    // `keyids` is the only supported init data type.
-    return equalLettersIgnoringASCIICase(initDataType, "keyids");
+    // `keyids` and 'cenc' are the only supported init data type.
+    return (equalLettersIgnoringASCIICase(initDataType, "keyids") || equalLettersIgnoringASCIICase(initDataType, "cenc"));
 }
 
 bool containsPersistentLicenseType(const Vector<CDMSessionType>& types)
@@ -275,12 +286,18 @@ bool CDMPrivateClearKey::supportsSessions() const
 
 bool CDMPrivateClearKey::supportsInitData(const AtomicString& initDataType, const SharedBuffer& initData) const
 {
-    // Fail for init data types other than 'keyids'.
-    if (!equalLettersIgnoringASCIICase(initDataType, "keyids"))
+    bool isKeyids = equalLettersIgnoringASCIICase(initDataType, "keyids");
+    bool isCenc = equalLettersIgnoringASCIICase(initDataType, "cenc");
+    // Fail for init data types other than 'keyids' or 'cenc'.
+    if (!(isKeyids || isCenc))
         return false;
 
-    // Validate the initData buffer as an JSON object.
-    if (!parseJSONObject(initData))
+    // Validate the initData buffer as an JSON object in keyids case.
+    if (isKeyids && (!parseJSONObject(initData)))
+        return false;
+
+    // Check the initData buffer isn't empty in cenc case.
+    if (isCenc && (initData.isEmpty()))
         return false;
 
     return true;
@@ -336,10 +353,98 @@ CDMInstance::SuccessValue CDMInstanceClearKey::setServerCertificate(Ref<SharedBu
     return Failed;
 }
 
-void CDMInstanceClearKey::requestLicense(LicenseType, const AtomicString&, Ref<SharedBuffer>&& initData, LicenseCallback callback)
+Ref<SharedBuffer> CDMInstanceClearKey::extractKeyidsFromCencInitData(const SharedBuffer& initData)
+{
+    // 4.1 Definition
+    // The SystemID is 1077efec-c0b2-4d02-ace3-3c1e52e2fb4b.
+    // The PSSH box format is as follows. It follows version 1 of the 'pssh' box as defined in [CENC].
+    // pssh = [
+    // 0x00, 0x00, 0x00, 0x4c, 0x70, 0x73, 0x73, 0x68, // BMFF box header (76 bytes, 'pssh')
+    // 0x01, 0x00, 0x00, 0x00,                         // Full box header (version = 1, flags = 0)
+    // 0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02, // SystemID
+    // 0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b,
+    // 0x00, 0x00, 0x00, 0x02,                         // KID_count (2)
+    // 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, // First KID ("0123456789012345")
+    // 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
+    // 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, // Second KID ("ABCDEFGHIJKLMNOP")
+    // 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50,
+    // 0x00, 0x00, 0x00, 0x00,                         // Size of Data (0)
+    // ];
+
+    Ref<SharedBuffer> keyids = SharedBuffer::create();
+
+    // Checks if the initData is valid
+    if (initData.isEmpty() ||  initData.size() > std::numeric_limits<unsigned>::max())
+        return keyids;
+
+    const char* data = initData.data();
+    unsigned initDataSize = initData.size();
+    unsigned index = 0;
+    unsigned psshSize = 0;
+
+    // Search in the concatenated InitData, the ClearKey PSSH.
+    bool foundPssh = false;
+    while (true) {
+
+        // Check the overflow InitData.
+        if (index + 12 + ClearKeyCencSystemIdSize >= initDataSize)
+            return keyids;
+
+        psshSize = data[index + 2] * 256 + data[index + 3];
+
+        // 12 = BMFF box header + Full box header.
+        if (!memcmp(&data[index + 12], ClearKeyCencSystemId, ClearKeyCencSystemIdSize)) {
+            foundPssh = true;
+            break;
+        }
+        index += psshSize;
+    }
+
+    // Check if the InitData contains the ClearKey PSSH.
+    if (!foundPssh)
+        return keyids;
+
+    index += (12 + ClearKeyCencSystemIdSize); // 12 (BMFF box header + Full box header) + SystemID size.
+
+    // Check the overflow.
+    if (index + 3 >= initDataSize)
+        return keyids;
+
+    unsigned nbKeyId =  data[index + 3];
+    index += 4; // KID_count size.
+
+    // check the overflow.
+    if ((index + (nbKeyId * KIDSize)) >= initDataSize)
+        return keyids;
+
+    auto object = InspectorObject::create();
+    auto kidsArray = InspectorArray::create();
+
+    // Read the KeyID
+    // 9.1.3 License Request Format
+    // This section describes the format of the license request provided to the application via the message attribute of the message event.
+    // The format is a JSON object containing the following members:
+    // "kids"
+    // An array of key IDs. Each element of the array is the base64url encoding of the octet sequence containing the key ID value.
+    for (unsigned i = 0; i < nbKeyId; i++) {
+        String keyID = WTF::base64URLEncode(&data[index], KIDSize);
+        kidsArray->pushString(keyID);
+        index += KIDSize;
+    }
+
+    object->setArray("kids", WTFMove(kidsArray));
+    CString jsonData = object->toJSONString().utf8();
+    keyids->append(jsonData.data(), jsonData.length());
+    return keyids;
+}
+
+void CDMInstanceClearKey::requestLicense(LicenseType, const AtomicString& initDataType, Ref<SharedBuffer>&& initData, LicenseCallback callback)
 {
     static uint32_t s_sessionIdValue = 0;
     ++s_sessionIdValue;
+
+    if (equalLettersIgnoringASCIICase(initDataType, "cenc"))
+        initData = extractKeyidsFromCencInitData(initData.get());
 
     callOnMainThread(
         [weakThis = m_weakPtrFactory.createWeakPtr(*this), callback = WTFMove(callback), initData = WTFMove(initData), sessionIdValue = s_sessionIdValue]() mutable {

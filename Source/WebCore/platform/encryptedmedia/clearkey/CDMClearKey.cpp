@@ -541,7 +541,8 @@ void CDMInstanceClearKey::updateLicense(const String& sessionId, LicenseType, co
         }
 
         // Cache the key information Vector on CDMInstance for easier access from the pipeline.
-        m_keys = keyVector;
+        for (auto& key : keyVector)
+            m_keys.append(key);
 
         dispatchCallback(false, WTFMove(changedKeys), SuccessValue::Succeeded);
         return;
